@@ -1,28 +1,69 @@
-build*/
-src/gen/
-fzero.sfc
-*.sfc
+# Root-level CMake build trees and release staging.
+/build*/
+/FZeroSNESRecomp/
+/release-stage/
+/release-linux/
+/release-macos*/
+
+# ROM files (copyrighted; never commit or redistribute).
 *.smc
+*.sfc
 *.fig
+*.rom
+
+# Recompiler output and other ROM-derived generated data.
+src/gen/
+assets/
+/tier2_coverage.json
+/tier2_*.json
+/tier2_*.jsonl
+
+# Runtime save/config/crash artifacts.
+/saves/
 *.sav
 *.srm
-/saves/
 /rom.cfg
 /keybinds.ini
 /config.ini
 /last_run_report.json
 /crash_report_*.json
 /crash_minidump_*.dmp
+
+# Local captures and triage scratch. Curated README assets belong in docs/.
 *.wav
 *.ppm
 *.bmp
+*.png
+!docs/
+!docs/screenshots/
+!docs/screenshots/*.png
 captures/
-/tier2_coverage.json
-/tier2_*.json
-/tier2_*.jsonl
+snesref_trace.jsonl
+_*
+
+# Compiler, IDE, and OS artifacts.
+*.obj
+*.pdb
+*.ilk
+*.exe
+*.dll
+*.tlog
+*.log
+*.idb
+.vs/
+*.vcxproj.user
+Thumbs.db
+.DS_Store
+
+# Python caches.
 __pycache__/
 *.pyc
-snesref_trace.jsonl
-# Release artifacts produced by tools/make_release.ps1 and tools/build-linux.sh
-/release-stage/
-/release-linux/
+
+# Ghidra databases are local and regenerable; track exported annotations only.
+ghidra/*
+!ghidra/annotations/
+!ghidra/annotations/**
+*.gpr
+*.rep/
+*.lock
+*.lock~

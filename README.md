@@ -117,11 +117,16 @@ model, and the folder the game runs from.
 
 ## Building from source
 
-Clone with all framework dependencies, then run the idempotent
-bootstrap check:
+Private collaborator first-time setup:
+
+1. Accept the GitHub repository invitation.
+2. Make sure your GitHub SSH key is configured, or authenticate with the
+   GitHub CLI and use the equivalent HTTPS clone URL.
+3. Clone with all framework dependencies, then run the idempotent
+   bootstrap check:
 
 ```bash
-git clone --recurse-submodules https://github.com/mstan/FZeroSNESRecomp.git
+git clone --recurse-submodules git@github.com:mstan/FZeroSNESRecomp.git
 cd FZeroSNESRecomp
 bash tools/bootstrap.sh
 ```
@@ -140,6 +145,10 @@ legally obtained USA ROM as `fzero.sfc`, then run:
 cp "/path/to/F-Zero (USA).sfc" fzero.sfc
 bash tools/regen.sh
 ```
+
+`fzero.sfc`, `src/gen/`, build directories, local captures, save files,
+and crash reports are ignored local artifacts. Do not commit or share the
+ROM, generated C, or build output.
 
 On Windows 10 or newer, install [MSYS2](https://www.msys2.org/) with the
 mingw64 toolchain (`cmake`, `ninja`, `gcc`), the SDL3 development
