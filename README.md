@@ -69,23 +69,6 @@ The release includes two BS Deluxe files:
 
 No patched ROM is included.
 
-## Controls
-
-| Action | Key |
-|---|---|
-| Steer | Arrow keys |
-| Accelerate | Z |
-| Use A button | X |
-| Start | Enter |
-| Pause | P |
-| Fullscreen | Alt+Enter |
-| Save state | Shift+F1 to Shift+F12 |
-| Load state | F1 to F12 |
-| Reset | Ctrl+R |
-| Quit | Esc |
-
-You can edit controls in the launcher or in `keybinds.ini`.
-
 ## If The Game Crashes
 
 Send these files from the game folder:
