@@ -2,6 +2,26 @@ cmake_minimum_required(VERSION 3.20)
 project(FZeroSNESRecomp C)
 set(CMAKE_C_STANDARD 11)
 
+include(CTest)
+option(FZERO_BUILD_GAME "Build game hosts (requires privately generated ROM sources)" ON)
+add_library(fzero_video STATIC src/fzero_video.c src/fzero_mode7.c)
+target_include_directories(fzero_video PUBLIC "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_compile_options(fzero_video PRIVATE -Wall -Wextra -Werror)
+    target_link_libraries(fzero_video PUBLIC m)
+endif()
+if(BUILD_TESTING)
+    add_executable(fzero_video_tests tests/test_video.c)
+    target_link_libraries(fzero_video_tests PRIVATE fzero_video)
+    add_test(NAME fzero_video COMMAND fzero_video_tests)
+    add_executable(fzero_mode7_tests tests/test_mode7.c)
+    target_link_libraries(fzero_mode7_tests PRIVATE fzero_video)
+    add_test(NAME fzero_mode7 COMMAND fzero_mode7_tests)
+endif()
+if(NOT FZERO_BUILD_GAME)
+    return()
+endif()
+
 # Both dependencies are pinned submodules of this repository (see
 # .gitmodules); `bash tools/bootstrap.sh` initializes them. Point
 # SNESRECOMP_ROOT at a worktree instead when developing framework changes

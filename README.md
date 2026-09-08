@@ -29,6 +29,10 @@ copy.
 
 ## Current status: early bring-up
 
+The `feat/fzero-adaptive-renderer` branch starts the opt-in native widescreen
+work with a [ROM-independent renderer and timing foundation](docs/ADAPTIVE_RENDERER.md).
+It is not yet connected to the game hosts; the gameplay status below still applies.
+
 The game boots, and the title screen and the attract-mode demo race run
 clean for at least a three-minute soak: Mode 7 track, sky, crowd,
 roadside markers, sprites, HUD, and audio all behave. **Interactive

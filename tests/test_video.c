@@ -1,0 +1,120 @@
+#include "fzero_video.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Do not use assert: Release builds must execute all validation. */
+#define CHECK(expr) do { if (!(expr)) { \
+  fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #expr); exit(1); \
+} } while (0)
+
+static void viewport_tests(void) {
+  FzeroVideoSettings settings;
+  FzeroVideoDefaults(&settings);
+  FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);
+  CHECK(!v.enhanced && v.width == 256 && v.extra == 0);
+  settings.enhanced = true;
+  const int expected[] = {256, 342, 448, 682};
+  for (int i = 0; i < 4; ++i) {
+    settings.aspect = (FzeroAspect)i;
+    v = FzeroCalculateViewport(&settings, 800, 600);
+    CHECK(v.width == expected[i]);
+    CHECK(v.width == 256 + 2 * v.extra);
+    CHECK(FzeroHudAnchorX(v, 8, -1) == 8);
+    CHECK(FzeroHudAnchorX(v, 248, 1) == v.width - 8);
+    CHECK(FzeroHudAnchorX(v, 128, 0) == v.width / 2);
+  }
+  settings.aspect = FZERO_ASPECT_FIT;
+  v = FzeroCalculateViewport(&settings, 5120, 1440);
+  CHECK(v.width == 682);
+  CHECK(FzeroCalculateViewport(&settings, 10000, 100).width == 682);
+  CHECK(FzeroCalculateViewport(&settings, 600, 900).width == 256);
+  CHECK(!FzeroCalculateViewport(&settings, 800, 600).enhanced);
+  CHECK(FzeroCalculateViewport(&settings, 0, 0).width == 256);
+  CHECK(FzeroCalculateViewport(&settings, 1920, 1080).width == 342);
+  FzeroRect r = FzeroDestination(v, 1920, 1080);
+  CHECK(r.w == 1920 && r.h == 540 && r.y == 270);
+  r = FzeroDestination(v, 0, 0);
+  CHECK(r.w == 0 && r.h == 0);
+  settings.enhanced = false;
+  r = FzeroDestination(FzeroCalculateViewport(&settings, 1920, 1080), 1920, 1080);
+  CHECK(r.w == 1440 && r.h == 1080 && r.x == 240);
+}
+
+static void clock_tests(void) {
+  const unsigned rates[] = {30, 60, 90, 120, 144, 165, 240, 360};
+  uint64_t expected_frames = (uint64_t)ceil(600 * FZERO_SIMULATION_HZ);
+  for (unsigned i = 0; i < sizeof(rates) / sizeof(*rates); ++i) {
+    FzeroClock c;
+    FzeroClockReset(&c, 0, rates[i]);
+    /* Ten minutes of independent simulation/display events, including
+     * display rates below the simulation rate and non-integer ratios. */
+    double now;
+    while ((now = FzeroClockNextDeadline(&c)) < 600) {
+      if (FzeroClockSimulationDue(&c, now)) FzeroClockSimulationDone(&c);
+      if (FzeroClockPresentationDue(&c, now)) {
+        CHECK(FzeroClockAlpha(&c, now) >= 0 && FzeroClockAlpha(&c, now) <= 1);
+        FzeroClockPresentationDone(&c, now);
+      }
+    }
+    CHECK(c.simulation_frames == expected_frames);
+    CHECK(llabs((long long)c.presentations - 600LL * rates[i]) <= 1);
+    CHECK(c.missed_presentations == 0);
+  }
+  FzeroClock c;
+  FzeroClockReset(&c, 10, 240);
+  FzeroClockSimulationDone(&c);
+  double simulation_deadline = c.next_simulation;
+  FzeroClockPresentationDone(&c, 10.05);
+  CHECK(c.missed_presentations >= 11);
+  CHECK(c.next_presentation > 10.05);
+  CHECK(c.next_simulation == simulation_deadline);
+  CHECK(FzeroClockSimulationDue(&c, 10.05));
+  FzeroClockReset(&c, 900, 120); /* resume/load discards paused wall time */
+  FzeroClockSimulationDone(&c);
+  CHECK(!FzeroClockSimulationDue(&c, 900));
+  CHECK(fabs(FzeroClockAlpha(&c, 900 + 0.5 / FZERO_SIMULATION_HZ) - 0.5) < 1e-8);
+  CHECK(FzeroClockAlpha(&c, 901) == 1);
+  CHECK(FzeroClockAlpha(&c, 899) == 0);
+  CHECK(FzeroPresentationHz(0, 59.94) == 59.94);
+  CHECK(FzeroPresentationHz(0, 500) == 360);
+  CHECK(FzeroPresentationHz(0, NAN) == 60);
+  CHECK(FzeroPresentationHz(0, 0) == 60);
+  CHECK(FzeroPresentationHz(144, 60) == 144);
+}
+
+static void config_tests(void) {
+  FzeroVideoSettings a, b;
+  FzeroVideoDefaults(&a);
+  a.enhanced = true; a.aspect = FZERO_ASPECT_FIT; a.fps = 165;
+  CHECK(FzeroVideoSave(&a, "test-video.ini"));
+  CHECK(FzeroVideoLoad(&b, "test-video.ini"));
+  CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165);
+  a.fps = 0; a.aspect = FZERO_ASPECT_21_9;
+  CHECK(FzeroVideoSave(&a, "test-video.ini")); /* atomic replacement */
+  CHECK(FzeroVideoLoad(&b, "test-video.ini"));
+  CHECK(b.aspect == FZERO_ASPECT_21_9 && b.fps == 0);
+  FILE *f = fopen("test-video.ini", "w");
+  CHECK(f);
+  fputs("EnhancedRenderer=perhaps\nAspect=99:1\nPresentationFPS=120bad\n", f);
+  fclose(f);
+  CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
+  CHECK(!b.enhanced && b.aspect == FZERO_ASPECT_16_9 && b.fps == 0);
+  remove("test-video.ini");
+  CHECK(FzeroVideoLoad(&b, "test-video.ini"));
+  CHECK(!b.enhanced);
+  CHECK(!FzeroValidFps(61));
+  FzeroAspect aspect;
+  CHECK(FzeroParseAspect("32:9", &aspect) && aspect == FZERO_ASPECT_32_9);
+  CHECK(!FzeroParseAspect("Garbage", &aspect));
+}
+
+int main(void) {
+  viewport_tests();
+  clock_tests();
+  config_tests();
+  puts("F-Zero video: viewport, anchors, clock, and config checks passed");
+  return 0;
+}
