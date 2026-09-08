@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument("--build", default="build-release")
 p.add_argument("--mingw", default="C:/msys64/mingw64")
+p.add_argument("--output", default="release-stage", help="Parent for a fresh versioned staging directory")
 a = p.parse_args()
 version = (ROOT / "VERSION").read_text().strip()
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
@@ -30,7 +31,7 @@ for source in (ROOT / "src/gen").glob("*.c"):
     if "rtl_aot_node_denied(" in source.read_text():
         raise SystemExit("Regenerate without the AOT deny gate before packaging")
 name = f"FZeroSNESRecomp-{version}-windows-x64"
-stage = ROOT / "release-stage" / name
+stage = ROOT / a.output / name
 stage.mkdir(parents=True, exist_ok=False)
 shutil.copy2(exe, stage / exe.name)
 shutil.copytree(build / "assets", stage / "assets")
@@ -78,7 +79,7 @@ for label, source in {
     "imgui": ROOT / "recomp-ui/src/third_party/imgui/LICENSE.txt",
 }.items():
     shutil.copy2(source, notices / (label + ".txt"))
-for package in ("gcc-libs", "libwinpthread", "winpthreads", "SDL3", "crt", "headers"):
+for package in ("gcc-libs", "libiconv", "libwinpthread", "winpthreads", "SDL3", "crt", "headers"):
     source = mingw / "share/licenses" / package
     if source.is_dir():
         shutil.copytree(source, notices / package)
