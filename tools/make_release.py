@@ -127,7 +127,10 @@ for font in (stage / "assets/fonts").glob("*.ttf"):
 
 git = "C:/Program Files/Git/mingw64/bin/git.exe"
 commit = subprocess.check_output([git, "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-manifest = {"version": version, "commit": commit, "files": {}}
+pins = {name: subprocess.check_output([git, "rev-parse", "HEAD"],
+                                     cwd=ROOT / name, text=True).strip()
+        for name in ("snesrecomp", "recomp-ui")}
+manifest = {"version": version, "commit": commit, "dependencies": pins, "files": {}}
 for path in sorted(stage.rglob("*")):
     if path.is_file():
         if path.suffix.lower() in (".sfc", ".smc", ".srm", ".sav", ".bin", ".c"):
