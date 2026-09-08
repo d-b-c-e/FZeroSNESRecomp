@@ -13,7 +13,11 @@
 
 # Recompiler output and other ROM-derived generated data.
 src/gen/
-assets/
+assets/*
+!assets/README.md
+!assets/img/
+assets/img/*
+!assets/img/boxart.tga
 /tier2_coverage.json
 /tier2_*.json
 /tier2_*.jsonl

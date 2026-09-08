@@ -19,6 +19,8 @@
 
 #include "fzero_runtime.h"
 #include "fzero_renderer.h"
+#include "fzero_deluxe.h"
+#include "fzero_hdma.h"
 
 #include "common_rtl.h"
 #include "cpu_state.h"
@@ -343,6 +345,27 @@ void FzeroPresent(double alpha) {
 }
 void FzeroSetDeferredPresentation(bool deferred) { s_deferred_presentation = deferred; }
 
+static uint8_t hdma_read_bus(void *context, uint32_t address, uint8_t open_bus) {
+  (void)context;
+  uint8_t bank = (uint8_t)(address >> 16);
+  uint16_t offset = (uint16_t)address;
+  if (bank == 0x7e || bank == 0x7f) return g_ram[address & 0x1ffff];
+  if ((bank & 0x7f) < 0x40 && offset < 0x2000) return g_ram[offset];
+  if ((bank & 0x7f) < 0x40 && offset < 0x6000)
+    return ReadRegOpenBus(offset, open_bus);
+  const Cart *cart = g_snes->cart;
+  if (((bank >= 0x70 && bank < 0x7e) || bank >= 0xf0) &&
+      offset < 0x8000 && cart->ram && cart->ramSize)
+    return cart->ram[(((bank & 15u) << 15) | offset) & (cart->ramSize - 1)];
+  uint8_t *mapped = cart_getRomPtr(g_snes->cart, bank, offset);
+  return mapped ? *mapped : open_bus;
+}
+
+static void hdma_write_bus(void *context, uint8_t reg, uint8_t value) {
+  (void)context;
+  ppu_write(g_ppu, reg, value);
+}
+
 void FzeroDrawPpuFrame(void) {
   const bool capture = s_viewport.enhanced || getenv("FZERO_CAPTURE_FRAME") != NULL ||
                        getenv("FZERO_CAPTURE_FRAMES") != NULL;
@@ -351,6 +374,9 @@ void FzeroDrawPpuFrame(void) {
     PpuBeginDrawing(g_ppu, (uint8_t *)s_stock_pixels, 256 * 4, kPpuRenderFlags_NewRenderer);
   }
   SimpleHdma channels[8];
+  FzeroHdma bus_channels[8] = {0};
+  FzeroHdmaBus bus = {.read = hdma_read_bus, .write = hdma_write_bus};
+  const bool deluxe_hdma = FzeroDeluxeActive();
   bool active[8] = {false};
   uint8_t cpu_ppu_registers[PPU_SAVESTATE_REGS_SIZE];
   uint16_t cpu_oam[0x100];
@@ -378,6 +404,12 @@ void FzeroDrawPpuFrame(void) {
               s_irq_events[i].after[offsetof(Ppu, bgmode)]);
     }
     fputc('\n', stderr);
+    for (int c = 0; c < 8; ++c) if (s_frame_hdmaen & (1u << c)) {
+      const DmaChannel *d = &s_frame_dma_channels[c];
+      fprintf(stderr, "[fzero-hdma] channel=%d bank=%02x address=%04x indirect=%d indbank=%02x mode=%d live_enable=%02x\n",
+              c, d->aBank, d->aAdr, d->indirect, d->indBank, d->mode,
+              g_snesrecomp_last_hdmaen);
+    }
   }
 
   memcpy(g_ppu, s_frame_ppu_start, sizeof(s_frame_ppu_start));
@@ -405,7 +437,12 @@ void FzeroDrawPpuFrame(void) {
   dma_startDma(g_dma, s_frame_hdmaen, true);
   for (int channel = 0; channel < 8; channel++) {
     active[channel] = g_dma->channel[channel].hdmaActive;
-    if (active[channel])
+    if (active[channel] && deluxe_hdma) {
+      const DmaChannel *d = &g_dma->channel[channel];
+      bus_channels[channel] = (FzeroHdma){.table = d->aAdr, .bank = d->aBank,
+        .indirect_bank = d->indBank, .mode = d->mode, .reg = d->bAdr,
+        .indirect = d->indirect, .active = true};
+    } else if (active[channel])
       SimpleHdma_Init(&channels[channel], &g_dma->channel[channel]);
   }
 
@@ -438,7 +475,10 @@ void FzeroDrawPpuFrame(void) {
     if (capture) FzeroRendererCaptureLine(g_ppu, line);
     ppu_runLine(g_ppu, line);
     for (int channel = 0; channel < 8; channel++)
-      if (active[channel]) SimpleHdma_DoLine(&channels[channel]);
+      if (active[channel]) {
+        if (deluxe_hdma) FzeroHdmaLine(&bus_channels[channel], &bus);
+        else SimpleHdma_DoLine(&channels[channel]);
+      }
   }
   (void)ppu_checkOverscan(g_ppu);
   ppu_handleVblank(g_ppu);
@@ -603,6 +643,13 @@ static const RtlGameInfo kFzeroGameInfo = {
     .session_reset = session_reset,
 };
 
-const RtlGameInfo *FzeroGameInfo(void) { return &kFzeroGameInfo; }
+const RtlGameInfo *FzeroGameInfo(void) {
+  static RtlGameInfo deluxe;
+  if (!FzeroDeluxeActive()) return &kFzeroGameInfo;
+  deluxe = kFzeroGameInfo;
+  deluxe.title = "bs_f_zero_deluxe";
+  deluxe.save_name_prefix = "fzero-bs-deluxe";
+  return &deluxe;
+}
 uint32_t FzeroResumePc(void) { return s_resume_pc; }
 int FzeroLastLleResult(void) { return s_last_lle_result; }

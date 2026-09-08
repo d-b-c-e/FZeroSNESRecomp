@@ -20,6 +20,7 @@ typedef struct FzeroVideoSettings {
   FzeroAspect aspect;
   unsigned fps; /* 0 = display refresh (Auto). */
   bool fps_enabled;
+  bool bs_deluxe; /* Launch-time content selection. */
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {

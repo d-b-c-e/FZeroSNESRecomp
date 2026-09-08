@@ -5,13 +5,16 @@ set(CMAKE_C_STANDARD 11)
 
 include(CTest)
 option(FZERO_BUILD_GAME "Build game hosts (requires privately generated ROM sources)" ON)
-add_library(fzero_video STATIC src/fzero_video.c src/fzero_mode7.c src/fzero_replay.c)
+add_library(fzero_video STATIC src/fzero_video.c src/fzero_mode7.c src/fzero_replay.c src/fzero_hdma.c)
 target_include_directories(fzero_video PUBLIC "${CMAKE_SOURCE_DIR}/src")
 if(NOT MSVC)
     target_compile_options(fzero_video PRIVATE -Wall -Wextra -Werror)
     target_link_libraries(fzero_video PUBLIC m)
 endif()
 if(BUILD_TESTING)
+    add_executable(fzero_hdma_tests tests/test_hdma.c)
+    target_link_libraries(fzero_hdma_tests PRIVATE fzero_video)
+    add_test(NAME fzero_hdma COMMAND fzero_hdma_tests)
     add_executable(fzero_video_tests tests/test_video.c)
     target_link_libraries(fzero_video_tests PRIVATE fzero_video)
     add_test(NAME fzero_video COMMAND fzero_video_tests)
@@ -73,6 +76,22 @@ list(REMOVE_ITEM SNESRECOMP_RUNNER_SOURCES
     "${SNESRECOMP_ROOT}/runner/src/keybinds.c"
     "${SNESRECOMP_ROOT}/runner/src/host_report.c")
 
+set(FZERO_DELUXE_GEN_DIR "" CACHE PATH "Private generated BS Deluxe native sources")
+if(FZERO_DELUXE_GEN_DIR)
+    file(GLOB DELUXE_SOURCES CONFIGURE_DEPENDS "${FZERO_DELUXE_GEN_DIR}/*.c")
+    if(NOT DELUXE_SOURCES OR NOT EXISTS "${FZERO_DELUXE_GEN_DIR}/deluxe_namespace.h")
+        message(FATAL_ERROR "Generate and import BS Deluxe before enabling its native module")
+    endif()
+    add_library(fzero_deluxe_native OBJECT ${DELUXE_SOURCES})
+    target_include_directories(fzero_deluxe_native PRIVATE
+        "${CMAKE_SOURCE_DIR}/recomp" ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+    if(MSVC)
+        target_compile_options(fzero_deluxe_native PRIVATE "/FI${FZERO_DELUXE_GEN_DIR}/deluxe_namespace.h")
+    else()
+        target_compile_options(fzero_deluxe_native PRIVATE -w -include "${FZERO_DELUXE_GEN_DIR}/deluxe_namespace.h")
+    endif()
+endif()
+
 # The headless host keeps its own host_report stubs: it links no SDL, and
 # host_report.c includes desktop/sdl_compat.h.
 add_executable(FZeroSNESRecompHeadless
@@ -95,6 +114,11 @@ add_executable(FZeroSNESRecomp
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
+    target_sources(${target} PRIVATE src/fzero_deluxe.c)
+    if(FZERO_DELUXE_GEN_DIR)
+        target_sources(${target} PRIVATE $<TARGET_OBJECTS:fzero_deluxe_native>)
+        target_compile_definitions(${target} PRIVATE FZERO_HAS_DELUXE=1)
+    endif()
     target_sources(${target} PRIVATE src/fzero_renderer.c)
     target_link_libraries(${target} PRIVATE fzero_video)
     target_include_directories(${target} PRIVATE
@@ -121,6 +145,11 @@ configure_fzero_target(FZeroSNESRecomp)
 # Hosts include "desktop/sdl_compat.h" rather than <SDL.h> so both majors build.
 snesrecomp_target_sdl(FZeroSNESRecomp)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
+add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga"
+        "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/img/boxart.tga"
+    VERBATIM)
 
 if(SNESRECOMP_BUILD_VERSION)
     target_compile_definitions(FZeroSNESRecomp PRIVATE

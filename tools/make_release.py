@@ -19,7 +19,15 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument("--build", default="build-release")
 p.add_argument("--mingw", default="C:/msys64/mingw64")
 p.add_argument("--output", default="release-stage", help="Parent for a fresh versioned staging directory")
+p.add_argument("--include-bs-deluxe", action="store_true",
+               help="Include locally imported Deluxe data; requires a private GitHub repository")
 a = p.parse_args()
+if a.include_bs_deluxe:
+    gh = shutil.which("gh") or "C:/Program Files/GitHub CLI/gh.exe"
+    visibility = json.loads(subprocess.check_output(
+        [gh, "repo", "view", "mstan/FZeroSNESRecomp", "--json", "isPrivate"], text=True))
+    if visibility.get("isPrivate") is not True:
+        raise SystemExit("Refusing Deluxe payload: F-Zero repository must be private")
 version = (ROOT / "VERSION").read_text().strip()
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
     raise SystemExit("Invalid VERSION")
@@ -39,12 +47,26 @@ for filename in ("README.md", "CHANGELOG.md", "VERSION"):
     shutil.copy2(ROOT / filename, stage / filename)
 (stage / "docs").mkdir()
 shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER.md")
+shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXPLORATION.md")
+shutil.copy2(ROOT / "assets/README.md", stage / "assets/README.md")
+if a.include_bs_deluxe:
+    metadata = json.loads((build / "mods/bs-deluxe-import.json").read_text())
+    payload = (build / "mods/bs-deluxe.dat").read_bytes()
+    if hashlib.sha256(payload).hexdigest() != metadata["delta_sha256"]:
+        raise SystemExit("Deluxe payload digest does not match import metadata")
+    (stage / "mods").mkdir()
+    for filename in ("bs-deluxe.dat", "bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
+        shutil.copy2(build / "mods" / filename, stage / "mods" / filename)
 (stage / "README.txt").write_text(
     f"FZeroSNESRecomp {version} - Windows x64\n\n"
     "Extract the entire ZIP and run FZeroSNESRecomp.exe. Select your own\n"
     "F-Zero (USA) ROM in the launcher. No ROM is included.\n\n"
     "Mods contains independent Widescreen and Presentation FPS plugins.\n"
     "Enable each plugin and choose its aspect or FPS setting, then Play.\n"
+    + ("BS Deluxe is also available in Mods: enable it before Play for the\n"
+       "original and BS content together. Saves are isolated under saves/bs-deluxe.\n"
+       "Read mods/BS-Deluxe-credits.txt for machine/league/alternate controls.\n"
+       if a.include_bs_deluxe else "") +
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"
     "Ctrl+F6: aspect; Ctrl+F7: enable/cycle FPS; Alt+Enter: fullscreen.\n"
     "P: pause; Ctrl+R: reset; Shift+F1..F12: save; F1..F12: load.\n\n"

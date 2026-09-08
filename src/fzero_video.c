@@ -89,6 +89,9 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
       has_fps_toggle = true;
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->fps_enabled = value[0] == '1';
       else valid = false;
+    } else if (!strcmp(key, "BSDeluxe")) {
+      if (!strcmp(value, "0") || !strcmp(value, "1")) s->bs_deluxe = value[0] == '1';
+      else valid = false;
     } else if (!strcmp(key, "Aspect")) {
       if (!FzeroParseAspect(value, &s->aspect)) valid = false;
     } else if (!strcmp(key, "PresentationFPS")) {
@@ -109,8 +112,8 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary)) return false;
   FILE *f = fopen(temporary, "w");
   if (!f) return false;
-  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\n",
-                    s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps) > 0;
+  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\n",
+                    s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe) > 0;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

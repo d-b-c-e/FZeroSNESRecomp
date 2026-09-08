@@ -27,9 +27,14 @@ silicon.
 The ROM is **never** redistributed — you supply your own legally-dumped
 copy.
 
-## Current status: 1.1.0
+## Current status: 1.3.0
 
-Open **Mods** in recomp-ui to configure two independent built-in plugins:
+This private release adds an optional, all-or-nothing **BS Deluxe** content
+plugin. The [mod and build instructions](docs/BS_DELUXE_EXPLORATION.md)
+describe its private archive import, separate saves, execution policy and
+remaining validation limits.
+
+Open **Mods** in recomp-ui to configure independent built-in plugins:
 
 - **Widescreen:** 16:9, 21:9, 32:9, or Fit (clamped to 4:3–32:9). Disabling
   it restores stock 4:3. Race HUD groups follow the outer edges; menus and
@@ -37,6 +42,10 @@ Open **Mods** in recomp-ui to configure two independent built-in plugins:
 - **Presentation FPS:** Auto display refresh or 60, 90, 120, 144, 165, 240,
   or 360 FPS. Disabling it restores the original presentation cadence.
   Native widescreen interpolates motion; stock 4:3 repeats authentic frames.
+- **BS Deluxe:** original and Satellaview content together, including eight
+  machines, 25 courses, alternate leagues/layouts and Practice ghosts. Enable
+  before Play; the stock ROM stays unchanged and Deluxe saves are separate.
+  The private release includes the verified USA 1.0 data and upstream credits.
 
 Game logic stays at 60.098811862 Hz. Opponent activation follows the viewport,
 so changing aspect can change gameplay. FPS targets depend on hardware capacity.

@@ -9,6 +9,7 @@
  */
 
 #include "fzero_runtime.h"
+#include "fzero_deluxe.h"
 #include "fzero_replay.h"
 
 #include "audio_trace.h"
@@ -285,6 +286,12 @@ int main(int argc, char **argv) {
     return 2;
   }
 
+  const char *deluxe_data = getenv("FZERO_DELUXE_DATA");
+  if (!FzeroDeluxePrepare(&rom, &rom_size, deluxe_data && *deluxe_data, deluxe_data)) {
+    fprintf(stderr, "[bs-deluxe] %s\n", FzeroDeluxeError());
+    free(rom);
+    return 2;
+  }
   RtlRegisterGame(FzeroGameInfo());
   if (!SnesInit(rom, (int)rom_size)) {
     fputs("failed to initialize the F-Zero cartridge\n", stderr);
@@ -293,6 +300,11 @@ int main(int argc, char **argv) {
   }
   const char *save_root = getenv("SNESRECOMP_SAVE_ROOT");
   if (save_root && save_root[0]) RtlSetSaveRoot(save_root);
+  if (!FzeroDeluxeSelectSaveRoot()) {
+    fprintf(stderr, "%s\n", FzeroDeluxeError());
+    free(rom);
+    return 3;
+  }
   RtlReadSram();
 
   InputSpan input_spans[kMaxInputSpans];
@@ -372,8 +384,10 @@ int main(int argc, char **argv) {
     }
     (void)RtlRunFrame(scripted_input(input_spans, input_span_count, frame));
     if (g_fail || !FzeroLastLleResult()) {
-      fprintf(stderr, "fzero_native: runtime failure frame=%ld pc=$%06x\n",
-              frame, (unsigned)FzeroResumePc());
+      fprintf(stderr, "fzero_native: runtime failure frame=%ld pc=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
+              frame, (unsigned)FzeroResumePc(), g_fail, FzeroLastLleResult(),
+              g_ram[0x54], g_ram[0x55], g_ram[0x56], g_ram[0x52]);
+      write_wram_dump(getenv("SNESRECOMP_WRAM_DUMP"));
       wav_close(&wav);
       free(rom);
       return 5;

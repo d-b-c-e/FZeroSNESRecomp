@@ -15,6 +15,7 @@ p.add_argument("--build", default="build-dev")
 p.add_argument("--viewport-script", default="")
 p.add_argument("--desktop-fps", type=int, default=None)
 p.add_argument("--lifecycle", action="store_true")
+p.add_argument("--deluxe", action="store_true", help="Use locally imported BS Deluxe data")
 a = p.parse_args()
 folder = ROOT / "captures" / a.name
 folder.mkdir(parents=True, exist_ok=True)
@@ -32,6 +33,8 @@ env.update(FZERO_CAPTURE_FRAMES=a.checkpoints,
            SNESRECOMP_WRAM_DUMP=str(folder / "final.wram"),
            FZERO_ASPECT=a.aspect)
 env["FZERO_VIEWPORT_SCRIPT"] = a.viewport_script
+if a.deluxe:
+    env["FZERO_DELUXE_DATA"] = str(ROOT / a.build / "mods/bs-deluxe.dat")
 if a.lifecycle:
     env["FZERO_LIFECYCLE_TEST"] = "1"
 host = "FZeroSNESRecompHeadless"
@@ -41,7 +44,7 @@ if a.desktop_fps is not None:
                SNESRECOMP_AUTOCLOSE_FRAMES=str(a.frames),
                FZERO_VIDEO_CONFIG=str(folder / "fzero-video.ini"))
     (folder / "fzero-video.ini").write_text(
-        f"EnhancedRenderer={int(a.aspect != '4:3')}\nAspect={a.aspect}\nPresentationEnabled=1\nPresentationFPS={a.desktop_fps}\n")
+        f"EnhancedRenderer={int(a.aspect != '4:3')}\nAspect={a.aspect}\nPresentationEnabled=1\nPresentationFPS={a.desktop_fps}\nBSDeluxe={int(a.deluxe)}\n")
 with (folder / "run.log").open("w") as log:
     result = subprocess.run([str(ROOT / a.build / (host + (".exe" if os.name == "nt" else ""))),
                              str(ROOT / "fzero.sfc"), str(a.frames)],

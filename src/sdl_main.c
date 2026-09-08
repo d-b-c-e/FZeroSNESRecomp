@@ -5,6 +5,7 @@
 
 #include "fzero_runtime.h"
 #include "fzero_mods.h"
+#include "fzero_deluxe.h"
 #include "fzero_replay.h"
 
 #include "common_rtl.h"
@@ -77,6 +78,7 @@ SpcPlayer *g_spc_player = &g_sdl_spc_player;
 
 void NORETURN Die(const char *error) {
   fprintf(stderr, "fatal: %s\n", error ? error : "unknown error");
+  fflush(stderr);
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "F-Zero",
                            error ? error : "Unknown error", NULL);
   exit(EXIT_FAILURE);
@@ -429,6 +431,21 @@ int main(int argc, char **argv) {
     return 2;
   }
 
+  char deluxe_path[2048];
+  const char *deluxe_override = getenv("FZERO_DELUXE_DATA");
+  const char *deluxe_base = SDL_GetBasePath();
+  snprintf(deluxe_path, sizeof(deluxe_path), "%smods/bs-deluxe.dat", deluxe_base ? deluxe_base : "");
+#if !SNESRECOMP_SDL3
+  SDL_free((void *)deluxe_base);
+#endif
+  if (!FzeroDeluxePrepare(&rom, &rom_size, g_video.bs_deluxe,
+                          deluxe_override ? deluxe_override : deluxe_path)) {
+    fprintf(stderr, "[bs-deluxe] %s\n", FzeroDeluxeError());
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "BS Deluxe", FzeroDeluxeError(), NULL);
+    free(rom);
+    return 2;
+  }
+
   /* SDL_Init flipped to true-on-success in SDL3 and inverts silently in its
    * old `!= 0` form, so it must route through the shim. */
   if (!snesrecomp_sdl_init(SDL_INIT_VIDEO | SDL_INIT_AUDIO |
@@ -465,6 +482,7 @@ int main(int argc, char **argv) {
   }
   const char *save_root = getenv("SNESRECOMP_SAVE_ROOT");
   if (save_root && *save_root) RtlSetSaveRoot(save_root);
+  if (!FzeroDeluxeSelectSaveRoot()) Die(FzeroDeluxeError());
   RtlReadSram();
 
   /* SDL_WINDOW_ALLOW_HIGHDPI is one of the few old names SDL3 does NOT alias
@@ -681,8 +699,12 @@ int main(int argc, char **argv) {
                        debug_server_get_controller_active_mask();
       if (FzeroReplayHasInput()) input = FzeroReplayInput((unsigned)frames);
       (void)RtlRunFrame(input);
-      if (g_fail || !FzeroLastLleResult())
+      if (g_fail || !FzeroLastLleResult()) {
+        fprintf(stderr, "[fzero-failure] frame=%ld resume=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
+                frames, (unsigned)FzeroResumePc(), g_fail, FzeroLastLleResult(),
+                g_ram[0x54], g_ram[0x55], g_ram[0x56], g_ram[0x52]);
         Die("F-Zero runtime execution failed");
+      }
       FzeroDrawPpuFrame();
       frames++;
       FzeroClockSimulationDone(&clock);

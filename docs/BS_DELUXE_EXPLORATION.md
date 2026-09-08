@@ -1,0 +1,187 @@
+# BS F-Zero Deluxe: configurable native mod exploration
+
+Status: accepted for private 1.3.0 release after visible desktop checks. Work
+was developed on `feat/bs-fzero-deluxe` in `_wt-fzero-bs-deluxe`. Tracking: central Beads
+`beads-8wg.5.3`; framework support: `beads-8wg.2.29` on the nested dependency
+branch `feat/fzero-deluxe-native-module`. Framework prerequisites are integrated
+before the game pin; the release tag records both dependency revisions.
+
+## Play the checkpoint
+
+For the private release, extract the complete Windows ZIP and run
+`FZeroSNESRecomp.exe`. Select your own stock USA ROM, then enable **BS Deluxe**
+in **Mods** before Play. The package includes the verified delta and credits;
+no import step is needed for this private build. Widescreen and Presentation
+FPS are separate optional plugins. No ROM or user save is shipped.
+
+Run `Launch-BS-Deluxe-checkpoint.cmd` from this worktree. The separate
+`build-deluxe` directory contains the executable, locally imported data, and
+its own launcher configuration. Open **Mods** to enable or disable **BS Deluxe**.
+**Widescreen** and **Presentation FPS** remain independent.
+
+The user simplified the scope to **one all-or-nothing package**. There are no
+individual feature switches or Custom preset. The complete USA Deluxe 1.0 delta
+is the package's ownership boundary: original and additional courses, eight
+machines, alternate courses/cups, records, and Practice ghosts together.
+The included upstream readme describes the controls in
+`build-deluxe/mods/BS-Deluxe-credits.txt`.
+
+The player still selects the verified stock USA ROM. The importer produces an
+indivisible cartridge delta; activation verifies the stock digest and every
+resulting byte against the pinned Deluxe digest, then maps a private in-memory
+cartridge and selects a separately namespaced compiled module. The ROM file
+is never written. A patched ROM is rejected as a player input. This is a full
+content-module adaptation, not the independently owned feature conversions used
+by the neighboring MMX6 project. The all-or-nothing scope makes that distinction
+explicit; no claim of per-feature byte ownership is made.
+
+Deluxe uses `saves/bs-deluxe/save.srm` (32 KiB), while stock uses `saves/save.srm`.
+The same subdirectory separation applies under a custom save root. Snapshot
+filenames also use a separate prefix. Existing stock saves are not migrated.
+The generated native sources, private reference ROM, and imported cartridge
+bytes are ignored and must not be committed or bundled into a public release.
+
+## Execution policy and validation limits
+
+Both native modules are linked with distinct function and table symbols;
+namespace generation covers definitions, aliases, and direct calls. Launch-time
+selection replaces dispatch, inline-argument metadata and WRAM guards together.
+
+**For this checkpoint, Deluxe's main scheduler uses the interpreter floor.**
+Its native interrupt helpers and the custom renderer remain active. Initial
+race-transition failures appeared sensitive to acceleration around 009EF4,
+but the same failure was subsequently reproduced with the interpreter floor.
+The confirmed fault was in deferred HDMA rendering, described below; an AOT
+miscompile has not been established. Further AOT promotion is deferred. The
+stock module keeps its original acceleration policy. This is not a claim that
+all Deluxe logic has been validated as native code.
+
+The added vehicle lookup also exposed a plain LoROM unmapped data read at
+1E:7F99. The CPU bus previously treated it as an invalid ROM pointer. The scoped
+fix preserves the open-bus latch, including word reads across 7FFF/8000; it leaves
+RomPtr's pointer guard intact. Hardware behavior reference:
+[SNESdev CPU open bus](https://snes.nesdev.org/wiki/Open_bus).
+
+The user-reported car-selection crash was reproduced in the visible desktop
+app at frame 789. Deferred HDMA channel 6 read `$0E:2000`; the pointer-based
+helper incorrectly treated this hardware-bus address as a ROM pointer and
+raised the fatal bus flag despite successful guest execution. Deluxe now uses
+guest-address HDMA transfers with RAM, register, cartridge and open-bus reads.
+The stock renderer retains its existing HDMA path. A focused test covers
+unmapped indirect reads, repetition, termination and wrapping within a bank.
+The exact failing input replay now completes 1,200 frames in the visible
+desktop app, with a captured frame showing the race start and no fatal error.
+
+The requested visible pairing checks also reached and ran Blue Thunder on
+Forest I (BS content) and Blue Falcon on Mute City I (original content), with
+Deluxe enabled for both. These bounded acceleration replays test loading and
+race execution, not full-race completion or handling quality.
+
+Those checks exposed invisible league/class text despite valid BG3 graphics.
+The shared PPU scanout always ORed its two window masks, ignoring WBGLOG and
+WOBJLOG. Deluxe uses XOR overlap to reveal the menu. The PPU now honors OR,
+AND, XOR and XNOR when both windows are enabled; the focused PPU regression
+checks actual rendered BG3 pixels for every operation. The custom widescreen
+renderer already honored these operations.
+After rebuilding, both visible pairings completed 1,600 frames without a
+runtime error. Captures verify the selected machines, Knight/BS-1 league menus,
+Mute City I/Forest I titles and moving vehicles in each race. The menu text is
+visible again. Final user validation remains pending.
+
+Completed checks:
+
+- Independent IPS/BPS agreement and CRC checks; synthetic overlap, malformed
+  stream and CRC rejection tests.
+- Five CTest suites pass, including the new HDMA regression test and the
+  independent content toggle.
+- Framework dispatch contract test extended for alternate tables, restoring
+  stock, mirrored open bus and the unmapped-to-ROM word boundary.
+- Stock-disabled 600-frame boot; Deluxe 1,800-frame attract and wide race routes.
+- Captured both machine-selection groups and inspected race rendering.
+- Desktop 240-FPS-target smoke run; actual target attainment is hardware limited.
+- Desktop save test wrote exactly 32,768 bytes under the Deluxe directory and
+  left a stock-save sentinel unchanged. Corrupted mod data and patched-ROM player
+  inputs were rejected. The stock ROM digest remains unchanged.
+
+**Remaining coverage: user playtest.** Check original and BS leagues, all eight
+machines, alternate layouts/cups, ghost recording/playback and persistence, and
+widescreen/FPS combinations. Full-cup coverage, all new stages, and ghost replay
+have not been validated. Further automated checks should follow specific
+failures rather than delaying this hands-on checkpoint.
+
+## Verified archive evidence
+
+Input: user-supplied `E:/Downloads/bs_f-zero_deluxe_v1.0.zip`.
+The included readme identifies version 1.0, February 10, 2024, and credits
+GuyPerfect, PowerPanda, Porthor, Catador and footage contributor kukun kun.
+Retain the supplied credits in the eventual local import flow.
+
+The readme describes all 25 courses in Practice, BS-1 and BS-2 GP leagues,
+eight vehicles, alternate course versions and mixed leagues selected with
+L+R, and a single saved Practice ghost. Big Blue II and Silence II variants
+have separate records. Some alternate layouts are cosmetic. The vehicle
+selection also affects rival and drone behavior; new vehicles are not solely
+a graphics replacement. These are documented upstream behaviors, not yet
+verified in this recomp.
+
+USA IPS and BPS patches independently produce exactly the same reference image.
+The BPS source, target and patch CRCs all verify.
+
+| Artifact | SHA-256 |
+|---|---|
+| Archive | `36935d50a036a1b269940051db4007ad25d1e41c91449390039b68e395132efb` |
+| Stock USA ROM | `bf16c3c867c58e2ab061c70de9295b6930d63f29f81cc986f5ecae03e0ad18d2` |
+| USA BPS | `8ee4baff76abd03e5e33dbf392b7aaecdcb5eaa885c445f7e200911002f301f3` |
+| USA IPS | `e80ff101b09c347e399394ae0624c18186cd391a5ebf0a2f5c64741470f02582` |
+| Private patched reference | `77bb37bcdedd3e17321727d5ed6a14792aa7a45ac04e9040b16bf564bd6dea24` |
+
+The cartridge header changes from 512 KiB ROM / 2 KiB SRAM to 1 MiB ROM /
+32 KiB SRAM. The original-size region contains 58,209 changed bytes in 437
+contiguous ranges. Changes occur in banks 00, 01, 02, 03, 06 and 07; appended
+bytes still require code/data/padding classification.
+
+A conservative interval comparison against the released native program manifest
+finds 69 potentially affected AOT variants. This is an audit lead, not a complete
+call graph or feature ownership map. The first 16 bytes at the widescreen
+projection hook 00:DCC6 match; the shadow routine at 00:C339 changes. Neither
+observation proves renderer compatibility across the entire routine.
+
+## Regenerate and build
+
+After staging the verified stock `fzero.sfc`, initialize the pinned dependencies
+and generate stock sources with `tools/regen.sh`. Build the native analyzer with
+`snesrecomp/tools/build_native_analyzer.py` (or set `SNESRECOMP_NATIVE_ANALYZER`
+to a compatible pinned executable). Then run:
+
+```powershell
+python tools/regen_bs_deluxe.py --archive E:/Downloads/bs_f-zero_deluxe_v1.0.zip
+cmake -S . -B build-deluxe -G Ninja -DCMAKE_BUILD_TYPE=Release `
+  "-DFZERO_DELUXE_GEN_DIR=$PWD/captures/bs-deluxe/gen"
+cmake --build build-deluxe
+```
+
+On Windows, invoke native CMake, Ninja and compiler executables directly when
+PATH contains MSYS shims. The shared framework changes currently live in this
+worktree's dependency branch; they are not available in the released pin yet.
+The importer preserves the original credits and records input and output hashes
+beside the private data. No upstream feature-level source code is assumed.
+
+## Reproduce the audit
+
+From this worktree, using a Python 3 executable:
+
+```powershell
+python tools/inspect_bs_deluxe.py `
+  --archive E:/Downloads/bs_f-zero_deluxe_v1.0.zip `
+  --stock ../_wt-fzero-adaptive-renderer/fzero.sfc `
+  --manifest ../_wt-fzero-adaptive-renderer/src/gen/program_manifest.json `
+  --out captures/bs-deluxe/audit.json
+```
+
+Optional `--oracle captures/bs-deluxe/oracle.sfc` creates a private reference
+with exclusive creation; it refuses to overwrite an existing file. The generated
+report contains offsets and hashes, not ROM payload. `captures/` is ignored.
+Source references: the supplied archive's `readme.txt` and USA patches,
+`../psxrecomp/MegaManX6Recomp/docs/MMX6_TWEAKS_MODS.md` and
+`docs/PSXMOD_CONVERSION_GUIDE.md` in that repository, and this worktree's
+`snesrecomp/runner/src/mod_runtime.h`.

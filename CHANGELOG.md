@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.3.0 — 2026-09-07
+
+Private feature release, advancing two minor versions from 1.1.0 as requested.
+
+- Added BS F-Zero Deluxe USA 1.0 as one independent, all-or-nothing mod:
+  original and BS courses, eight machines, alternate leagues/layouts, records
+  and Practice ghosts. The stock ROM file remains unchanged.
+- Retained separate Widescreen and Presentation FPS plugins, adaptive HUD
+  anchoring, wider opponent projection and interpolation independent of logic.
+- Added a separately namespaced Deluxe module and isolated 32 KiB SRAM saves.
+  Deluxe currently runs its main scheduler through the interpreter floor;
+  native interrupt helpers and the custom renderer remain active.
+- Fixed the car-selection HDMA bus-read crash and the shared PPU's missing
+  XOR/AND/XNOR window operations that hid league and difficulty text.
+- Added original North American SNES box art to the launcher.
+
+Validated both Blue Thunder on Forest I and Blue Falcon on Mute City I in
+visible desktop runs. Five game test suites and the focused framework dispatch
+and PPU regressions pass. Full-cup coverage and ghost recording/playback remain
+unverified. See [BS Deluxe details](docs/BS_DELUXE_EXPLORATION.md).
+
+The private release can include the locally verified Deluxe delta and upstream
+credits. The packaging tool refuses this payload unless the F-Zero repository
+is private. No stock/patched ROM or user save is included.
+
 ## 1.1.0 — 2026-09-07
 
 - Added a native Mode 7 renderer for 16:9, 21:9, 32:9 and Fit to window.
