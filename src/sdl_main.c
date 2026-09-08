@@ -22,6 +22,9 @@
 #include "spc_player.h"
 #include "types.h"
 
+#include "third_party/gl_core/gl_core_3_1.h"
+#include "glsl_shader.h"
+#include "desktop/config.h"
 #include "desktop/sdl_compat.h"
 
 #include <stdarg.h>
@@ -59,9 +62,17 @@ bool g_new_ppu = true;
 static SDL_mutex *g_audio_mutex;
 static const char kWindowTitle[] = "F-Zero";
 static FzeroVideoSettings g_video;
+Config g_config;
 static bool g_reset_presentation_clock;
 static const char *kVideoConfig = "fzero-video.ini";
 static char video_config_path[1024];
+static const char *const kFzeroAspectLabels[] = {
+    "4:3",
+    "16:9",
+    "21:9",
+    "32:9",
+    "Fit to window",
+};
 
 static void spc_initialize(SpcPlayer *player) { (void)player; }
 static void spc_upload(SpcPlayer *player, const uint8_t *data) {
@@ -82,6 +93,182 @@ void NORETURN Die(const char *error) {
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "F-Zero",
                            error ? error : "Unknown error", NULL);
   exit(EXIT_FAILURE);
+}
+
+#define GLSL_CODE(...) #__VA_ARGS__
+
+typedef struct FzeroGlRenderer {
+  SDL_Window *window;
+  SDL_GLContext context;
+  uint program;
+  uint vao;
+  uint vbo;
+  GlTextureWithSize texture;
+  GlslShader *shader;
+} FzeroGlRenderer;
+
+static void fzero_gl_prepare_window(void) {
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+}
+
+static bool fzero_gl_compile(uint shader, const char *kind) {
+  int ok = 0;
+  char info[512] = {0};
+  glCompileShader(shader);
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+  glGetShaderInfoLog(shader, sizeof(info), NULL, info);
+  if (ok != GL_TRUE) {
+    fprintf(stderr, "[fzero-gl] %s shader compile failed:\n%s\n", kind, info);
+    return false;
+  }
+  if (info[0]) fprintf(stderr, "[fzero-gl] %s shader compile log:\n%s\n", kind, info);
+  return true;
+}
+
+static bool fzero_gl_link(uint program) {
+  int ok = 0;
+  char info[512] = {0};
+  glLinkProgram(program);
+  glGetProgramiv(program, GL_LINK_STATUS, &ok);
+  glGetProgramInfoLog(program, sizeof(info), NULL, info);
+  if (ok != GL_TRUE) {
+    fprintf(stderr, "[fzero-gl] program link failed:\n%s\n", info);
+    return false;
+  }
+  if (info[0]) fprintf(stderr, "[fzero-gl] program link log:\n%s\n", info);
+  return true;
+}
+
+static bool fzero_gl_create_passthrough(FzeroGlRenderer *glr) {
+  static const GLchar *vs_code = "#version 330 core\n" GLSL_CODE(
+    layout(location = 0) in vec3 aPos;
+    layout(location = 1) in vec2 aTexCoord;
+    out vec2 TexCoord;
+    void main(void) {
+      gl_Position = vec4(aPos, 1.0);
+      TexCoord = aTexCoord;
+    }
+  );
+  static const GLchar *fs_code = "#version 330 core\n" GLSL_CODE(
+    out vec4 FragColor;
+    in vec2 TexCoord;
+    uniform sampler2D texture1;
+    void main(void) {
+      FragColor = texture(texture1, TexCoord);
+    }
+  );
+
+  uint vs = glCreateShader(GL_VERTEX_SHADER);
+  uint fs = glCreateShader(GL_FRAGMENT_SHADER);
+  glShaderSource(vs, 1, &vs_code, NULL);
+  glShaderSource(fs, 1, &fs_code, NULL);
+  bool ok = fzero_gl_compile(vs, "vertex") && fzero_gl_compile(fs, "fragment");
+  if (ok) {
+    glr->program = glCreateProgram();
+    glAttachShader(glr->program, vs);
+    glAttachShader(glr->program, fs);
+    ok = fzero_gl_link(glr->program);
+  }
+  glDeleteShader(vs);
+  glDeleteShader(fs);
+  if (!ok) return false;
+
+  static const float vertices[] = {
+      -1.0f,  1.0f, 0.0f, 0.0f, 0.0f,
+      -1.0f, -1.0f, 0.0f, 0.0f, 1.0f,
+       1.0f,  1.0f, 0.0f, 1.0f, 0.0f,
+       1.0f, -1.0f, 0.0f, 1.0f, 1.0f,
+  };
+  glGenVertexArrays(1, &glr->vao);
+  glGenBuffers(1, &glr->vbo);
+  glBindVertexArray(glr->vao);
+  glBindBuffer(GL_ARRAY_BUFFER, glr->vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                        (void *)(3 * sizeof(float)));
+  glEnableVertexAttribArray(1);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
+  return true;
+}
+
+static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
+                          const char *shader_path) {
+  memset(glr, 0, sizeof(*glr));
+  glr->window = window;
+  glr->context = SDL_GL_CreateContext(window);
+  if (!glr->context) return false;
+  SDL_GL_SetSwapInterval(1);
+  ogl_LoadFunctions();
+  if (!ogl_IsVersionGEQ(3, 3)) {
+    fprintf(stderr, "[fzero-gl] OpenGL 3.3 is required for GLSL shaders\n");
+    return false;
+  }
+  glGenTextures(1, &glr->texture.gl_texture);
+  if (!fzero_gl_create_passthrough(glr)) return false;
+  if (shader_path && shader_path[0]) {
+    glr->shader = GlslShader_CreateFromFile(shader_path);
+    if (!glr->shader) {
+      fprintf(stderr, "[fzero-gl] Unable to load shader preset: %s\n", shader_path);
+      return false;
+    }
+  }
+  return true;
+}
+
+static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
+                            int logical_width, FzeroViewport viewport,
+                            int drawable_width, int drawable_height) {
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, glr->texture.gl_texture);
+  if (glr->texture.width == logical_width && glr->texture.height == kFrameHeight) {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, logical_width, kFrameHeight,
+                    GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels);
+  } else {
+    glr->texture.width = (uint16)logical_width;
+    glr->texture.height = (uint16)kFrameHeight;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, logical_width, kFrameHeight, 0,
+                 GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels);
+  }
+
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
+  int viewport_y = drawable_height - rect.y - rect.h;
+  if (glr->shader) {
+    glBindVertexArray(glr->vao);
+    GlslShader_Render(glr->shader, &glr->texture, rect.x, viewport_y, rect.w,
+                      rect.h);
+    glBindVertexArray(0);
+  } else {
+    int filter = g_config.linear_filtering ? GL_LINEAR : GL_NEAREST;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glViewport(rect.x, viewport_y, rect.w, rect.h);
+    glUseProgram(glr->program);
+    glUniform1i(glGetUniformLocation(glr->program, "texture1"), 0);
+    glBindVertexArray(glr->vao);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glUseProgram(0);
+  }
+  SDL_GL_SwapWindow(glr->window);
+}
+
+static void fzero_gl_destroy(FzeroGlRenderer *glr) {
+  if (glr->shader) GlslShader_Destroy(glr->shader);
+  glDeleteTextures(1, &glr->texture.gl_texture);
+  glDeleteProgram(glr->program);
+  glDeleteBuffers(1, &glr->vbo);
+  glDeleteVertexArrays(1, &glr->vao);
+  if (glr->context) SDL_GL_DestroyContext(glr->context);
+  memset(glr, 0, sizeof(*glr));
 }
 
 void RtlApuLock(void) {
@@ -134,6 +321,13 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   settings->volume = 100;
   settings->player_src[0] = 1;
   settings->deadzone[0] = 25;
+  settings->aspect_index = (int)g_video.aspect;
+  {
+    const char *shader_override = getenv("FZERO_SHADER");
+    if (shader_override && shader_override[0])
+      snprintf(settings->shader_path, sizeof(settings->shader_path), "%s",
+               shader_override);
+  }
   /* The built-in mod owns native presentation settings. */
   settings->adaptive_view = 0;
   settings->widescreen_hud = 0;
@@ -156,6 +350,13 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   game.sram_path = "saves/fzero.srm";
   game.widescreen_supported = 0;
   game.adaptive_view_supported = 0;
+  game.aspect_labels = kFzeroAspectLabels;
+  game.num_aspect_labels = FZERO_ASPECT_COUNT;
+  game.aspect_setting_label = "Aspect ratio";
+  game.aspect_setting_help =
+      "Used for stock presentation. The built-in Presentation mod's aspect "
+      "option overrides this when that mod is enabled.";
+  game.has_shader = 1;
   game.mods = FzeroModsProvider(&g_video, kVideoConfig);
   game.rom_cache_path = "rom.cfg";
 
@@ -188,6 +389,11 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
     return 1;
   }
   return -1;
+}
+
+static FzeroAspect launcher_aspect(int index) {
+  if (index < 0 || index >= FZERO_ASPECT_COUNT) return FZERO_ASPECT_STOCK;
+  return (FzeroAspect)index;
 }
 
 static uint32_t keyboard_input(void) {
@@ -423,6 +629,12 @@ int main(int argc, char **argv) {
   int resolve_result =
       resolve_rom(argc, argv, rom_path, sizeof(rom_path), &launcher_settings);
   if (resolve_result <= 0) return resolve_result == 0 ? 0 : 2;
+  if (!g_video.enhanced) {
+    g_video.aspect = launcher_aspect(launcher_settings.aspect_index);
+    if (!FzeroVideoSave(&g_video, kVideoConfig))
+      fprintf(stderr, "[fzero] Unable to save video settings\n");
+  }
+  g_config.linear_filtering = launcher_settings.linear_filter != 0;
   size_t rom_size = 0;
   uint8_t *rom = read_rom(rom_path, &rom_size);
   if (!rom || !verify_rom(rom, rom_size)) {
@@ -492,29 +704,43 @@ int main(int argc, char **argv) {
 #else
   const Uint32 kHighDpiFlag = SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
+  bool use_gl_renderer = launcher_settings.shader_path[0] != 0;
+  if (use_gl_renderer) fzero_gl_prepare_window();
   SDL_Window *window = snesrecomp_sdl_create_window(
-      kWindowTitle, 768, 576, SDL_WINDOW_RESIZABLE | kHighDpiFlag);
+      kWindowTitle, 768, 576,
+      SDL_WINDOW_RESIZABLE | kHighDpiFlag |
+          (use_gl_renderer ? SDL_WINDOW_OPENGL : 0));
   if (!window) Die("Unable to create the game window");
   if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
-  SDL_Renderer *renderer = snesrecomp_sdl_create_renderer(window, false, false);
-  if (!renderer) renderer = snesrecomp_sdl_create_renderer(window, true, false);
-  if (!renderer) Die("Unable to create the game renderer");
-  SDL_Texture *texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-                        SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH,
-                        kFrameHeight);
-  if (!texture) Die("Unable to create the game texture");
-  /* Scale quality is per-texture in SDL3 (the SDL2 render hint is gone), and
-   * the SNES framebuffer leaves alpha zero, so it must be marked opaque or
-   * SDL3 blends the whole frame away and presents only the clear color. */
-  snesrecomp_sdl_set_texture_linear(texture,
-                                    launcher_settings.linear_filter != 0);
-  snesrecomp_sdl_set_texture_opaque(texture);
+  FzeroGlRenderer gl_renderer;
+  SDL_Renderer *renderer = NULL;
+  SDL_Texture *texture = NULL;
+  if (use_gl_renderer) {
+    if (!fzero_gl_init(&gl_renderer, window, launcher_settings.shader_path))
+      Die("Unable to initialize the OpenGL shader renderer");
+  } else {
+    renderer = snesrecomp_sdl_create_renderer(window, false, false);
+    if (!renderer) renderer = snesrecomp_sdl_create_renderer(window, true, false);
+    if (!renderer) Die("Unable to create the game renderer");
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH,
+                                kFrameHeight);
+    if (!texture) Die("Unable to create the game texture");
+    /* Scale quality is per-texture in SDL3 (the SDL2 render hint is gone), and
+     * the SNES framebuffer leaves alpha zero, so it must be marked opaque or
+     * SDL3 blends the whole frame away and presents only the clear color. */
+    snesrecomp_sdl_set_texture_linear(texture,
+                                      launcher_settings.linear_filter != 0);
+    snesrecomp_sdl_set_texture_opaque(texture);
+  }
 
   static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
   int drawable_width = 768, drawable_height = 576;
-  snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
+  if (use_gl_renderer)
+    snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
+  else
+    snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
   FzeroViewport viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
   FzeroSetViewport(viewport);
   FzeroSetDeferredPresentation(true);
@@ -686,7 +912,10 @@ int main(int argc, char **argv) {
       int replay_width, replay_height;
       if (FzeroReplayWindow((unsigned)frames, &replay_width, &replay_height))
         SDL_SetWindowSize(window, replay_width, replay_height);
-      snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
+      if (use_gl_renderer)
+        snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
+      else
+        snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
       FzeroViewport next = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
       if (next.width != viewport.width || next.aspect != viewport.aspect) {
         viewport = next;
@@ -714,14 +943,20 @@ int main(int argc, char **argv) {
 
     if (FzeroClockPresentationDue(&clock, now)) {
       FzeroPresent(FzeroClockAlpha(&clock, now));
-      SDL_Rect source = {0, 0, logical_width, kFrameHeight};
-      SDL_UpdateTexture(texture, &source, pixels, logical_width * kBytesPerPixel);
-      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-      SDL_RenderClear(renderer);
-      FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
-      SDL_Rect destination = {rect.x, rect.y, rect.w, rect.h};
-      snesrecomp_sdl_render_texture(renderer, texture, &source, &destination);
-      SDL_RenderPresent(renderer);
+      if (use_gl_renderer) {
+        fzero_gl_render(&gl_renderer, pixels, logical_width, viewport,
+                        drawable_width, drawable_height);
+      } else {
+        SDL_Rect source = {0, 0, logical_width, kFrameHeight};
+        SDL_UpdateTexture(texture, &source, pixels,
+                          logical_width * kBytesPerPixel);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+        FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
+        SDL_Rect destination = {rect.x, rect.y, rect.w, rect.h};
+        snesrecomp_sdl_render_texture(renderer, texture, &source, &destination);
+        SDL_RenderPresent(renderer);
+      }
       FzeroClockPresentationDone(&clock, monotonic_seconds());
       ++presentations;
     }
@@ -755,8 +990,12 @@ int main(int argc, char **argv) {
   SDL_CloseAudioDevice(audio);
 #endif
   if (pad) SDL_GameControllerClose(pad);
-  SDL_DestroyTexture(texture);
-  SDL_DestroyRenderer(renderer);
+  if (use_gl_renderer) {
+    fzero_gl_destroy(&gl_renderer);
+  } else {
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+  }
   SDL_DestroyWindow(window);
   SDL_DestroyMutex(g_audio_mutex);
   g_audio_mutex = NULL;

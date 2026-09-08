@@ -18,6 +18,8 @@ assets/*
 !assets/img/
 assets/img/*
 !assets/img/boxart.tga
+!assets/shaders/
+!assets/shaders/**
 /tier2_coverage.json
 /tier2_*.json
 /tier2_*.jsonl
@@ -46,6 +48,8 @@ assets/img/*
 captures/
 snesref_trace.jsonl
 _*
+!assets/shaders/_passes/
+!assets/shaders/_passes/**
 
 # Compiler, IDE, and OS artifacts.
 *.obj

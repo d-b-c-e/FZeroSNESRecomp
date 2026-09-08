@@ -48,6 +48,9 @@ for filename in ("README.md", "CHANGELOG.md", "VERSION"):
 (stage / "docs").mkdir()
 shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER.md")
 shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXPLORATION.md")
+screenshots = ROOT / "docs/screenshots"
+if screenshots.is_dir():
+    shutil.copytree(screenshots, stage / "docs/screenshots")
 shutil.copy2(ROOT / "assets/README.md", stage / "assets/README.md")
 if a.include_bs_deluxe:
     metadata = json.loads((build / "mods/bs-deluxe-import.json").read_text())
@@ -61,10 +64,14 @@ if a.include_bs_deluxe:
     f"FZeroSNESRecomp {version} - Windows x64\n\n"
     "Extract the entire ZIP and run FZeroSNESRecomp.exe. Select your own\n"
     "F-Zero (USA) ROM in the launcher. No ROM is included.\n\n"
+    "Settings > Display contains aspect choices and shader presets including\n"
+    "CRT Soft. Selecting a shader uses the OpenGL presentation path.\n\n"
     "Mods contains independent Widescreen and Presentation FPS plugins.\n"
     "Enable each plugin and choose its aspect or FPS setting, then Play.\n"
     + ("BS Deluxe is also available in Mods: enable it before Play for the\n"
        "original and BS content together. Saves are isolated under saves/bs-deluxe.\n"
+       "The BS Satellaview mod is included with permission from its authors:\n"
+       "GuyPerfect, Porthor, and PowerPanda.\n"
        "Read mods/BS-Deluxe-credits.txt for machine/league/alternate controls.\n"
        if a.include_bs_deluxe else "") +
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"

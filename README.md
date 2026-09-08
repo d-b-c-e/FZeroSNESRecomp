@@ -6,7 +6,11 @@ is the per-game side: the runtime, the recompiled C output, the
 per-game `.cfg`, and the build glue.
 
 <p align="center">
-  <img src="docs/screenshots/attract-race.png" width="60%" alt="F-Zero attract-mode demo race rendering in FZeroSNESRecomp">
+  <img src="docs/screenshots/widescreen-title.png" width="48%" alt="F-Zero title screen rendered in 16:9">
+  <img src="docs/screenshots/bs-forest-iii-race.png" width="48%" alt="BS F-Zero Deluxe Forest III race rendered in 16:9">
+  <br>
+  <img src="docs/screenshots/bs-blue-thunder.png" width="48%" alt="BS F-Zero Deluxe Blue Thunder machine selection">
+  <img src="docs/screenshots/bs-forest-iii.png" width="48%" alt="BS F-Zero Deluxe Forest III course select">
 </p>
 
 ## What "static recompilation" means here
@@ -27,12 +31,27 @@ silicon.
 The ROM is **never** redistributed — you supply your own legally-dumped
 copy.
 
-## Current status: 1.3.0
+## Current status: 1.4.0
 
-This private release adds an optional, all-or-nothing **BS Deluxe** content
-plugin. The [mod and build instructions](docs/BS_DELUXE_EXPLORATION.md)
-describe its private archive import, separate saves, execution policy and
-remaining validation limits.
+This private release adds launcher **Display** settings for GLSL shader
+presets, including `CRT Soft`, and exposes F-Zero's aspect choices there.
+Selecting a shader uses the OpenGL presentation path; leaving it unset keeps
+the existing SDL renderer path.
+
+The release also includes the optional, all-or-nothing **BS Deluxe** content
+plugin. The BS Satellaview mod is included with permission from its authors:
+GuyPerfect, Porthor, and PowerPanda. The
+[mod and build instructions](docs/BS_DELUXE_EXPLORATION.md) describe its
+private archive import, separate saves, execution policy and remaining
+validation limits.
+
+Open **Settings > Display** in recomp-ui to configure:
+
+- **Aspect ratio:** 4:3, 16:9, 21:9, 32:9, or Fit to window. When the
+  built-in Widescreen/Presentation mod is enabled, that mod's aspect option is
+  authoritative and overrides the generic Display aspect selection.
+- **Shader:** None, CRT Soft, LCD Grid, Sharp, Warm Composite, or a custom
+  `.glsl` / `.glslp` file placed under `assets/shaders`.
 
 Open **Mods** in recomp-ui to configure independent built-in plugins:
 
@@ -141,7 +160,7 @@ model, and the folder the game runs from.
 
 ## Building from source
 
-Private collaborator first-time setup:
+Private source checkout setup:
 
 1. Accept the GitHub repository invitation.
 2. Make sure your GitHub SSH key is configured, or authenticate with the

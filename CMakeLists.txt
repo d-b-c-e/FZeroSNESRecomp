@@ -39,6 +39,7 @@ set(SNESRECOMP_SDL_BACKEND "SDL3" CACHE STRING
 set(RECOMP_UI_ENABLE_MODS ON CACHE BOOL "F-Zero built-in native presentation mod" FORCE)
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
+find_package(OpenGL REQUIRED)
 
 add_executable(FZeroRenderCapture tools/render_capture.c src/fzero_renderer.c)
 target_include_directories(FZeroRenderCapture PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
@@ -108,6 +109,7 @@ add_executable(FZeroSNESRecomp
     ${SNESRECOMP_RUNNER_SOURCES}
     "${SNESRECOMP_ROOT}/runner/src/host_report.c"
     "${SNESRECOMP_ROOT}/runner/src/keybinds.c"
+    "${RECOMP_UI_ROOT}/src/third_party/gl_core_3_1.c"
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
     src/fzero_mods.c
@@ -143,12 +145,22 @@ endfunction()
 configure_fzero_target(FZeroSNESRecompHeadless)
 configure_fzero_target(FZeroSNESRecomp)
 # Hosts include "desktop/sdl_compat.h" rather than <SDL.h> so both majors build.
+snesrecomp_target_glsl_shader(FZeroSNESRecomp)
 snesrecomp_target_sdl(FZeroSNESRecomp)
+target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga"
         "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/img/boxart.tga"
+    VERBATIM)
+add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove_directory
+        "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/shaders"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders"
+        "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/shaders"
+    COMMENT "Staging F-Zero shader presets"
     VERBATIM)
 
 if(SNESRECOMP_BUILD_VERSION)

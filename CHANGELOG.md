@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.0 - 2026-09-08
+
+- Added launcher Display shader support for F-Zero, including staged presets:
+  CRT Soft, LCD Grid, Sharp, and Warm Composite.
+- Added an OpenGL GLSL presentation path used when a shader is selected. The
+  no-shader path keeps the existing SDL renderer behavior.
+- Added Display aspect choices for F-Zero: 4:3, 16:9, 21:9, 32:9, and Fit to
+  window. The built-in Widescreen/Presentation mod remains authoritative over
+  aspect when enabled.
+- Added widescreen and BS Deluxe screenshots to the README.
+- Updated BS Satellaview README credit/permission wording.
+
+Validated with direct unit test executables, no-shader and CRT shader desktop
+smoke runs, and a live CRT window capture after fixing the OpenGL VAO binding
+needed by the shared GLSL renderer.
+
 ## 1.3.0 — 2026-09-07
 
 Private feature release, advancing two minor versions from 1.1.0 as requested.
