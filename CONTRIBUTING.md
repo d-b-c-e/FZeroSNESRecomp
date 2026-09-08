@@ -79,7 +79,19 @@ Report the `fzero_native:` summary line and say whether the final frame
 still renders correctly. A `PASS` with a garbled frame is not a pass —
 the qualification gate measures activity, not correctness.
 
-## Commits
+## Windows release
+
+Update `VERSION` and `CHANGELOG.md`, regenerate using the native analysis backend
+without the AOT deny gate, then configure a Release build with
+`-DSNESRECOMP_BUILD_VERSION=<version>`. Run CTest and the relevant bounded game
+checks. Commit the source before packaging so the manifest records its revision.
+Run `python tools/make_release.py --build build-release`; this resolves runtime
+DLL imports and creates a fresh ROM-free ZIP and SHA-256 file in `release-stage`.
+Do not reuse or distribute a development folder containing personal ROM/config/save
+files. Publish an annotated `v<version>` tag and attach the ZIP/checksum to its
+GitHub release after owner authorization.
+
+## Commit descriptions
 
 Describe the defect and its evidence, not just the edit. If you
 disproved a plausible cause along the way, say so in the commit body;

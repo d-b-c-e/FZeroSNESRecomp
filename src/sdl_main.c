@@ -4,6 +4,8 @@
  */
 
 #include "fzero_runtime.h"
+#include "fzero_mods.h"
+#include "fzero_replay.h"
 
 #include "common_rtl.h"
 #include "cpu_trace.h"
@@ -55,6 +57,10 @@ static const char kBuildVersion[] = SNESRECOMP_BUILD_VERSION;
 bool g_new_ppu = true;
 static SDL_mutex *g_audio_mutex;
 static const char kWindowTitle[] = "F-Zero";
+static FzeroVideoSettings g_video;
+static bool g_reset_presentation_clock;
+static const char *kVideoConfig = "fzero-video.ini";
+static char video_config_path[1024];
 
 static void spc_initialize(SpcPlayer *player) { (void)player; }
 static void spc_upload(SpcPlayer *player, const uint8_t *data) {
@@ -126,8 +132,7 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   settings->volume = 100;
   settings->player_src[0] = 1;
   settings->deadzone[0] = 25;
-  /* F-Zero renders its track through Mode 7 with raster splits; no widescreen
-   * integration exists yet, so the port ships the authentic 4:3 view only. */
+  /* The built-in mod owns native presentation settings. */
   settings->adaptive_view = 0;
   settings->widescreen_hud = 0;
 
@@ -149,6 +154,7 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   game.sram_path = "saves/fzero.srm";
   game.widescreen_supported = 0;
   game.adaptive_view_supported = 0;
+  game.mods = FzeroModsProvider(&g_video, kVideoConfig);
   game.rom_cache_path = "rom.cfg";
 
   char initial_rom[1024] = {0};
@@ -306,23 +312,32 @@ static void SDLCALL audio_callback(void *userdata, Uint8 *stream, int len) {
 }
 #endif
 
-static void pace_frame(double *next_counter, double frame_counters) {
-  *next_counter += frame_counters;
-  double now = (double)SDL_GetPerformanceCounter();
-  if (now + frame_counters * 4.0 < *next_counter ||
-      now > *next_counter + frame_counters * 4.0) {
-    *next_counter = now;
-    return;
-  }
+static void wait_until(double deadline) {
   double frequency = (double)SDL_GetPerformanceFrequency();
-  while (now < *next_counter) {
-    double remaining_ms = (*next_counter - now) * 1000.0 / frequency;
+  double target = deadline * frequency;
+  double now = (double)SDL_GetPerformanceCounter();
+  while (now < target) {
+    double remaining_ms = (target - now) * 1000.0 / frequency;
     if (remaining_ms > 1.5)
       SDL_Delay((Uint32)(remaining_ms - 0.5));
     else
       SDL_Delay(0);
     now = (double)SDL_GetPerformanceCounter();
   }
+}
+
+static double monotonic_seconds(void) {
+  return (double)SDL_GetPerformanceCounter() / (double)SDL_GetPerformanceFrequency();
+}
+
+static double display_refresh(SDL_Window *window) {
+#if SNESRECOMP_SDL3
+  const SDL_DisplayMode *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
+  return mode ? mode->refresh_rate : 0;
+#else
+  SDL_DisplayMode mode;
+  return SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(window), &mode) == 0 ? mode.refresh_rate : 0;
+#endif
 }
 
 static int write_frame_bmp(const char *path, const uint8_t *pixels, int width,
@@ -370,9 +385,9 @@ static void perform_state_action(SDL_Window *window, int save, int slot,
   char path[128];
   if (save) RtlEnsureSaveDir();
   RtlSaveSlotPath(slot, path, sizeof(path));
-  set_state_feedback(window, save ? "save" : "load", slot,
-                     save ? RtlSaveSnapshot(path) : RtlLoadSnapshot(path),
-                     feedback_until);
+  int ok = save ? RtlSaveSnapshot(path) : RtlLoadSnapshot(path);
+  if (!save && ok) g_reset_presentation_clock = true;
+  set_state_feedback(window, save ? "save" : "load", slot, ok, feedback_until);
 }
 
 static void update_state_feedback(SDL_Window *window, Uint64 *feedback_until) {
@@ -384,6 +399,22 @@ static void update_state_feedback(SDL_Window *window, Uint64 *feedback_until) {
 
 int main(int argc, char **argv) {
   SDL_SetMainReady();
+  const char *config_override = getenv("FZERO_VIDEO_CONFIG");
+  if (config_override && *config_override) kVideoConfig = config_override;
+  else {
+    const char *base = SDL_GetBasePath();
+    if (base && snprintf(video_config_path, sizeof(video_config_path), "%sfzero-video.ini", base) < (int)sizeof(video_config_path))
+      kVideoConfig = video_config_path;
+#if !SNESRECOMP_SDL3
+    SDL_free((void *)base);
+#endif
+  }
+  if (!FzeroVideoLoad(&g_video, kVideoConfig))
+    fprintf(stderr, "[fzero] Invalid video settings; invalid fields use defaults\n");
+  if (!FzeroReplayConfigure(getenv("SNESRECOMP_INPUT_SCRIPT"), getenv("FZERO_VIEWPORT_SCRIPT"))) {
+    fprintf(stderr, "[fzero] Invalid validation replay\n");
+    return 2;
+  }
   host_report_init(kWindowTitle, kBuildVersion);
   char rom_path[1024] = {0};
   RecompLauncherCSettings launcher_settings;
@@ -432,6 +463,8 @@ int main(int argc, char **argv) {
 #endif
     }
   }
+  const char *save_root = getenv("SNESRECOMP_SAVE_ROOT");
+  if (save_root && *save_root) RtlSetSaveRoot(save_root);
   RtlReadSram();
 
   /* SDL_WINDOW_ALLOW_HIGHDPI is one of the few old names SDL3 does NOT alias
@@ -451,7 +484,7 @@ int main(int argc, char **argv) {
   if (!renderer) Die("Unable to create the game renderer");
   SDL_Texture *texture =
       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-                        SDL_TEXTUREACCESS_STREAMING, kPpuBufWidth,
+                        SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH,
                         kFrameHeight);
   if (!texture) Die("Unable to create the game texture");
   /* Scale quality is per-texture in SDL3 (the SDL2 render hint is gone), and
@@ -461,8 +494,13 @@ int main(int argc, char **argv) {
                                     launcher_settings.linear_filter != 0);
   snesrecomp_sdl_set_texture_opaque(texture);
 
-  static uint8_t pixels[kPpuBufWidth * kFrameHeight * kBytesPerPixel];
-  const int logical_width = FzeroFrameWidth();
+  static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
+  int drawable_width = 768, drawable_height = 576;
+  snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
+  FzeroViewport viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
+  FzeroSetViewport(viewport);
+  FzeroSetDeferredPresentation(true);
+  int logical_width = viewport.width;
   FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
 
   SDL_AudioSpec wanted = {0};
@@ -517,8 +555,12 @@ int main(int argc, char **argv) {
   long auto_close_frames = 0;
   const char *auto_close = getenv("SNESRECOMP_AUTOCLOSE_FRAMES");
   if (auto_close) auto_close_frames = strtol(auto_close, NULL, 10);
-  double frame_counters = (double)SDL_GetPerformanceFrequency() / 60.098811862;
-  double next_frame_counter = (double)SDL_GetPerformanceCounter();
+  FzeroClock clock;
+  double hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, display_refresh(window)) : FZERO_SIMULATION_HZ;
+  FzeroClockReset(&clock, monotonic_seconds(), hz);
+  bool suspended = false;
+  double next_display_check = 0;
+  uint64_t presentations = 0, missed_presentations = 0;
   while (running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -528,6 +570,27 @@ int main(int argc, char **argv) {
          * right member for each major. */
         const SDL_Keycode key = SNESRECOMP_SDL_EVENT_KEY(event);
         const Uint16 mod = (Uint16)SNESRECOMP_SDL_EVENT_MOD(event);
+        if ((mod & KMOD_CTRL) && (key == SDLK_F6 || key == SDLK_F7)) {
+          if (key == SDLK_F6) {
+            if (!g_video.enhanced) { g_video.enhanced = true; g_video.aspect = FZERO_ASPECT_16_9; }
+            else if (g_video.aspect == FZERO_ASPECT_FIT) g_video.enhanced = false;
+            else g_video.aspect++;
+          } else {
+            g_video.fps_enabled = true;
+            static const unsigned rates[] = {0,60,90,120,144,165,240,360};
+            for (unsigned i = 0; i < sizeof(rates) / sizeof(*rates); ++i)
+              if (g_video.fps == rates[i]) { g_video.fps = rates[(i + 1) % 8]; break; }
+          }
+          if (!FzeroVideoSave(&g_video, kVideoConfig)) fprintf(stderr, "[fzero] Unable to save video settings\n");
+          next_display_check = 0;
+          char title[192];
+          snprintf(title, sizeof(title), "F-Zero - %s - %s%u FPS",
+                   g_video.enhanced ? FzeroAspectName(g_video.aspect) : "4:3",
+                   g_video.fps ? "" : "Auto / ", g_video.fps ? g_video.fps : (unsigned)display_refresh(window));
+          SDL_SetWindowTitle(window, title);
+          state_feedback_until = (Uint64)SDL_GetTicks() + 2500;
+          continue;
+        }
         if (key >= SDLK_F1 && key <= SDLK_F12) {
           int slot = (int)(key - SDLK_F1);
           perform_state_action(window, (mod & KMOD_SHIFT) != 0, slot,
@@ -540,7 +603,14 @@ int main(int argc, char **argv) {
             break;
           case SDLK_p:
             paused = !paused;
-            snesrecomp_sdl_pause_audio_device(audio, paused != 0);
+            break;
+          case SDLK_r:
+            if (mod & KMOD_CTRL) {
+              RtlReset(1);
+              FzeroGameInfo()->session_reset();
+              FzeroSetViewport(viewport);
+              g_reset_presentation_clock = true;
+            }
             break;
           case SDLK_RETURN: {
             if (!(mod & KMOD_ALT)) break;
@@ -565,33 +635,90 @@ int main(int argc, char **argv) {
       if (slot >= 0)
         perform_state_action(window, 1, slot, &state_feedback_until);
     }
+    double debug_wait_start = monotonic_seconds();
     debug_server_wait_if_paused();
-    if (!paused) {
+    if (monotonic_seconds() - debug_wait_start > 0.1)
+      g_reset_presentation_clock = true;
+    if (!running) break;
+    bool should_suspend = paused || (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED);
+    if (should_suspend != suspended) {
+      suspended = should_suspend;
+      snesrecomp_sdl_pause_audio_device(audio, suspended || !launcher_settings.enable_audio);
+      g_reset_presentation_clock = true;
+    }
+    if (suspended) { SDL_Delay(10); continue; }
+    double now = monotonic_seconds();
+    if (now >= next_display_check) {
+      double next_hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, display_refresh(window)) : FZERO_SIMULATION_HZ;
+      if (next_hz != hz) {
+        hz = next_hz;
+        clock.presentation_hz = hz;
+        clock.next_presentation = now;
+      }
+      next_display_check = now + 0.25;
+    }
+    if (g_reset_presentation_clock) {
+      missed_presentations += clock.missed_presentations;
+      FzeroClockReset(&clock, now, hz);
+      g_reset_presentation_clock = false;
+    }
+    /* Viewport policy and input sampling change only at simulation boundaries. */
+    for (unsigned batch = 0; batch < 4 && FzeroClockSimulationDue(&clock, now); ++batch) {
+      FzeroReplayViewport((unsigned)frames, &g_video);
+      int replay_width, replay_height;
+      if (FzeroReplayWindow((unsigned)frames, &replay_width, &replay_height))
+        SDL_SetWindowSize(window, replay_width, replay_height);
+      snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
+      FzeroViewport next = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
+      if (next.width != viewport.width || next.aspect != viewport.aspect) {
+        viewport = next;
+        FzeroSetViewport(viewport);
+        logical_width = viewport.width;
+        FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
+      }
       uint32_t input = keyboard_input() | controller_input(pad) |
                        debug_server_get_controller_inputs() | (1u << 30) |
                        debug_server_get_controller_active_mask();
+      if (FzeroReplayHasInput()) input = FzeroReplayInput((unsigned)frames);
       (void)RtlRunFrame(input);
       if (g_fail || !FzeroLastLleResult())
         Die("F-Zero runtime execution failed");
       FzeroDrawPpuFrame();
-      SDL_Rect update_rect = {0, 0, logical_width, kFrameHeight};
-      SDL_UpdateTexture(texture, &update_rect, pixels,
-                        logical_width * kBytesPerPixel);
       frames++;
+      FzeroClockSimulationDone(&clock);
+      now = monotonic_seconds();
+      if (auto_close_frames > 0 && frames >= auto_close_frames) { running = 0; break; }
     }
 
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-    SDL_Rect source = {0, 0, logical_width, kFrameHeight};
-    snesrecomp_sdl_render_texture(renderer, texture, &source, NULL);
-    SDL_RenderPresent(renderer);
-    pace_frame(&next_frame_counter, frame_counters);
-    if (auto_close_frames > 0 && frames >= auto_close_frames) running = 0;
+    if (FzeroClockPresentationDue(&clock, now)) {
+      FzeroPresent(FzeroClockAlpha(&clock, now));
+      SDL_Rect source = {0, 0, logical_width, kFrameHeight};
+      SDL_UpdateTexture(texture, &source, pixels, logical_width * kBytesPerPixel);
+      SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+      SDL_RenderClear(renderer);
+      FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
+      SDL_Rect destination = {rect.x, rect.y, rect.w, rect.h};
+      snesrecomp_sdl_render_texture(renderer, texture, &source, &destination);
+      SDL_RenderPresent(renderer);
+      FzeroClockPresentationDone(&clock, monotonic_seconds());
+      ++presentations;
+    }
+    if (running) wait_until(FzeroClockNextDeadline(&clock));
   }
+  fprintf(stderr, "[fzero-presentation] simulation=%ld presentations=%llu missed=%llu target_hz=%.3f\n",
+          frames, (unsigned long long)presentations,
+          (unsigned long long)(missed_presentations + clock.missed_presentations), hz);
 
   const char *frame_dump = getenv("SNESRECOMP_FRAME_BMP");
   if (!write_frame_bmp(frame_dump, pixels, logical_width, kFrameHeight))
     fprintf(stderr, "Unable to write frame dump: %s\n", frame_dump);
+  const char *ram_dump = getenv("SNESRECOMP_WRAM_DUMP");
+  if (ram_dump && ram_dump[0]) {
+    FILE *dump = fopen(ram_dump, "wb");
+    if (!dump || fwrite(g_ram, sizeof(g_ram), 1, dump) != 1)
+      fprintf(stderr, "Unable to write WRAM capture\n");
+    if (dump) fclose(dump);
+  }
   RtlWriteSram();
   debug_server_shutdown();
   snesrecomp_sdl_pause_audio_device(audio, true);

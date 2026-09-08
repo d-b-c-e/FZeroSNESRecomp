@@ -18,6 +18,7 @@
  */
 
 #include "fzero_runtime.h"
+#include "fzero_renderer.h"
 
 #include "common_rtl.h"
 #include "cpu_state.h"
@@ -62,6 +63,32 @@ static unsigned s_host_frames;
 static int s_last_lle_result = 1;
 static uint8_t s_frame_hdmaen;
 static bool s_loaded_runtime_state;
+static uint8_t *s_output_pixels;
+static size_t s_output_pitch;
+static uint32_t s_stock_pixels[256 * 224];
+static FzeroViewport s_viewport = {256, 0, 4.0 / 3.0, false};
+static uint8_t s_published_ram[0x20000];
+static unsigned s_wide_projection_accepts;
+static bool s_deferred_presentation;
+
+static void widened_projection(CpuState *cpu, uint32_t pc) {
+  (void)pc;
+  if (!s_viewport.enhanced) return;
+  int x = (int16_t)cpu->A;
+  /* Retail DCC6..DCD2 rejects X outside [-32,288); the caller uses the
+   * returned carry to activate/deactivate opponent graphics and state.
+   * Admit only the newly exposed range; all original accepted/rejected
+   * paths otherwise retain their opcodes and register behavior. */
+  if ((x < -32 || x >= 288) && x >= -32 - s_viewport.extra && x < 288 + s_viewport.extra) {
+    cpu->_flag_Z = 0;
+    cpu->_flag_N = ((uint16_t)(x - (288 + s_viewport.extra)) & 0x8000) != 0;
+    interp_bridge_pre_opcode_redirect(0x00dcd3);
+    ++s_wide_projection_accepts;
+    if (s_wide_projection_accepts <= 4 || s_wide_projection_accepts % 600 == 0)
+      fprintf(stderr, "[fzero-visibility] frame=%u x=%d extra=%d accepted=%u\n",
+              s_host_frames, x, s_viewport.extra, s_wide_projection_accepts);
+  }
+}
 
 /* Frame-start snapshot the deferred renderer rewinds to. */
 static uint8_t s_frame_ppu_start[PPU_SAVESTATE_REGS_SIZE];
@@ -72,9 +99,8 @@ static DmaChannel s_frame_dma_channels[8];
 static FzeroIrqEvent s_irq_events[kMaximumIrqEventsPerFrame];
 static uint8_t s_irq_event_count;
 
-/* F-Zero ships authentic 4:3 only for now: no widescreen policy is wired up,
- * but the shared frontend symbols must still exist because the injected
- * override snippets and runner/widescreen.c reference them unconditionally. */
+/* The game-owned compositor handles wide output. Keep the shared PPU's
+ * smaller widescreen buffers disabled. */
 bool g_ws_active = false;
 int g_ws_extra = 0;
 
@@ -172,12 +198,16 @@ static bool run_main_slice(uint64_t deadline) {
 
 static void run_one_frame(void) {
   if (!s_initialized) {
+    uint64_t reset_master = g_cpu.master_cycles;
     cpu_state_init(&g_cpu, g_ram);
+    /* RtlReset keeps APU/beam sync anchored to the monotonic master clock. */
+    g_cpu.master_cycles = reset_master;
+    g_cpu.coprocessor_master_cycles = reset_master;
     s_resume_pc = read_vector(0xfffcu);
     /* The first interrupt edge is scanline 225, not the end of scanline 261.
      * Keeping every recurring deadline on that beam phase matters for games
      * that only work while $4212 reports vblank. */
-    s_next_frame_master = kFirstVblankMaster;
+    s_next_frame_master = reset_master + kFirstVblankMaster;
     s_host_frames = 0;
     s_last_lle_result = 1;
     s_initialized = true;
@@ -205,6 +235,7 @@ static void run_one_frame(void) {
   memcpy(s_frame_high_oam_start, g_ppu->highOam,
          sizeof(s_frame_high_oam_start));
   memcpy(s_frame_dma_channels, g_dma->channel, sizeof(s_frame_dma_channels));
+  memcpy(s_published_ram, g_ram, sizeof(s_published_ram));
 
   while (s_last_lle_result && g_cpu.master_cycles < deadline &&
          slices++ < kMaximumSlicesPerFrame) {
@@ -294,12 +325,31 @@ static void run_one_frame(void) {
 }
 
 void FzeroBeginDrawing(uint8_t *pixels, size_t pitch) {
+  s_output_pixels = pixels;
+  s_output_pitch = pitch;
   PpuBeginDrawing(g_ppu, pixels, pitch, kPpuRenderFlags_NewRenderer);
 }
 
-int FzeroFrameWidth(void) { return 256; }
+int FzeroFrameWidth(void) { return s_viewport.width; }
+
+void FzeroSetViewport(FzeroViewport viewport) {
+  if (viewport.width != s_viewport.width) FzeroRendererReset();
+  s_viewport = viewport;
+}
+
+void FzeroPresent(double alpha) {
+  if (s_viewport.enhanced && s_output_pixels)
+    FzeroRendererDraw((uint32_t *)s_output_pixels, s_viewport, alpha);
+}
+void FzeroSetDeferredPresentation(bool deferred) { s_deferred_presentation = deferred; }
 
 void FzeroDrawPpuFrame(void) {
+  const bool capture = s_viewport.enhanced || getenv("FZERO_CAPTURE_FRAME") != NULL ||
+                       getenv("FZERO_CAPTURE_FRAMES") != NULL;
+  if (capture) {
+    FzeroRendererBeginFrame(s_published_ram, s_host_frames);
+    PpuBeginDrawing(g_ppu, (uint8_t *)s_stock_pixels, 256 * 4, kPpuRenderFlags_NewRenderer);
+  }
   SimpleHdma channels[8];
   bool active[8] = {false};
   uint8_t cpu_ppu_registers[PPU_SAVESTATE_REGS_SIZE];
@@ -385,12 +435,22 @@ void FzeroDrawPpuFrame(void) {
         memcpy(g_ppu->highOam, event->high_oam, sizeof(event->high_oam));
       }
     }
+    if (capture) FzeroRendererCaptureLine(g_ppu, line);
     ppu_runLine(g_ppu, line);
     for (int channel = 0; channel < 8; channel++)
       if (active[channel]) SimpleHdma_DoLine(&channels[channel]);
   }
   (void)ppu_checkOverscan(g_ppu);
   ppu_handleVblank(g_ppu);
+  if (capture) {
+    FzeroRendererEndFrame(g_ppu, s_stock_pixels);
+    if (s_viewport.enhanced) {
+      if (!s_deferred_presentation) FzeroPresent(1);
+    }
+    else for (unsigned y = 0; y < 224; ++y)
+        memcpy(s_output_pixels + y * s_output_pitch, s_stock_pixels + y * 256, 256 * 4);
+    PpuBeginDrawing(g_ppu, s_output_pixels, s_output_pitch, kPpuRenderFlags_NewRenderer);
+  }
 
   memcpy(g_ppu, cpu_ppu_registers, sizeof(cpu_ppu_registers));
   memcpy(g_ppu->oam, cpu_oam, sizeof(cpu_oam));
@@ -399,6 +459,14 @@ void FzeroDrawPpuFrame(void) {
 }
 
 static void session_reset(void) {
+  FzeroRendererReset();
+  s_wide_projection_accepts = 0;
+  interp_bridge_set_pre_opcode_hook(0x00dcc6, widened_projection);
+  FzeroVideoSettings video;
+  FzeroVideoDefaults(&video);
+  const char *aspect = getenv("FZERO_ASPECT");
+  if (aspect && FzeroParseAspect(aspect, &video.aspect)) video.enhanced = true;
+  s_viewport = FzeroCalculateViewport(&video, 1920, 1080);
   s_initialized = false;
   s_resume_pc = 0;
   s_next_frame_master = 0;
@@ -509,6 +577,7 @@ static void fzero_state_load_extra(SaveLoadInfo *sli, uint32_t version) {
 }
 
 static void fzero_on_state_loaded(uint32_t version) {
+  FzeroRendererReset();
   (void)version;
   if (!s_loaded_runtime_state) return;
 
@@ -524,7 +593,7 @@ static void fzero_on_state_loaded(uint32_t version) {
 
 static const RtlGameInfo kFzeroGameInfo = {
     .title = "f_zero",
-    .initialize = NULL,
+    .initialize = session_reset,
     .run_frame = run_one_frame,
     .draw_ppu_frame = FzeroDrawPpuFrame,
     .save_name_prefix = "fzero",

@@ -1,92 +1,97 @@
-# Adaptive renderer development
+# Adaptive renderer — 1.1.0
 
-Work is tracked by central Beads feature `beads-wrca`, beneath `beads-8wg.5`.
-The implementation branch is `feat/fzero-adaptive-renderer`. This document
-describes the renderer contracts; completion and validation remain in Beads.
+Implemented in the isolated `feat/fzero-adaptive-renderer` worktree, tracked
+by central Beads `beads-wrca` beneath the F-Zero epic `beads-8wg.5`. The owner
+accepted the visual checkpoint and authorized integration/release.
 
-The current change is a **ROM-independent foundation**, not a playable
-widescreen implementation. The desktop and headless hosts still use their
-original rendering and frame loop. No game-state addresses or spawn hooks
-have been guessed, and the new library is not yet connected to the hosts.
+## Independent plugins
 
-## Agreed behavior
+| Plugin | Settings | Disabled behavior |
+|---|---|---|
+| Widescreen (`fzero-widescreen`) | 16:9, 21:9, 32:9, Fit | Stock 4:3 |
+| Presentation FPS (`fzero-presentation-fps`) | Auto, 60, 90, 120, 144, 165, 240, 360 | Original cadence |
 
-- Authentic 4:3 uses the stock PPU renderer and stock gameplay visibility.
-- An opt-in custom Mode 7 compositor owns enhanced race presentation at
-  16:9, 21:9, 32:9, or fit-to-window, clamped to 4:3–32:9. Menus retain a
-  centered 4:3 picture. HUD groups anchor to the outer edges.
-- Actual gameplay activation/spawning follows the viewport. Changes apply at
-  simulation boundaries and must be replayable; resizing can change gameplay.
-- Simulation stays at 60.098811862 Hz. Auto presentation follows display
-  refresh, capped at 360 Hz, with 60 Hz fallback. Fixed choices are 60, 90,
-  120, 144, 165, 240, and 360. Interpolation must use validated scene/camera
-  and object identities, with resets after discontinuities.
-- Windows SDL3 is the first validation target. The owner's playtest is the
-  final checkpoint before closure, merge, or release.
+`fzero-video.ini` beside the executable persists `EnhancedRenderer`, `Aspect`,
+`PresentationEnabled`, and `PresentationFPS`. Initial combined-checkpoint
+settings migrate automatically. `FZERO_VIDEO_CONFIG` overrides the path for
+isolated validation. Ctrl+F6 cycles aspect; Ctrl+F7 enables/cycles FPS.
 
-## Foundation interfaces
+## Rendering and gameplay
 
-`fzero_video.h` owns settings, physical output geometry, HUD anchor arithmetic,
-and independent simulation/presentation deadlines. Simulation debt is retained;
-only overdue presentations are skipped. The future host must pump events between
-bounded catch-up batches and explicitly reset its clock after pause/minimize/load.
-The interpolation alpha addresses previous-to-current completed snapshots,
-introducing one simulation interval of presentation latency rather than predicting
-unavailable game state.
+`fzero_renderer.c` owns immutable double-buffered frames containing per-line
+PPU registers, palette and OAM, plus VRAM, stock pixels and published game RAM.
+It samples Mode 7 beyond the stock viewport, composites Mode 1 backgrounds and
+sprites, and preserves colour math, windows and fades. It never writes guest
+state. The shared PPU's smaller wide buffers remain disabled. Internal widths
+are 342, 448 and 682 pixels at 224 lines; scaling preserves stock pixel aspect.
+Fit clamps to 4:3–32:9.
 
-Internal widths preserve the stock 256-pixel picture's 7:6 display pixel aspect:
-342, 448, and 682 pixels for the fixed wide presets. Widths are even so the
-stock center is exact; destination rectangles retain the requested physical
-aspect. The 684-pixel capacity is separate from the shared PPU's smaller buffers.
-Never pass the native output width to the stock PPU buffers.
+Race BG3 and HUD reservations anchor to the outer edges. The power meter's
+composed fill follows its outline. Non-world screens and course-intro text
+remain centered. Hidden player/effect reservations stay hidden even when their
+stale tile data lies within the expanded viewport.
 
-Settings serialize to a dedicated caller-selected file (planned host filename:
-`fzero-video.ini`). Save uses an atomic replacement; malformed recognized values
-report failure and retain safe per-field defaults.
+Vehicle identity comes from DMA ordering pointers `$0AC0..$0ACA`, which select
+six 32-byte reservations. Used-tile counts at `$11D0` suppress unused opponent
+reservation tails. Interpolation follows identity across OAM sorting changes,
+rejects changed attributes and large motion, and resets on discontinuities and
+loads. Camera interpolation handles periodic coordinates and rejects scene jumps.
 
-`fzero_mode7.h` implements a renderer-owned per-scanline affine transform, signed
-sampling outside the stock viewport, hardware map overflow behavior, periodic
-origin interpolation, and world-to-scanline projection. The register decoding
-follows the pinned framework's `PpuDrawBackground_mode7` semantics. These
-functions do not read or write guest globals. Sampling returns palette indices;
-layer ordering, colour math, fades, mosaic policy, HUD ownership, and frame
-snapshot publication still belong to the forthcoming compositor integration.
+The opponent projection routine `$00:DBC4` runs through the interpreter so a
+pre-opcode policy at `$00:DCC6` can extend its horizontal interval `[-32,288)`
+by the current viewport's extra columns. Original callers own activation flags,
+allocation-related distance metrics, graphics selection and disappearance.
+Depth/longitudinal limits and pool size retain original behavior. This changes
+actual game state, not just drawing; aspect changes can affect gameplay. No ROM
+patch or generated-C edit is used.
 
-Interpolation must only be called after the publisher proves continuity. The
-primitive cannot identify scene transitions, camera cuts, object reuse, or
-whether two scanlines belong to the same world view. Projection requires
-unwrapped world coordinates in the same coordinate system as the captured line.
+`fzero_video.c` schedules the original 60.098811862 Hz simulation independently
+from presentation. Bounded catch-up batches retain simulation debt; only overdue
+presentations are skipped. Pause, minimize and load explicitly reset pacing.
+Auto follows display refresh with a 60 Hz fallback and 360 Hz cap. Native
+interpolation uses previous/current completed snapshots, adding one simulation
+interval of latency. Stock 4:3 repeats authentic frames.
 
-## ROM-independent validation
+## Validation evidence
 
-From PowerShell, with the working directory at this worktree root:
+- Four Release CTest suites pass: video/config/clock/replay, Mode 7, renderer
+  bounds/identity/layout, and independent plugin toggles/options/persistence.
+- Eleven captured menu, intro and race frames matched stock pixels exactly
+  when the native compositor was evaluated at stock width.
+- An 1,800-frame GP input route produced identical RAM at 60/240 desktop FPS
+  and in the wide headless run.
+- A replay through 32:9, 4:3, 21:9 and Fit at two window sizes matched headless
+  and desktop at 60/144 FPS. Final RAM SHA-256:
+  `dacd0de1393c0ad9a264de5c1fc9891b15ebc8f9e26de441670cdb94167233a6`.
+- Snapshot save/load reproduced ten subsequent frames in RAM and master clock;
+  soft reset completed a 3,600-frame lifecycle route.
+- Wide attract soak, 108,180 frames: `resume=00803c`, `master=38660019778`,
+  `logic_changes=108110`, `video_active=107381`, `video_changes=79913`,
+  `audio_samples=57767662`, `audio_active=108017`, `audio_peak=17644`,
+  `audio_underruns=4`. This is 30 simulated minutes, not a desktop wall-clock
+  benchmark, and preceded the final HUD/plugin fixes.
+- Owner feedback identified stray hidden sprites and separated title characters.
+  Focused regression tests and an inspected intro capture verified the fixes;
+  the owner accepted the updated checkpoint.
 
-```powershell
-& 'C:/msys64/mingw64/bin/cmake.exe' -S . -B build-tests -G Ninja `
-  -DFZERO_BUILD_GAME=OFF -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_C_COMPILER=C:/msys64/mingw64/bin/gcc.exe `
-  -DCMAKE_MAKE_PROGRAM=C:/msys64/mingw64/bin/ninja.exe
-& 'C:/msys64/mingw64/bin/cmake.exe' --build build-tests
-& 'C:/msys64/mingw64/bin/ctest.exe' --test-dir build-tests --output-on-failure
-```
+Coverage is not exhaustive across all courses or complete cups. The owner
+preferred a fast human checkpoint over further broad automated checks. Linux,
+macOS and SDL2 were not validated for this release. Three pre-existing
+scene-transition raster/HDMA discrepancies remain in `beads-8wg.5.2`. An earlier
+optional Python-analysis build failed in attract mode; release generation uses
+the supported native backend. Selected FPS targets are not performance guarantees.
 
-The video suite checks ten simulated minutes at eight display rates, missed
-deadlines without lost simulation debt, pause/load resets, fractional refresh,
-aspect clamps, destination bars, HUD anchors, and settings replacement/validation.
-The Mode 7 suite checks both wide margins, flips, rotation, map wrapping and
-overflow fill, inverse projection, periodic interpolation, and invalid transforms.
-Checks stay active in Release builds. These synthetic tests do not establish
-retail-game rendering, spawning, timing, audio, or full-course correctness.
+## Reproduction and packaging
 
-## Integration prerequisite
+Run `ctest --test-dir <build> --output-on-failure`. Pure video/replay and Mode 7
+tests also build with `-DFZERO_BUILD_GAME=OFF`, without a ROM. The private
+`tools/run_capture.py` input grammar is `FIRST[-LAST]:MASK`; viewport events use
+`FRAME:ASPECT[@WIDTHxHEIGHT]`. `--desktop-fps` uses SDL dummy drivers and
+`--lifecycle` exercises disk snapshots and reset. `FZeroRenderCapture` renders
+local source captures and compares stock-width output against stock pixels.
+Raw captures are compiler-dependent diagnostics, not portable save states.
 
-The starting checkout has no `fzero.sfc` or `src/gen`. Stage the verified USA
-v1.0 ROM (SHA-256 from the main README) locally and regenerate before resuming
-the stock baseline and object/camera investigation. Keep ROM-derived output
-untracked. Reproduce `beads-8wg.5.2` separately from enhanced changes.
-
-After state mapping, connect immutable scanline and world snapshots to the
-native compositor, implement verified viewport-following activation hooks,
-wire the launcher and SDL host, then execute the agreed course/aspect/FPS,
-save/load, resize, complete-cup, and 30-minute soak matrix. A synthetic-test
-pass is not the final owner-validation handoff.
+`VERSION` owns the release number. Regenerate without
+`SNESRECOMP_EMIT_AOT_DENY_GATE`, build Release, and run `tools/make_release.py`.
+Packages contain launcher assets, runtime DLLs and notices; they exclude ROMs,
+generated C, personal settings, saves and captures.

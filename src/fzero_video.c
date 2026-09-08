@@ -12,7 +12,7 @@
 static const char *const aspect_names[] = {"4:3", "16:9", "21:9", "32:9", "Fit"};
 
 void FzeroVideoDefaults(FzeroVideoSettings *s) {
-  *s = (FzeroVideoSettings){false, FZERO_ASPECT_16_9, 0};
+  *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_16_9};
 }
 
 const char *FzeroAspectName(FzeroAspect aspect) {
@@ -79,10 +79,15 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
   if (!f) return errno == ENOENT;
   char line[256], key[64], value[64], tail;
   bool valid = true;
+  bool has_fps_toggle = false;
   while (fgets(line, sizeof(line), f)) {
     if (sscanf(line, " %63[^= \t] = %63s", key, value) != 2) continue;
     if (!strcmp(key, "EnhancedRenderer")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->enhanced = value[0] == '1';
+      else valid = false;
+    } else if (!strcmp(key, "PresentationEnabled")) {
+      has_fps_toggle = true;
+      if (!strcmp(value, "0") || !strcmp(value, "1")) s->fps_enabled = value[0] == '1';
       else valid = false;
     } else if (!strcmp(key, "Aspect")) {
       if (!FzeroParseAspect(value, &s->aspect)) valid = false;
@@ -95,6 +100,7 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
   }
   if (ferror(f)) valid = false;
   fclose(f);
+  if (!has_fps_toggle) s->fps_enabled = s->enhanced; /* migrate combined checkpoint mod */
   return valid;
 }
 
@@ -103,8 +109,8 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary)) return false;
   FILE *f = fopen(temporary, "w");
   if (!f) return false;
-  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationFPS=%u\n",
-                    s->enhanced, FzeroAspectName(s->aspect), s->fps) > 0;
+  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\n",
+                    s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps) > 0;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

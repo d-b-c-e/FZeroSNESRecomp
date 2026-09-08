@@ -27,17 +27,25 @@ silicon.
 The ROM is **never** redistributed — you supply your own legally-dumped
 copy.
 
-## Current status: early bring-up
+## Current status: 1.1.0
 
-The `feat/fzero-adaptive-renderer` branch starts the opt-in native widescreen
-work with a [ROM-independent renderer and timing foundation](docs/ADAPTIVE_RENDERER.md).
-It is not yet connected to the game hosts; the gameplay status below still applies.
+Open **Mods** in recomp-ui to configure two independent built-in plugins:
+
+- **Widescreen:** 16:9, 21:9, 32:9, or Fit (clamped to 4:3–32:9). Disabling
+  it restores stock 4:3. Race HUD groups follow the outer edges; menus and
+  course titles remain centered.
+- **Presentation FPS:** Auto display refresh or 60, 90, 120, 144, 165, 240,
+  or 360 FPS. Disabling it restores the original presentation cadence.
+  Native widescreen interpolates motion; stock 4:3 repeats authentic frames.
+
+Game logic stays at 60.098811862 Hz. Opponent activation follows the viewport,
+so changing aspect can change gameplay. FPS targets depend on hardware capacity.
 
 The game boots, and the title screen and the attract-mode demo race run
-clean for at least a three-minute soak: Mode 7 track, sky, crowd,
-roadside markers, sprites, HUD, and audio all behave. **Interactive
-gameplay has not been played through yet** — treat everything past the
-attract loop as unvalidated.
+cleanly. The wide attract loop completed a 108,180-frame (30 simulated minute)
+soak, and the owner playtested and accepted the checkpoint. Full-cup and
+exhaustive all-course coverage have not been established. See the
+[renderer design and validation record](docs/ADAPTIVE_RENDERER.md).
 
 Validated so far, on the headless soak host:
 
@@ -65,8 +73,8 @@ unheadered images both work.
 
 ## Quick start (from source)
 
-There is no packaged release yet. Build from source as described below,
-then run `FZeroSNESRecomp.exe`. On first launch the recomp-ui launcher
+Download the Windows x64 ZIP from the repository's Releases page, extract
+the whole archive, and run `FZeroSNESRecomp.exe`. On first launch recomp-ui
 asks for your **legally-obtained** *F-Zero (USA)* ROM (`.sfc` / `.smc`);
 the path you pick is cached to `rom.cfg` next to the exe so subsequent
 launches skip the picker.
@@ -101,6 +109,9 @@ Host shortcuts:
 | Load state 1-12 | F1..F12 |
 | Toggle pause | P |
 | Toggle fullscreen | Alt+Enter |
+| Cycle widescreen aspect | Ctrl+F6 |
+| Enable/cycle presentation FPS | Ctrl+F7 |
+| Soft reset (retain SRAM) | Ctrl+R |
 | Quit | Esc |
 
 ## Reporting crashes

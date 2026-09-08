@@ -19,6 +19,7 @@ typedef struct FzeroVideoSettings {
   bool enhanced;
   FzeroAspect aspect;
   unsigned fps; /* 0 = display refresh (Auto). */
+  bool fps_enabled;
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {

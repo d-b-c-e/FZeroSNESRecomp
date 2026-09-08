@@ -9,6 +9,7 @@
  */
 
 #include "fzero_runtime.h"
+#include "fzero_replay.h"
 
 #include "audio_trace.h"
 #include "common_rtl.h"
@@ -303,9 +304,20 @@ int main(int argc, char **argv) {
     free(rom);
     return 2;
   }
+  if (!FzeroReplayConfigure(NULL, getenv("FZERO_VIEWPORT_SCRIPT"))) {
+    fputs("invalid FZERO_VIEWPORT_SCRIPT\n", stderr);
+    free(rom); return 2;
+  }
+  FzeroVideoSettings replay_video;
+  FzeroVideoDefaults(&replay_video);
+  const char *initial_aspect = getenv("FZERO_ASPECT");
+  if (initial_aspect && FzeroParseAspect(initial_aspect, &replay_video.aspect)) replay_video.enhanced = true;
 
-  const int frame_width = FzeroFrameWidth();
-  static uint8_t pixels[kPpuBufWidth * 224u * 4u];
+  int frame_width = FzeroFrameWidth();
+  int drawable_width = 768, drawable_height = 576;
+  FzeroSetViewport(FzeroCalculateViewport(&replay_video, drawable_width, drawable_height));
+  frame_width = FzeroFrameWidth();
+  static uint8_t pixels[FZERO_MAX_WIDTH * 224u * 4u];
   int16_t audio[600 * 2];
   FzeroBeginDrawing(pixels, (size_t)frame_width * 4u);
 
@@ -317,8 +329,47 @@ int main(int argc, char **argv) {
     return 4;
   }
   double audio_accumulator = 0.0;
+  /* Private validation: replay ten frames across an actual disk snapshot. */
+  const char *lifecycle = getenv("FZERO_LIFECYCLE_TEST");
+  static uint8_t replay_expected[0x20000];
+  uint64_t replay_master = 0;
 
   for (long frame = 0; frame < frame_limit; frame++) {
+    if (lifecycle && frame == 1500) {
+      RtlEnsureSaveDir();
+      char path[1024]; RtlSaveSlotPath(11, path, sizeof(path));
+      if (!RtlSaveSnapshot(path)) { fputs("lifecycle: save failed\n", stderr); return 8; }
+      for (long n = frame; n < frame + 10; ++n) {
+        (void)RtlRunFrame(scripted_input(input_spans, input_span_count, n));
+        if (g_fail || !FzeroLastLleResult()) return 8;
+        FzeroDrawPpuFrame();
+      }
+      memcpy(replay_expected, g_ram, sizeof(replay_expected));
+      replay_master = g_cpu.master_cycles;
+      if (!RtlLoadSnapshot(path)) { fputs("lifecycle: load failed\n", stderr); return 8; }
+    }
+    if (lifecycle && frame == 1510) {
+      if (memcmp(replay_expected, g_ram, sizeof(replay_expected)) || replay_master != g_cpu.master_cycles) {
+        fputs("lifecycle: resimulation differs after load\n", stderr); return 8;
+      }
+      fputs("lifecycle: save/load ten-frame resimulation identical (RAM and master clock)\n", stderr);
+    }
+    if (lifecycle && frame == 1800) {
+      uint64_t before_reset = g_cpu.master_cycles;
+      RtlReset(1); FzeroGameInfo()->session_reset();
+      FzeroSetViewport(FzeroCalculateViewport(&replay_video, drawable_width, drawable_height));
+      FzeroBeginDrawing(pixels, (size_t)frame_width * 4u);
+      if (g_cpu.master_cycles != before_reset) return 8;
+      fputs("lifecycle: soft reset, SRAM retained\n", stderr);
+    }
+    if (FzeroReplayViewport((unsigned)frame, &replay_video)) {
+      FzeroReplayWindow((unsigned)frame, &drawable_width, &drawable_height);
+      FzeroViewport viewport = FzeroCalculateViewport(&replay_video, drawable_width, drawable_height);
+      FzeroSetViewport(viewport);
+      frame_width = viewport.width;
+      FzeroBeginDrawing(pixels, (size_t)frame_width * 4u);
+      fprintf(stderr, "[fzero-viewport] frame=%ld width=%d\n", frame, frame_width);
+    }
     (void)RtlRunFrame(scripted_input(input_spans, input_span_count, frame));
     if (g_fail || !FzeroLastLleResult()) {
       fprintf(stderr, "fzero_native: runtime failure frame=%ld pc=$%06x\n",

@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-project(FZeroSNESRecomp C)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" FZERO_VERSION LIMIT_COUNT 1)
+project(FZeroSNESRecomp VERSION ${FZERO_VERSION} LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 
 include(CTest)
 option(FZERO_BUILD_GAME "Build game hosts (requires privately generated ROM sources)" ON)
-add_library(fzero_video STATIC src/fzero_video.c src/fzero_mode7.c)
+add_library(fzero_video STATIC src/fzero_video.c src/fzero_mode7.c src/fzero_replay.c)
 target_include_directories(fzero_video PUBLIC "${CMAKE_SOURCE_DIR}/src")
 if(NOT MSVC)
     target_compile_options(fzero_video PRIVATE -Wall -Wextra -Werror)
@@ -32,15 +33,32 @@ set(RECOMP_UI_ROOT "${CMAKE_SOURCE_DIR}/recomp-ui" CACHE PATH
     "Path to the shared recomp-ui launcher checkout")
 set(SNESRECOMP_SDL_BACKEND "SDL3" CACHE STRING
     "Desktop SDL backend (SDL3 or SDL2)")
+set(RECOMP_UI_ENABLE_MODS ON CACHE BOOL "F-Zero built-in native presentation mod" FORCE)
 include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
 
-# Release version stamp: configure with -DSNESRECOMP_BUILD_VERSION=<ver>.
-# Unset (local builds) the define is omitted and the host defaults to "dev".
+add_executable(FZeroRenderCapture tools/render_capture.c src/fzero_renderer.c)
+target_include_directories(FZeroRenderCapture PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+target_link_libraries(FZeroRenderCapture PRIVATE fzero_video)
+if(BUILD_TESTING)
+    add_executable(fzero_renderer_tests tests/test_renderer.c src/fzero_renderer.c)
+    add_executable(fzero_mods_tests tests/test_mods.c src/fzero_mods.c)
+    target_include_directories(fzero_mods_tests PRIVATE "${RECOMP_UI_ROOT}/src")
+    target_link_libraries(fzero_mods_tests PRIVATE fzero_video)
+    add_test(NAME fzero_mods COMMAND fzero_mods_tests)
+    target_include_directories(fzero_renderer_tests PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+    target_link_libraries(fzero_renderer_tests PRIVATE fzero_video)
+    if(NOT MSVC)
+        target_compile_options(fzero_renderer_tests PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME fzero_renderer COMMAND fzero_renderer_tests)
+endif()
+
+# Release version stamp defaults to VERSION; override explicitly for local builds.
 # NOTE: quote it when configuring - PowerShell rewrites an unquoted
 # -DSNESRECOMP_BUILD_VERSION=0.1.0 into "0".
-set(SNESRECOMP_BUILD_VERSION "" CACHE STRING
-    "Release version stamp baked into crash reports (empty = dev)")
+set(SNESRECOMP_BUILD_VERSION "${PROJECT_VERSION}" CACHE STRING
+    "Version stamp baked into crash reports")
 
 set(FZERO_GEN_DIR "${CMAKE_SOURCE_DIR}/src/gen" CACHE PATH
     "Directory containing the private generated F-Zero C sources")
@@ -73,9 +91,12 @@ add_executable(FZeroSNESRecomp
     "${SNESRECOMP_ROOT}/runner/src/keybinds.c"
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
+    src/fzero_mods.c
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
+    target_sources(${target} PRIVATE src/fzero_renderer.c)
+    target_link_libraries(${target} PRIVATE fzero_video)
     target_include_directories(${target} PRIVATE
         "${CMAKE_SOURCE_DIR}"
         "${CMAKE_SOURCE_DIR}/src"

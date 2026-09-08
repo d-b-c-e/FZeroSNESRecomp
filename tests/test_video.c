@@ -1,4 +1,5 @@
 #include "fzero_video.h"
+#include "fzero_replay.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -112,6 +113,32 @@ static void config_tests(void) {
 }
 
 int main(void) {
+  FzeroVideoSettings replay;
+  FzeroVideoDefaults(&replay);
+  CHECK(FzeroReplayConfigure("0:8,10-20:1,15:256", "0:16:9,12:32:9,22:4:3"));
+  CHECK(FzeroReplayHasInput());
+  CHECK(FzeroReplayInput(0) == 8 && FzeroReplayInput(9) == 0);
+  CHECK(FzeroReplayInput(15) == 257 && FzeroReplayInput(20) == 1);
+  CHECK(FzeroReplayInput(21) == 0);
+  CHECK(FzeroReplayViewport(0, &replay) && replay.enhanced);
+  CHECK(!FzeroReplayViewport(1, &replay));
+  CHECK(FzeroReplayViewport(12, &replay) && replay.aspect == FZERO_ASPECT_32_9);
+  CHECK(FzeroReplayViewport(22, &replay) && !replay.enhanced);
+  CHECK(!FzeroReplayConfigure("-1:1", NULL));
+  CHECK(!FzeroReplayConfigure(" -1:1", NULL));
+  CHECK(!FzeroReplayConfigure("20-10:1", NULL));
+  CHECK(!FzeroReplayConfigure("0:4096", NULL));
+  CHECK(!FzeroReplayConfigure("0:1,", NULL));
+  CHECK(!FzeroReplayConfigure(NULL, "1:16:9,1:32:9"));
+  CHECK(!FzeroReplayConfigure(NULL, "1:16:9,"));
+  CHECK(FzeroReplayConfigure(NULL, NULL) && !FzeroReplayHasInput());
+  int width = 0, height = 0;
+  CHECK(FzeroReplayConfigure(NULL, "10:Fit@1280x720,20:Fit@5120x1440"));
+  CHECK(!FzeroReplayWindow(9, &width, &height));
+  CHECK(FzeroReplayWindow(10, &width, &height) && width == 1280 && height == 720);
+  CHECK(FzeroReplayWindow(20, &width, &height) && width == 5120 && height == 1440);
+  CHECK(!FzeroReplayConfigure(NULL, "0:Fit@0x720"));
+  CHECK(!FzeroReplayConfigure(NULL, "0:Fit@1280x0"));
   viewport_tests();
   clock_tests();
   config_tests();
