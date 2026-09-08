@@ -43,6 +43,9 @@ stage = ROOT / a.output / name
 stage.mkdir(parents=True, exist_ok=False)
 shutil.copy2(exe, stage / exe.name)
 shutil.copytree(build / "assets", stage / "assets")
+patches = ROOT / "patches"
+if patches.is_dir():
+    shutil.copytree(patches, stage / "patches")
 for filename in ("README.md", "CHANGELOG.md", "VERSION"):
     shutil.copy2(ROOT / filename, stage / filename)
 (stage / "docs").mkdir()
@@ -72,12 +75,13 @@ if a.include_bs_deluxe:
        "original and BS content together. Saves are isolated under saves/bs-deluxe.\n"
        "The BS Satellaview mod is included with permission from its authors:\n"
        "GuyPerfect, Porthor, and PowerPanda.\n"
+       "The SNES patch is included at patches/bs-deluxe-usa.ips for your own ROM.\n"
        "Read mods/BS-Deluxe-credits.txt for machine/league/alternate controls.\n"
        if a.include_bs_deluxe else "") +
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"
     "Ctrl+F6: aspect; Ctrl+F7: enable/cycle FPS; Alt+Enter: fullscreen.\n"
     "P: pause; Ctrl+R: reset; Shift+F1..F12: save; F1..F12: load.\n\n"
-    "See CHANGELOG.md and docs/ADAPTIVE_RENDERER.md for validation limits.\n",
+    "See README.md and CHANGELOG.md for more details.\n",
     encoding="utf-8")
 
 pending, seen = [stage / exe.name], set()

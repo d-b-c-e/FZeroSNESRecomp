@@ -10,6 +10,10 @@
   window. The built-in Widescreen/Presentation mod remains authoritative over
   aspect when enabled.
 - Added widescreen and BS Deluxe screenshots to the README.
+- Added a 21:9 BS Deluxe race screenshot to the README.
+- Added the BS Deluxe USA IPS patch to the repo and release ZIP at
+  `patches/bs-deluxe-usa.ips`.
+- Added Linux x86_64 AppImage release packaging.
 - Updated BS Satellaview README credit/permission wording.
 
 Validated with direct unit test executables, no-shader and CRT shader desktop
