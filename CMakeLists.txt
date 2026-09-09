@@ -112,6 +112,7 @@ add_executable(FZeroSNESRecomp
     "${RECOMP_UI_ROOT}/src/third_party/gl_core_3_1.c"
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
+    src/fzero_dlss.c
     src/fzero_mods.c
     src/fzero_runtime.c)
 
@@ -149,6 +150,7 @@ snesrecomp_target_glsl_shader(FZeroSNESRecomp)
 snesrecomp_target_sdl(FZeroSNESRecomp)
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
+configure_file(tools/dlss_worker.py dlss_worker.py COPYONLY)
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga"

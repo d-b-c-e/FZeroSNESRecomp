@@ -9,40 +9,41 @@ static char error_text[128];
 static const char *const aspects[] = {"16:9", "21:9", "32:9", "Fit"};
 static const char *const rates[] = {"Auto", "60", "90", "120", "144", "165", "240", "360"};
 #define COPY(field, value) snprintf(field, sizeof(field), "%s", value)
-static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe"};
-static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe"};
-static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe"};
+static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe", "fzero-vulkan"};
+static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe", "vulkan"};
+static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe", "Vulkan (experimental)"};
 static const char *const descriptions[] = {
   "Expand the race view and anchor the HUD at its outer edges.",
   "Choose the presentation rate independently of widescreen and game speed.",
-  "Full BS Deluxe: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves."
+  "Full BS Deluxe: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves.",
+  ""
 };
-static int count(void *ctx) { (void)ctx; return 3; }
+static int count(void *ctx) { (void)ctx; return 4; }
 static int identity(const char *package, const char *feature) {
-  if (package && feature) for (int i = 0; i < 3; ++i)
+  if (package && feature) for (int i = 0; i < 4; ++i)
     if (!strcmp(package, packages[i]) && !strcmp(feature, features[i])) return i + 1;
   return 0;
 }
 static int package_get(void *ctx, int index, RecompLauncherCModPackage *out) {
   (void)ctx;
-  if (index < 0 || index > 2 || !out) return 0;
+  if (index < 0 || index > 3 || !out) return 0;
   memset(out, 0, sizeof(*out));
   COPY(out->id, packages[index]); COPY(out->version, "1");
   COPY(out->name, names[index]); COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 3 ? video->vulkan : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   return 1;
 }
 static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
   (void)ctx;
-  if (index < 0 || index > 2 || !out) return 0;
+  if (index < 0 || index > 3 || !out) return 0;
   memset(out, 0, sizeof(*out));
   COPY(out->id, features[index]); COPY(out->package_id, packages[index]);
   COPY(out->package_name, names[index]); COPY(out->package_version, "1");
   COPY(out->name, names[index]); COPY(out->group, index == 2 ? "Content" : "Presentation");
   COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 3 ? video->vulkan : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   COPY(out->status, out->enabled ? "Enabled" : "Disabled");
   out->option_count = index == 2 ? 0 : 1;
   return 1;
@@ -53,7 +54,11 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
   int kind = identity(package, feature);
   if (!kind || kind == 3 || index != 0 || !out) return 0;
   memset(out, 0, sizeof(*out)); out->type = RECOMP_MOD_OPTION_CHOICE; out->step = 1;
-  if (kind == 1) {
+  if (kind == 4) {
+    out->type = RECOMP_MOD_OPTION_BOOLEAN;
+    COPY(out->id, "dlss5"); COPY(out->label, "DLSS 5 Neural Rendering");
+    COPY(out->value, video->dlss ? "true" : "false"); COPY(out->default_value, "false");
+  } else if (kind == 1) {
     COPY(out->id, "aspect"); COPY(out->label, "Aspect ratio");
     COPY(out->description, "Fit follows the window from 4:3 through 32:9.");
     COPY(out->value, FzeroAspectName(video->aspect)); COPY(out->default_value, "16:9");
@@ -82,7 +87,8 @@ static int choice_get(void *ctx, const char *package, const char *feature,
 static int enable(void *ctx, const char *package, const char *feature, int enabled) {
   (void)ctx;
   if (!identity(package, feature)) return 0;
-  if (identity(package, feature) == 3) video->bs_deluxe = enabled != 0;
+  if (identity(package, feature) == 4) video->vulkan = enabled != 0;
+  else if (identity(package, feature) == 3) video->bs_deluxe = enabled != 0;
   else if (identity(package, feature) == 2) video->fps_enabled = enabled != 0;
   else {
     video->enhanced = enabled != 0;
@@ -94,7 +100,10 @@ static int set_option(void *ctx, const char *package, const char *feature,
                       const char *option, const char *value) {
   (void)ctx;
   if (!identity(package, feature) || !option || !value) return 0;
-  if (identity(package, feature) == 1 && !strcmp(option, "aspect")) {
+  if (identity(package, feature) == 4 && !strcmp(option, "dlss5")) {
+    if (strcmp(value, "false") && strcmp(value, "true")) return 0;
+    video->dlss = !strcmp(value, "true"); return 1;
+  } else if (identity(package, feature) == 1 && !strcmp(option, "aspect")) {
     for (unsigned i = 0; i < 4; ++i) if (!strcmp(value, aspects[i]))
       return FzeroParseAspect(value, &video->aspect);
   } else if (identity(package, feature) == 2 && !strcmp(option, "fps")) {
