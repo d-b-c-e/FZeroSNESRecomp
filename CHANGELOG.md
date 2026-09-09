@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.4.2 - 2026-09-08
+
+- Extended live title and start-sequence scenery to the selected aspect ratio
+  while keeping logos, menu text, and course-selection artwork together.
+- Kept the race HUD adaptive from its first setup frame through attract-demo
+  exit fades; intro lives counters now retain their right-edge position.
+- Fixed the split Training course map and the centered timer after a Training
+  crash. Training and Grand Prix loss screens now use their own HUD layouts.
+- Fixed an oversized red/gray panel on the Grand Prix loss screen caused by
+  extending its collapsed color window into the widescreen margins.
+
+Accepted in interactive playtesting. All five regression suites pass, with
+focused coverage for scene transitions, temporary sprite reservations, and
+loss-screen color windows. Captured Training, loss, and attract-exit frames
+preserve stock-width output.
+
 ## 1.4.1 - 2026-09-08
 
 - Fixed distant scenery disappearing or changing abruptly in widescreen,
