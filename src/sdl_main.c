@@ -8,6 +8,7 @@
 #include "fzero_deluxe.h"
 #include "fzero_replay.h"
 #include "fzero_dlss.h"
+#include "fzero_menu.h"
 
 #include "common_rtl.h"
 #include "cpu_trace.h"
@@ -259,7 +260,6 @@ static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
     glBindVertexArray(0);
     glUseProgram(0);
   }
-  SDL_GL_SwapWindow(glr->window);
 }
 
 static void fzero_gl_destroy(FzeroGlRenderer *glr) {
@@ -753,6 +753,7 @@ int main(int argc, char **argv) {
 
   static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
   const char *dlss_env = getenv("FZERO_DLSS");
+  FzeroDlssConfigure(&g_video);
   bool dlss_enabled = use_vulkan && (dlss_env ? !strcmp(dlss_env, "1") : g_video.dlss) && FzeroDlssStart();
   SDL_Texture *dlss_texture = NULL;
   SDL_Texture *dlss_original_texture = NULL;
@@ -815,6 +816,8 @@ int main(int argc, char **argv) {
 #endif
 
   int running = 1;
+  if (!FzeroMenuInit(window, renderer, &g_video, &dlss_enabled, &dlss_compare,
+                     &running, kVideoConfig, use_vulkan)) Die("Unable to initialize in-game menu");
   int paused = 0;
   Uint64 state_feedback_until = 0;
   long frames = 0;
@@ -830,6 +833,7 @@ int main(int argc, char **argv) {
   while (running) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+      if (FzeroMenuEvent(&event)) continue;
       if (event.type == SDL_QUIT) running = 0;
       if (event.type == SDL_KEYDOWN && !event.key.repeat) {
         /* The keysym struct was flattened in SDL3; the shim macros pick the
@@ -927,7 +931,7 @@ int main(int argc, char **argv) {
       snesrecomp_sdl_pause_audio_device(audio, suspended || !launcher_settings.enable_audio);
       g_reset_presentation_clock = true;
     }
-    if (suspended) { SDL_Delay(10); continue; }
+    if (suspended && (!FzeroMenuOpen() || (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED))) { SDL_Delay(10); continue; }
     double now = monotonic_seconds();
     if (now >= next_display_check) {
       if (use_vulkan && !state_feedback_until) {
@@ -951,7 +955,8 @@ int main(int argc, char **argv) {
       g_reset_presentation_clock = false;
     }
     /* Viewport policy and input sampling change only at simulation boundaries. */
-    for (unsigned batch = 0; batch < 4 && FzeroClockSimulationDue(&clock, now); ++batch) {
+    if (suspended) clock.next_simulation = now + 1.0 / FZERO_SIMULATION_HZ;
+    for (unsigned batch = 0; !suspended && batch < 4 && FzeroClockSimulationDue(&clock, now); ++batch) {
       FzeroReplayViewport((unsigned)frames, &g_video);
       int replay_width, replay_height;
       if (FzeroReplayWindow((unsigned)frames, &replay_width, &replay_height))
@@ -968,7 +973,7 @@ int main(int argc, char **argv) {
         logical_width = viewport.width;
         FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
       }
-      uint32_t input = keyboard_input() | controller_input(pad) |
+      uint32_t input = (FzeroMenuOpen() ? 0 : keyboard_input()) | controller_input(pad) |
                        debug_server_get_controller_inputs() | (1u << 30) |
                        debug_server_get_controller_active_mask();
       if (FzeroReplayHasInput()) input = FzeroReplayInput((unsigned)frames);
@@ -991,6 +996,8 @@ int main(int argc, char **argv) {
       if (use_gl_renderer) {
         fzero_gl_render(&gl_renderer, pixels, logical_width, viewport,
                         drawable_width, drawable_height);
+        FzeroMenuDraw();
+        SDL_GL_SwapWindow(window);
       } else {
         SDL_Rect source = {0, 0, logical_width, kFrameHeight};
         SDL_Texture *present_texture = texture;
@@ -1039,6 +1046,7 @@ int main(int argc, char **argv) {
           left_destination.w = (int)((int64_t)destination.w * left_source.w / source.w);
           snesrecomp_sdl_render_texture(renderer, dlss_original_texture, &left_source, &left_destination);
         }
+        FzeroMenuDraw();
 #if SNESRECOMP_SDL3
         const char *capture_path = getenv("FZERO_PRESENT_CAPTURE");
         const char *capture_frame = getenv("FZERO_PRESENT_CAPTURE_FRAME");
@@ -1074,6 +1082,7 @@ int main(int argc, char **argv) {
     if (dump) fclose(dump);
   }
   RtlWriteSram();
+  FzeroMenuShutdown();
   FzeroDlssStop();
   SDL_DestroyTexture(dlss_texture);
   SDL_DestroyTexture(dlss_original_texture);

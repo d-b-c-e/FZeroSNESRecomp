@@ -29,6 +29,18 @@ output on the right. The title reports Starting, Priming history, Temporal,
 Off, or Failed (original output). Existing controls, save slots, audio and original simulation
 timing remain available. The OpenGL shader preset is inactive under Vulkan.
 
+Esc (or Ctrl+F10) now opens/closes recomp-ui's shared in-game settings menu,
+instead of quitting immediately. Its DLSS5 section exposes on/off, split view,
+style, preset, intensity/tone/structure/skin strength, auto mask, temporal mode,
+and Reset defaults. Numeric controls step by 5 percentage points; 100 maps to
+the runtime's 1.0, not a calibrated percentage of visual change. Changes are
+saved to fzero-video.ini and applied to the next submitted neural frame, with
+history invalidation and no worker restart. Game > Quit game replaces Esc quit.
+The game keeps running behind the menu; keyboard gameplay input is suppressed
+while navigating it. This uses the existing recomp-ui runtime model and theme;
+no shared repository changes are required. The SDL3 ImGui renderer backend is
+vendored unmodified from Dear ImGui v1.91.9b with its MIT license.
+
 Every game build includes the BS Deluxe native module, data and credits.
 Configure `FZERO_DELUXE_GEN_DIR` and `FZERO_DELUXE_MODS_DIR` to the existing
 private generated/imported directories when building in a separate worktree.

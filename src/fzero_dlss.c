@@ -14,6 +14,7 @@ static unsigned char *shared;
 static uint32_t *cached;
 static uint32_t *original;
 static const char *status = "Off";
+static int parameters[8] = {1, 3, 100, 100, 100, -100, 0, 1};
 static bool busy, valid, reset = true;
 static unsigned generation, submitted_generation;
 static int cached_width, cached_height;
@@ -104,6 +105,12 @@ fail:
 }
 
 void FzeroDlssReset(void) { ++generation; valid = false; reset = true; }
+void FzeroDlssConfigure(const FzeroVideoSettings *settings) {
+  if (memcmp(parameters, settings->dlss_params, sizeof(parameters))) {
+    memcpy(parameters, settings->dlss_params, sizeof(parameters));
+    FzeroDlssReset();
+  }
+}
 
 const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
                               double aspect, int *out_width, int *out_height) {
@@ -124,7 +131,7 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
              (size_t)cached_width * cached_height * 4);
       memcpy(original, shared + HEADER_BYTES, (size_t)cached_width * cached_height * 4);
       valid = true;
-      status = header[7] ? "Temporal" : "Priming history";
+      status = !parameters[2] ? "Bypass (0%)" : !parameters[7] ? "Still frames" : header[7] ? "Temporal" : "Priming history";
       fprintf(stderr, "[dlss] Neural frame %u: %u ms, %dx%d, %s\n", header[6], header[4], cached_width, cached_height, status);
     }
   }
@@ -147,6 +154,7 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
     for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x)
       input[y * w + x] = pixels[(y * height / h) * width + x * width / w];
     header[0] = w; header[1] = h; header[2] = reset; ++header[5];
+    memcpy(shared + 32, parameters, sizeof(parameters));
     reset = false; busy = true; submitted_generation = generation;
     submitted_at = GetTickCount64(); SetEvent(request);
   }
@@ -154,6 +162,7 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
   return valid ? cached : NULL;
 }
 #else
+void FzeroDlssConfigure(const FzeroVideoSettings *s) { (void)s; }
 bool FzeroDlssStart(void) { fprintf(stderr, "[dlss] This experiment requires Windows\n"); return false; }
 const char *FzeroDlssStatus(void) { return "Unavailable"; }
 const uint32_t *FzeroDlssOriginal(void) { return NULL; }

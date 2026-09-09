@@ -15,6 +15,7 @@ class FakeNative:
                         tone, structure, skin, mask, reset, temporal, error, cap):
         self.reset = reset
         self.temporal = temporal
+        self.settings = (style, preset, intensity, tone, structure, skin, mask)
         np.ctypeslib.as_array(dst, shape=(w * h * 3,))[:] = np.ctypeslib.as_array(src, shape=(w * h * 3,))
         return 1
 
@@ -35,6 +36,17 @@ class WorkerTests(unittest.TestCase):
         out, _ = self.bridge.process(self.rgb, False, True, self.args)
         np.testing.assert_array_equal(out, self.rgb)
         self.assertEqual(self.bridge.motion[4], 1)
+
+    def test_tuning_reaches_native_call(self):
+        self.args.style = 2
+        self.args.preset = 1
+        self.args.intensity = 1.75
+        self.args.tone = 0.65
+        self.args.structure = 0.4
+        self.args.skin = 0.5
+        self.args.auto_mask = True
+        self.bridge.process(self.rgb, True, True, self.args)
+        self.assertEqual(self.bridge.lib.settings, (2, 1, 1.75, 0.65, 0.4, 0.5, 1))
 
     def test_black_first_frame_does_not_choose_channel_order(self):
         self.bridge.process(np.zeros_like(self.rgb), True, True, self.args)

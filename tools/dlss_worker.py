@@ -68,8 +68,8 @@ class Bridge:
         start = time.perf_counter()
         self.check(self.lib.dlss5nr_process(
             src.ctypes.data_as(c.POINTER(c.c_float)), dst.ctypes.data_as(c.POINTER(c.c_float)),
-            w, h, args.style, 3, args.intensity, args.tone, args.structure, -1.0,
-            0, int(reset), int(temporal), self.error, len(self.error)))
+            w, h, args.style, getattr(args, 'preset', 3), args.intensity, args.tone, args.structure, getattr(args, 'skin', -1.0),
+            int(getattr(args, 'auto_mask', False)), int(reset), int(temporal), self.error, len(self.error)))
         elapsed = (time.perf_counter() - start) * 1000
         self.lib.dlss5nr_motion_stats(self.motion)
         if not np.isfinite(dst).all():
@@ -125,6 +125,13 @@ def live(args):
             if result != 1:
                 raise OSError(c.get_last_error(), 'Mailbox wait failed')
             w, h, reset, _, _, sequence = struct.unpack_from('<6I', memory)
+            params = struct.unpack_from('<8i', memory, 32)
+            bounds = ((0, 6), (0, 3), (0, 200), (0, 200), (0, 200), (-100, 200), (0, 1), (0, 1))
+            if any(not lo <= v <= hi for v, (lo, hi) in zip(params, bounds)):
+                raise ValueError('Invalid neural settings in mailbox')
+            args.style, args.preset = params[:2]
+            args.intensity, args.tone, args.structure, args.skin = (v / 100 for v in params[2:6])
+            args.auto_mask, args.temporal = (bool(v) for v in params[6:])
             if not (0 < w <= 1280 and 0 < h <= 960):
                 raise ValueError('Invalid mailbox dimensions')
             packed = np.frombuffer(memory, '<u4', w * h, HEADER).copy().reshape(h, w)
@@ -140,7 +147,7 @@ def live(args):
             log.write(json.dumps(dict(event='evaluated', sequence=sequence, milliseconds=ms,
                                       reset=reset, temporal=args.temporal,
                                       width=w, height=h, swap_rb=getattr(bridge, 'swap', False),
-                                      motion=list(bridge.motion))) + '\n')
+                                      motion=list(bridge.motion), parameters=params)) + '\n')
             if sequence % 120 == 0:
                 Image.fromarray(rgb).save(Path(args.root) / 'live-original.png')
                 Image.fromarray(out).save(Path(args.root) / 'live-neural.png')
@@ -172,13 +179,18 @@ def main():
     p.add_argument('--output', type=Path)
     p.add_argument('--width', type=int, default=640)
     p.add_argument('--height', type=int, default=480)
-    p.add_argument('--style', type=int, default=1)
+    p.add_argument('--style', type=int, choices=range(7), default=1)
+    p.add_argument('--preset', type=int, choices=range(4), default=3)
+    p.add_argument('--skin', type=float, default=-1)
+    p.add_argument('--auto-mask', action='store_true')
     p.add_argument('--temporal', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--channel-order', choices=['rgb', 'bgr'], default='rgb')
     p.add_argument('--intensity', type=float, default=1)
     p.add_argument('--tone', type=float, default=1)
     p.add_argument('--structure', type=float, default=1)
     args = p.parse_args()
+    if not np.isfinite(args.skin) or not -1 <= args.skin <= 2:
+        p.error('skin strength must be finite and between -1 and 2')
     if not all(np.isfinite(v) and 0 <= v <= 2 for v in (args.intensity, args.tone, args.structure)):
         p.error('strengths must be finite values between 0 and 2')
     if args.mode == 'live':

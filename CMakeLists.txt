@@ -169,6 +169,12 @@ snesrecomp_target_glsl_shader(FZeroSNESRecomp)
 snesrecomp_target_sdl(FZeroSNESRecomp)
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
+target_sources(FZeroSNESRecomp PRIVATE src/fzero_menu.cpp)
+if(SNESRECOMP_SDL_BACKEND STREQUAL "SDL3")
+    target_sources(FZeroSNESRecomp PRIVATE src/third_party/imgui-sdl3/imgui_impl_sdlrenderer3.cpp)
+else()
+    target_sources(FZeroSNESRecomp PRIVATE "${RECOMP_UI_ROOT}/src/third_party/imgui/backends/imgui_impl_sdlrenderer2.cpp")
+endif()
 configure_file(tools/dlss_worker.py dlss_worker.py COPYONLY)
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

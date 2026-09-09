@@ -10,9 +10,27 @@
 #endif
 
 static const char *const aspect_names[] = {"4:3", "16:9", "21:9", "32:9", "Fit"};
+const FzeroDlssParam fzero_dlss_params[FZERO_DLSS_PARAM_COUNT] = {
+  {"DLSSStyle", "Style", 0, 6, 1}, {"DLSSPreset", "Preset", 0, 3, 3},
+  {"DLSSIntensity", "Intensity (%)", 0, 200, 100},
+  {"DLSSTone", "Tone (%)", 0, 200, 100},
+  {"DLSSStructure", "Structure (%)", 0, 200, 100},
+  {"DLSSSkin", "Skin strength (%)", -100, 200, -100},
+  {"DLSSAutoMask", "Auto mask", 0, 1, 0},
+  {"DLSSTemporal", "Temporal history", 0, 1, 1}
+};
+void FzeroDlssDefaults(FzeroVideoSettings *s) {
+  for (int i = 0; i < FZERO_DLSS_PARAM_COUNT; ++i) s->dlss_params[i] = fzero_dlss_params[i].initial;
+}
+bool FzeroDlssSetParam(FzeroVideoSettings *s, int i, int value) {
+  if (i < 0 || i >= FZERO_DLSS_PARAM_COUNT || value < fzero_dlss_params[i].minimum || value > fzero_dlss_params[i].maximum) return false;
+  s->dlss_params[i] = value;
+  return true;
+}
 
 void FzeroVideoDefaults(FzeroVideoSettings *s) {
   *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_16_9};
+  FzeroDlssDefaults(s);
 }
 
 const char *FzeroAspectName(FzeroAspect aspect) {
@@ -82,6 +100,15 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
   bool has_fps_toggle = false;
   while (fgets(line, sizeof(line), f)) {
     if (sscanf(line, " %63[^= \t] = %63s", key, value) != 2) continue;
+    for (int i = 0; i < FZERO_DLSS_PARAM_COUNT; ++i) {
+      if (!strcmp(key, fzero_dlss_params[i].key)) {
+        char *end;
+        errno = 0;
+        long n = strtol(value, &end, 10);
+        if (errno || end == value || *end || n < fzero_dlss_params[i].minimum || n > fzero_dlss_params[i].maximum) valid = false;
+        else FzeroDlssSetParam(s, i, (int)n);
+      }
+    }
     if (!strcmp(key, "Vulkan") || !strcmp(key, "DLSS5")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) {
         if (!strcmp(key, "Vulkan")) s->vulkan = value[0] == '1';
@@ -119,6 +146,8 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (!f) return false;
   bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nVulkan=%d\nDLSS5=%d\n",
                     s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe, s->vulkan, s->dlss) > 0;
+  for (int i = 0; i < FZERO_DLSS_PARAM_COUNT; ++i)
+    if (fprintf(f, "%s=%d\n", fzero_dlss_params[i].key, s->dlss_params[i]) < 0) ok = false;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

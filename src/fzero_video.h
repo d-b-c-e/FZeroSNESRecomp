@@ -23,7 +23,19 @@ typedef struct FzeroVideoSettings {
   bool bs_deluxe; /* Launch-time content selection. */
   bool vulkan;
   bool dlss;
+  int dlss_params[8]; /* style, preset, intensity/tone/structure/skin %, mask, temporal */
 } FzeroVideoSettings;
+
+enum { FZERO_DLSS_STYLE, FZERO_DLSS_PRESET, FZERO_DLSS_INTENSITY,
+       FZERO_DLSS_TONE, FZERO_DLSS_STRUCTURE, FZERO_DLSS_SKIN,
+       FZERO_DLSS_MASK, FZERO_DLSS_TEMPORAL, FZERO_DLSS_PARAM_COUNT };
+typedef struct FzeroDlssParam {
+  const char *key, *label;
+  int minimum, maximum, initial;
+} FzeroDlssParam;
+extern const FzeroDlssParam fzero_dlss_params[FZERO_DLSS_PARAM_COUNT];
+void FzeroDlssDefaults(FzeroVideoSettings *settings);
+bool FzeroDlssSetParam(FzeroVideoSettings *settings, int index, int value);
 
 typedef struct FzeroViewport {
   int width, extra;

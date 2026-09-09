@@ -11,6 +11,28 @@
   fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, #expr); exit(1); \
 } } while (0)
 
+static void neural_settings_tests(void) {
+  FzeroVideoSettings s, loaded;
+  FzeroVideoDefaults(&s);
+  for (int i = 0; i < FZERO_DLSS_PARAM_COUNT; ++i) {
+    CHECK(s.dlss_params[i] == fzero_dlss_params[i].initial);
+    CHECK(!FzeroDlssSetParam(&s, i, fzero_dlss_params[i].maximum + 1));
+    CHECK(!FzeroDlssSetParam(&s, i, fzero_dlss_params[i].minimum - 1));
+    CHECK(FzeroDlssSetParam(&s, i, fzero_dlss_params[i].maximum));
+  }
+  CHECK(!FzeroDlssSetParam(&s, -1, 0));
+  CHECK(!FzeroDlssSetParam(&s, FZERO_DLSS_PARAM_COUNT, 0));
+  CHECK(FzeroVideoSave(&s, "test-neural.ini"));
+  CHECK(FzeroVideoLoad(&loaded, "test-neural.ini"));
+  CHECK(!memcmp(s.dlss_params, loaded.dlss_params, sizeof(s.dlss_params)));
+  FILE *f = fopen("test-neural.ini", "w"); CHECK(f);
+  fputs("DLSSIntensity=201\nDLSSTone=nan\nDLSSSkin=-101\nDLSSPreset=99999999999999999999999\n", f);
+  fclose(f);
+  CHECK(!FzeroVideoLoad(&loaded, "test-neural.ini"));
+  CHECK(loaded.dlss_params[FZERO_DLSS_INTENSITY] == 100);
+  remove("test-neural.ini");
+}
+
 static void viewport_tests(void) {
   FzeroVideoSettings settings;
   FzeroVideoDefaults(&settings);
@@ -142,6 +164,7 @@ int main(void) {
   viewport_tests();
   clock_tests();
   config_tests();
+  neural_settings_tests();
   puts("F-Zero video: viewport, anchors, clock, and config checks passed");
   return 0;
 }
