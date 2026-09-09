@@ -98,6 +98,6 @@ Local ROMs, generated files, saves, captures, and builds are ignored by git.
 
 ## License
 
-Code in this repo is not yet under a declared license.
+PolyForm Noncommercial 1.0.0. See `LICENSE`.
 
 *F-Zero* belongs to Nintendo. The game ROM is not included.
