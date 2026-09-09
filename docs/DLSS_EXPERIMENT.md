@@ -11,8 +11,8 @@ Build with SDL3 using the normal CMake targets. Run
 pinned bridge, Ampere runtime, and isolated Python dependencies. The setup
 script verifies download hashes and writes `dlss-deps/manifest.json`.
 
-Open the game launcher, enable **Mods > Vulkan (experimental)**, and set its
-**DLSS 5 Neural Rendering** option to **On**. These settings persist in
+Open the game launcher and enable **Mods > DLSS5**. Its checkbox enables neural
+rendering and selects Vulkan presentation. These settings persist in
 `fzero-video.ini`. Vulkan alone requires neither Python nor NVIDIA hardware.
 
 Alternatively:
@@ -24,6 +24,11 @@ Alternatively:
 Supply `-Rom <path>` to skip the launcher. Ctrl+F8 toggles neural rendering
 during play. Existing controls, save slots, audio and original simulation
 timing remain available. The OpenGL shader preset is inactive under Vulkan.
+
+Every game build includes the BS Deluxe native module, data and credits.
+Configure `FZERO_DELUXE_GEN_DIR` and `FZERO_DELUXE_MODS_DIR` to the existing
+private generated/imported directories when building in a separate worktree.
+Missing module inputs fail configuration; they are never silently omitted.
 
 Overrides: `FZERO_OUTPUT_METHOD=Vulkan` selects Vulkan, `FZERO_DLSS=0|1`
 overrides the saved neural option. `FZERO_DLSS_PYTHON` and `FZERO_DLSS_ROOT`
