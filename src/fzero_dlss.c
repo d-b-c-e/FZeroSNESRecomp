@@ -12,6 +12,8 @@ enum { MAX_PIXELS = 1280 * 960, HEADER_BYTES = 1024,
 static HANDLE mapping, request, done, stop, process, job;
 static unsigned char *shared;
 static uint32_t *cached;
+static uint32_t *original;
+static const char *status = "Off";
 static bool busy, valid, reset = true;
 static unsigned generation, submitted_generation;
 static int cached_width, cached_height;
@@ -33,10 +35,14 @@ void FzeroDlssStop(void) {
   if (done) CloseHandle(done);
   if (stop) CloseHandle(stop);
   if (job) CloseHandle(job);
-  free(cached);
+  free(cached); free(original);
   mapping = request = done = stop = process = job = NULL;
-  shared = NULL; cached = NULL; busy = valid = false; reset = true;
+  shared = NULL; cached = original = NULL; busy = valid = false; reset = true;
+  status = "Off";
 }
+
+const char *FzeroDlssStatus(void) { return status; }
+const uint32_t *FzeroDlssOriginal(void) { return valid ? original : NULL; }
 
 bool FzeroDlssStart(void) {
   if (process) return true;
@@ -65,7 +71,8 @@ bool FzeroDlssStart(void) {
   snprintf(name, sizeof(name), "%s-done", base); done = CreateEventA(NULL, FALSE, FALSE, name);
   snprintf(name, sizeof(name), "%s-stop", base); stop = CreateEventA(NULL, TRUE, FALSE, name);
   cached = malloc(MAX_PIXELS * sizeof(*cached));
-  if (!shared || !request || !done || !stop || !cached) goto fail;
+  original = malloc(MAX_PIXELS * sizeof(*original));
+  if (!shared || !request || !done || !stop || !cached || !original) goto fail;
   DWORD length = GetModuleFileNameA(NULL, exe, sizeof(exe));
   if (!length || length >= sizeof(exe)) goto fail;
   char *slash = strrchr(exe, '\\');
@@ -88,11 +95,12 @@ bool FzeroDlssStart(void) {
   CloseHandle(pi.hThread);
   busy = true; submitted_at = GetTickCount64();
   reset = true; valid = false;
+  status = "Starting";
   fprintf(stderr, "[dlss] Neural worker starting\n");
   return true;
 fail:
   fprintf(stderr, "[dlss] Worker startup failed: Win32 %lu\n", GetLastError());
-  FzeroDlssStop(); return false;
+  FzeroDlssStop(); status = "Failed (original output)"; return false;
 }
 
 void FzeroDlssReset(void) { ++generation; valid = false; reset = true; }
@@ -105,7 +113,7 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
     busy = false;
     if ((int32_t)header[3] < 0) {
       fprintf(stderr, "[dlss] Worker error: %.900s\n", shared + 64);
-      FzeroDlssStop(); return NULL;
+      FzeroDlssStop(); status = "Failed (original output)"; return NULL;
     }
     if (header[3] == 2 && submitted_generation == generation) {
       cached_width = (int)header[0]; cached_height = (int)header[1];
@@ -114,18 +122,26 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
       }
       memcpy(cached, shared + HEADER_BYTES + MAX_PIXELS * 4,
              (size_t)cached_width * cached_height * 4);
+      memcpy(original, shared + HEADER_BYTES, (size_t)cached_width * cached_height * 4);
       valid = true;
-      fprintf(stderr, "[dlss] Neural frame %u: %u ms, %dx%d\n", header[6], header[4], cached_width, cached_height);
+      status = header[7] ? "Temporal" : "Priming history";
+      fprintf(stderr, "[dlss] Neural frame %u: %u ms, %dx%d, %s\n", header[6], header[4], cached_width, cached_height, status);
     }
   }
   if (WaitForSingleObject(process, 0) == WAIT_OBJECT_0 ||
       (busy && GetTickCount64() - submitted_at > 60000)) {
     DWORD code = 0; GetExitCodeProcess(process, &code);
     fprintf(stderr, "[dlss] Worker exited or timed out (code %lu); restoring original output\n", code);
-    FzeroDlssStop(); return NULL;
+    FzeroDlssStop(); status = "Failed (original output)"; return NULL;
   }
   if (!busy) {
-    int h = 480, w = (int)(aspect * h + 0.5);
+    int h = 480;
+    const char *height_env = getenv("FZERO_DLSS_HEIGHT");
+    if (height_env) {
+      int requested = atoi(height_env);
+      if (requested >= 240 && requested <= 960) h = requested;
+    }
+    int w = (int)(aspect * h + 0.5);
     if (w > 1280) { w = 1280; h = (int)(w / aspect + 0.5); }
     uint32_t *input = (uint32_t *)(shared + HEADER_BYTES);
     for (int y = 0; y < h; ++y) for (int x = 0; x < w; ++x)
@@ -139,6 +155,8 @@ const uint32_t *FzeroDlssFrame(const uint32_t *pixels, int width, int height,
 }
 #else
 bool FzeroDlssStart(void) { fprintf(stderr, "[dlss] This experiment requires Windows\n"); return false; }
+const char *FzeroDlssStatus(void) { return "Unavailable"; }
+const uint32_t *FzeroDlssOriginal(void) { return NULL; }
 void FzeroDlssStop(void) {}
 void FzeroDlssReset(void) {}
 const uint32_t *FzeroDlssFrame(const uint32_t *p, int w, int h, double a, int *ow, int *oh) {

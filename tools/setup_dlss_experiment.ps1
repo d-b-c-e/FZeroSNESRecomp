@@ -37,6 +37,7 @@ if (!(Test-Path -LiteralPath (Join-Path $venv 'Scripts\python.exe'))) {
 }
 & (Join-Path $venv 'Scripts\python.exe') -m pip install numpy==2.2.6 Pillow==11.3.0
 if ($LASTEXITCODE) { throw 'Dependency installation failed' }
+& (Join-Path $PSScriptRoot 'build_dlss_bridge.ps1') -Build $Build
 $manifest = @{
     bridge_revision='3745b8ab6c70761e8d9e7daf47948a389833086f'
     packages=$packages
