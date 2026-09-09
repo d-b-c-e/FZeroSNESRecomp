@@ -125,9 +125,30 @@ static unsigned tile_pixel(const uint16_t *vram, unsigned address, int x, int y,
 }
 
 static uint16_t background_pixel(const Ppu *p, const uint16_t *vram,
-                                 int layer, int x, int y) {
+                                 int layer, int x, int y, bool extend_panorama) {
   int size = PPU_bigTiles(p, layer) ? 16 : 8;
   int px = (x + p->hScroll[layer]) & 1023, py = (y + p->vScroll[layer]) & 1023;
+  /* $A60C packs the skyline into overlapping 512x56 strips, selected by
+   * vertical scroll ($A69F: 36,92,148,204). BG1's panorama is 896 pixels;
+   * BG2's is 768 and starts at scroll 92. Only the stock 256-pixel view is
+   * guaranteed valid in each strip, including the partially filled last one.
+   * In the margins, address the full panorama through each strip's first
+   * 256 pixels instead of wrapping X into unrelated/padded strip content.
+   * Keep this local to the known world layout; HUD and guest VRAM stay intact. */
+  if (extend_panorama && layer < 2 && size == 8 &&
+      p->bgXsc[layer] == (layer == 0 ? 0x79 : 0x71) &&
+      p->hScroll[layer] < 256 && y >= 1 && y < 52) {
+    int first = layer == 0 ? 36 : 92;
+    int scroll = p->vScroll[layer];
+    if (scroll >= first && scroll <= 204 && (scroll - first) % 56 == 0) {
+      int band = (scroll - first) / 56;
+      int period = layer == 0 ? 896 : 768;
+      int panorama_x = (band * 256 + p->hScroll[layer] + x) % period;
+      if (panorama_x < 0) panorama_x += period;
+      px = panorama_x % 256;
+      py = y + first + (panorama_x / 256) * 56;
+    }
+  }
   int tx = px / size, ty = py / size;
   unsigned sc = p->bgXsc[layer];
   unsigned address = (sc & 0xfc) * 256 + (tx & 31) + (ty & 31) * 32;
@@ -367,7 +388,8 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
               if ((sx < viewport.width / 2 && bx >= 128) ||
                   (sx >= viewport.width / 2 && bx < 128)) continue;
             }
-            pixel = background_pixel(&scanout, f->vram, layer, bx, y + 1);
+            pixel = background_pixel(&scanout, f->vram, layer, bx, y + 1,
+                                     viewport.enhanced && (x < 0 || x >= 256));
           }
           if (pixel > screens[sub]) screens[sub] = pixel;
         }

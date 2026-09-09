@@ -26,6 +26,28 @@ state. The shared PPU's smaller wide buffers remain disabled. Internal widths
 are 342, 448 and 682 pixels at 224 lines; scaling preserves stock pixel aspect.
 Fit clamps to 4:3–32:9.
 
+The skyline uses overlapping 512-by-56-pixel strips, rather than a single
+wrapping background map. Retail `$A60C` selects a strip through vertical scroll
+while keeping horizontal scroll in 0–255. BG1 spans 896 panorama pixels with
+scroll bases 36/92/148/204; BG2 spans 768 with bases 92/148/204. Padding beyond
+the stock-visible overlap caused scenery to disappear or change abruptly in
+the wide margins. The compositor now maps margin pixels into the full panorama
+and samples the corresponding strip's first 256 columns. This applies only to
+the recognized skyline layout and leaves the stock center and guest state
+unchanged.
+
+The `fix/widescreen-background-culling` regression checks both panoramas across
+all aspect modes and rotation boundaries, including partially filled final
+strips. All five CTest suites pass, and the new panorama test fails against the
+old renderer. Comparison of 104 saved-frame/aspect pairs (stock races, an
+attract route and BS Deluxe Forest) preserved every center and lower-track/HUD
+pixel; 50 outputs corrected skyline margins. Before/after inspection at 21:9
+confirmed that the abrupt skyline cutoff in the captured turn is gone.
+Both Windows hosts built successfully. A bounded SDL dummy-driver desktop run
+completed 2,200 simulation frames at the 144 FPS presentation setting (5,270
+presentations, zero missed); this is an automated smoke check, not a human
+playtest or display-performance measurement.
+
 Race BG3 and HUD reservations anchor to the outer edges. The power meter's
 composed fill follows its outline. Non-world screens and course-intro text
 remain centered. Hidden player/effect reservations stay hidden even when their

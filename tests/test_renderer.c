@@ -25,6 +25,61 @@ static void setup(void) {
   ram[0x54] = 2; ram[0x81] = 1;
   FzeroRendererReset();
 }
+
+static uint32_t palette_rgb(unsigned c) {
+  unsigned r = c & 31, g = (c >> 5) & 31, b = (c >> 10) & 31;
+  return (((r << 3) | (r >> 2)) << 16) |
+         (((g << 3) | (g >> 2)) << 8) | ((b << 3) | (b >> 2));
+}
+
+static void test_panorama(void) {
+  /* Build an independently indexed, coloured panorama in the retail strip
+   * layout. Leave padding past the stock-visible overlap empty: simply
+   * widening the tilemap sampler must fail at strip/rotation boundaries. */
+  for (int layer = 0; layer < 2; ++layer) {
+    setup();
+    memset(p.vram, 0, sizeof(p.vram));
+    p.bgmode = 1; p.screenEnabled[0] = 1 << layer;
+    p.bgXsc[layer] = layer == 0 ? 0x79 : 0x71;
+    int base = layer == 0 ? 0x7800 : 0x7000;
+    int first = layer == 0 ? 36 : 92;
+    int period = layer == 0 ? 896 : 768;
+    for (int i = 1; i < 128; ++i) p.cgram[i] = i;
+    for (int pixel = 1; pixel <= 15; ++pixel)
+      for (int y = 0; y < 8; ++y) {
+        p.vram[pixel * 16 + y] = ((pixel & 1) ? 255 : 0) | ((pixel & 2) ? 0xff00 : 0);
+        p.vram[pixel * 16 + y + 8] = ((pixel & 4) ? 255 : 0) | ((pixel & 8) ? 0xff00 : 0);
+      }
+    for (int band = 0; band * 256 < period; ++band) {
+      int remaining = period - band * 256;
+      int valid = (remaining < 256 ? remaining : 256) + 256;
+      for (int x = 0; x < valid; x += 8) {
+        int tile = ((band * 256 + x) % period) / 8;
+        for (int row = 0; row < 7; ++row)
+          p.vram[base + (x >= 256 ? 1024 : 0) +
+                 (first / 8 + band * 7 + row) * 32 + (x / 8) % 32] =
+              (tile % 15 + 1) | ((tile / 15) << 10);
+      }
+    }
+    for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
+      FzeroVideoSettings s; FzeroVideoDefaults(&s);
+      s.enhanced = true; s.aspect = aspect;
+      FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
+      for (int origin = 0; origin < period; origin += 31) {
+        p.hScroll[layer] = origin % 256;
+        p.vScroll[layer] = first + (origin / 256) * 56;
+        publish(1);
+        CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+        for (int sx = 0; sx < v.width; ++sx) {
+          int logical = (origin + sx - v.extra + period) % period;
+          int tile = logical / 8;
+          unsigned index = (tile / 15) * 16 + tile % 15 + 1;
+          CHECK(guarded[1 + 10 * v.width + sx] == palette_rgb(p.cgram[index]));
+        }
+      }
+    }
+  }
+}
 int main(void) {
   FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -69,6 +124,7 @@ int main(void) {
   CHECK(out[100*v.width + v.extra + 100] == 0x00ff00);
   CHECK(out[100*v.width + 100] == 0);
   FzeroRendererReset(); CHECK(!FzeroRendererDraw(out, v, 0));
-  puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity and signed X passed");
+  test_panorama();
+  puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X and panorama wrap passed");
   return 0;
 }
