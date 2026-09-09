@@ -49,8 +49,10 @@ presentations, zero missed); this is an automated smoke check, not a human
 playtest or display-performance measurement.
 
 Race BG3 and HUD reservations anchor to the outer edges. The power meter's
-composed fill follows its outline. Non-world screens and course-intro text
-remain centered. Hidden player/effect reservations stay hidden even when their
+composed fill follows its outline. Title screens extend their live track and
+skyline to the selected viewport; flat selection/loading screens extend the
+PPU backdrop with its brightness and colour-window effects. Original title/menu
+artwork and course-intro text remain centered. Hidden player/effect reservations stay hidden even when their
 stale tile data lies within the expanded viewport.
 
 HUD anchoring begins when race setup has installed its graphics (`$55=2`,
@@ -59,7 +61,10 @@ installs the HUD and `$8B11` advances the setup substate. Waiting for active
 racing left the already-visible HUD at 4:3 positions during setup (24 frames
 in the captured stock attract transition, longer during a GP start). BG3,
 the sprite reservations, and the power-meter fill share this readiness flag.
-The earlier intro/setup phase remains centered; no previous-frame layout is
+The earlier intro/setup text remains centered. Its spare-machine icon/count
+uses temporary OBJ slots 126/127, written by `$B164` at `$03F8/$03FC`, before
+moving to race slots 22/23. Those temporary counters use the same right anchor
+from their first visible frame. No previous-frame layout is
 latched, so reset and direct snapshot loads use the correct layout immediately.
 
 The `fix/hud-transition-layout` regression passes all five CTest suites and

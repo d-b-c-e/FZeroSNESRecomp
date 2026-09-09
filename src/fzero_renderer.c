@@ -232,7 +232,11 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     int sprite_y = position >> 8;
     int raw_x = (position & 255) | ((high & 1) << 8);
     if (raw_x == 384 && sprite_y == 128) continue;
-    int owner = object_owner(frame, slot);
+    /* $B164 draws the intro's spare-machine icon/count in temporary slots
+     * 126/127 ($03F8/$03FC); setup later transfers them to HUD slots 22/23.
+     * They already belong to the right edge while the course name is centered. */
+    bool intro_counter = !race_hud && frame->ram[0x55] <= 2 && slot >= 126;
+    int owner = intro_counter ? -1 : object_owner(frame, slot);
     /* The screen-locked player and unowned effects use offscreen X as a
      * hiding mechanism, sometimes retaining Y and stale tile attributes.
      * Only verified opponent reservations can reveal those signed positions. */
@@ -274,6 +278,7 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
       x += (slot < 22 || (slot >= 24 && slot < 32) || slot >= 48) ?
           -viewport.extra : viewport.extra;
     }
+    if (intro_counter) x += viewport.extra;
     x += viewport.extra;
     if (attr & 0x8000) row = size - 1 - row;
     unsigned base = (p->obsel & 7) << 13;
@@ -331,21 +336,17 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   if (!f->valid || !out || viewport.width < 256 || viewport.width > FZERO_MAX_WIDTH ||
       viewport.width != 256 + 2 * viewport.extra) return false;
   memset(out, 0, (size_t)viewport.width * 224 * sizeof(*out));
-  /* Retail $81 selects perspective/top-down track drawing; zero identifies
-   * non-world screens. Source state, not pixel coverage, owns this decision. */
-  bool world = f->ram[0x81] != 0 && f->ram[0x54] == 2;
+  /* $81 selects live track scenery on the title screen as well as in races.
+   * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
+  bool scenery = f->ram[0x81] != 0;
+  bool world = scenery && f->ram[0x54] == 2;
   /* $8ACD installs the race HUD before $8B11 advances setup substate $56.
    * Setup phase $55=2 then displays it while waiting to enter active phase 3.
    * Anchor tiles, sprites and the power meter as soon as that HUD is ready;
    * the preceding course-title/setup phase still uses centered reservations. */
   bool race_hud = world && (f->ram[0x55] >= 3 ||
                             (f->ram[0x55] == 2 && f->ram[0x56] != 0));
-  if (!world) {
-    for (int y = 0; y < 224; ++y)
-      memcpy(out + y * viewport.width + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
-    return true;
-  }
-  bool interpolate = previous->valid && previous->frame + 1 == f->frame &&
+  bool interpolate = world && previous->valid && previous->frame + 1 == f->frame &&
       !memcmp(previous->ram + 0x54, f->ram + 0x54, 3) &&
       previous->ram[0x81] == f->ram[0x81];
   if (interpolate) {
@@ -362,7 +363,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
     memcpy(&scanout, l->registers, PPU_SAVESTATE_REGS_SIZE);
     if (scanout.inidisp & 128) continue;
     int mode = scanout.bgmode & 7;
-    if (mode != 1 && mode != 7) {
+    if (!scenery || (mode != 1 && mode != 7)) {
+      /* Flat selection/loading screens keep their original centered artwork,
+       * but their backdrop, fades and colour windows cover the full viewport. */
+      for (int sx = 0; sx < viewport.width; ++sx)
+        out[y * viewport.width + sx] = colour(&scanout, l->palette, 0x500, 0x500,
+            in_window(&scanout, 5, sx - viewport.extra, viewport.extra));
       memcpy(out + y * viewport.width + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
       continue;
     }
@@ -373,7 +379,10 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       if ((old.bgmode & 7) == 7)
         transform = FzeroMode7Interpolate(FzeroMode7Transform(old.m7matrix, old.m7sel, y + 1), transform, alpha);
     }
-    sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
+    if (world)
+      sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
+    else
+      memset(object_pixels, 0, (size_t)viewport.width * sizeof(*object_pixels));
     for (int sx = 0; sx < viewport.width; ++sx) {
       int x = sx - viewport.extra;
       uint16_t screens[2] = {0x500, 0x500};
@@ -416,6 +425,11 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
     if (race_hud && viewport.enhanced && mode == 1 && y >= 19 && y <= 27)
       memcpy(out + y * viewport.width + 176 + 2 * viewport.extra,
              f->stock + y * 256 + 176, 64 * sizeof(*out));
+    /* Title/menu graphics remain an exact centered group. Only their live
+     * scenery expands; hidden/reused OBJ reservations cannot leak into it. */
+    if (!world)
+      memcpy(out + y * viewport.width + viewport.extra,
+             f->stock + y * 256, 256 * sizeof(*out));
   }
   return true;
 }
