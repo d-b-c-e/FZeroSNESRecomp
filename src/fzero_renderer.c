@@ -220,7 +220,7 @@ static int object_x(const FzeroSourceFrame *f, int raw_x, FzeroViewport viewport
 
 static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
                     const FzeroSourceFrame *previous, double alpha,
-                    int y, FzeroViewport viewport, uint16_t *pixels) {
+                    int y, FzeroViewport viewport, bool race_hud, uint16_t *pixels) {
   const FzeroRasterLine *line = &frame->lines[y];
   const uint16_t *vram = frame->vram;
   static const int sizes[8][2] = {{8,16},{8,32},{8,64},{16,32},{16,64},{32,64},{16,32},{16,32}};
@@ -269,7 +269,7 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     if (row >= size) continue;
     /* Verified fixed race HUD reservations: map/markers 20..31, timer,
      * boosts and rank 32..51. Hidden HUD positions remain hidden. */
-    if (frame->ram[0x55] >= 3 && slot >= 20 && slot < 52) {
+    if (race_hud && slot >= 20 && slot < 52) {
       if (x < 0 || x >= 256) continue;
       x += (slot < 22 || (slot >= 24 && slot < 32) || slot >= 48) ?
           -viewport.extra : viewport.extra;
@@ -334,7 +334,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   /* Retail $81 selects perspective/top-down track drawing; zero identifies
    * non-world screens. Source state, not pixel coverage, owns this decision. */
   bool world = f->ram[0x81] != 0 && f->ram[0x54] == 2;
-  bool race_hud = world && f->ram[0x55] >= 3;
+  /* $8ACD installs the race HUD before $8B11 advances setup substate $56.
+   * Setup phase $55=2 then displays it while waiting to enter active phase 3.
+   * Anchor tiles, sprites and the power meter as soon as that HUD is ready;
+   * the preceding course-title/setup phase still uses centered reservations. */
+  bool race_hud = world && (f->ram[0x55] >= 3 ||
+                            (f->ram[0x55] == 2 && f->ram[0x56] != 0));
   if (!world) {
     for (int y = 0; y < 224; ++y)
       memcpy(out + y * viewport.width + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
@@ -368,7 +373,7 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       if ((old.bgmode & 7) == 7)
         transform = FzeroMode7Interpolate(FzeroMode7Transform(old.m7matrix, old.m7sel, y + 1), transform, alpha);
     }
-    sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, object_pixels);
+    sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
     for (int sx = 0; sx < viewport.width; ++sx) {
       int x = sx - viewport.extra;
       uint16_t screens[2] = {0x500, 0x500};

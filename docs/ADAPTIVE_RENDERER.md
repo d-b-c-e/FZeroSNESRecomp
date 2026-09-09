@@ -53,6 +53,21 @@ composed fill follows its outline. Non-world screens and course-intro text
 remain centered. Hidden player/effect reservations stay hidden even when their
 stale tile data lies within the expanded viewport.
 
+HUD anchoring begins when race setup has installed its graphics (`$55=2`,
+`$56!=0`), not only when active racing begins (`$55>=3`). Retail `$8ACD`
+installs the HUD and `$8B11` advances the setup substate. Waiting for active
+racing left the already-visible HUD at 4:3 positions during setup (24 frames
+in the captured stock attract transition, longer during a GP start). BG3,
+the sprite reservations, and the power-meter fill share this readiness flag.
+The earlier intro/setup phase remains centered; no previous-frame layout is
+latched, so reset and direct snapshot loads use the correct layout immediately.
+
+The `fix/hud-transition-layout` regression passes all five CTest suites and
+fails against the old renderer. Across 440 captured frame/aspect comparisons
+covering stock attract, GP start and BS Deluxe attract, 105 wide setup outputs
+correct their HUD positions; stock-width, menu, intro and active-race outputs
+remain identical.
+
 Vehicle identity comes from DMA ordering pointers `$0AC0..$0ACA`, which select
 six 32-byte reservations. Used-tile counts at `$11D0` suppress unused opponent
 reservation tails. Interpolation follows identity across OAM sorting changes,

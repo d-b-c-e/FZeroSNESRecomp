@@ -80,6 +80,51 @@ static void test_panorama(void) {
     }
   }
 }
+
+static void test_hud_transition(void) {
+  static uint32_t active[FZERO_MAX_WIDTH * 224];
+  for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
+    FzeroVideoSettings s; FzeroVideoDefaults(&s);
+    s.enhanced = true; s.aspect = aspect;
+    FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
+    setup(); memset(p.vram, 0, sizeof(p.vram));
+    p.bgmode = 1; p.screenEnabled[0] = 4 | 16;
+    p.bgXsc[2] = 0x74; p.bgTileAdr = 0x100;
+    p.vram[0x7400 + 32 + 3] = p.vram[0x7400 + 32 + 24] = 1;
+    for (int y = 0; y < 8; ++y) {
+      p.vram[0x1008 + y] = 255; /* red BG3 HUD tiles */
+      p.vram[16 + y] = 255; /* green HUD sprites */
+    }
+    p.cgram[193] = 0x03e0;
+    p.oam[20 * 2] = (100 << 8) | 24; p.oam[20 * 2 + 1] = 0x3801;
+    p.oam[32 * 2] = (100 << 8) | 200; p.oam[32 * 2 + 1] = 0x3801;
+    p.highOam[5] &= ~3; p.highOam[8] &= ~3;
+    ram[0x55] = 3; publish(1);
+    CHECK(FzeroRendererDraw(active, v, 1));
+    CHECK(active[10 * v.width + 24] == 0xff0000);
+    CHECK(active[10 * v.width + 192 + 2 * v.extra] == 0xff0000);
+    CHECK(active[100 * v.width + 24] == 0x00ff00);
+    CHECK(active[100 * v.width + 200 + 2 * v.extra] == 0x00ff00);
+
+    /* Race setup already owns this HUD in substates 1 and 2, before phase 3.
+     * Start from a reset too: loading a setup snapshot must not need history. */
+    for (int substate = 1; substate <= 2; ++substate) {
+      FzeroRendererReset();
+      ram[0x55] = 2; ram[0x56] = substate; publish(2);
+      CHECK(FzeroRendererDraw(guarded + 1, v, 0.5));
+      CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
+      if (v.enhanced)
+        CHECK(guarded[1 + 20 * v.width + 176 + 2 * v.extra] == 0x123456);
+    }
+    /* Before HUD installation, the same reservations still belong to the
+     * centered intro. Do not latch the previous frame's adaptive layout. */
+    ram[0x56] = 0; publish(3);
+    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+    CHECK(guarded[1 + 10 * v.width + v.extra + 24] == 0xff0000);
+    CHECK(guarded[1 + 100 * v.width + v.extra + 24] == 0x00ff00);
+    if (v.extra) CHECK(guarded[1 + 100 * v.width + 24] == 0);
+  }
+}
 int main(void) {
   FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -125,6 +170,7 @@ int main(void) {
   CHECK(out[100*v.width + 100] == 0);
   FzeroRendererReset(); CHECK(!FzeroRendererDraw(out, v, 0));
   test_panorama();
-  puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X and panorama wrap passed");
+  test_hud_transition();
+  puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }
