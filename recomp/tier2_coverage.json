@@ -2,7 +2,7 @@
   "schema": "snesrecomp tier2 coverage v1",
   "rom_title": "f_zero",
   "total_tier_hits": 0,
-  "distinct_sites": 316,
+  "distinct_sites": 331,
   "overflowed_tuples": 0,
   "journal_write_failures": 0,
   "discoveries": [
@@ -321,7 +321,22 @@
     {"site_pc24": "0x03953B", "target_pc24": "0x0395BA", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 587, "bail_hits": 0, "first_frame": 1950, "last_frame": 3252},
     {"site_pc24": "0x0394FC", "target_pc24": "0x0395BA", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 739, "bail_hits": 0, "first_frame": 2037, "last_frame": 3344},
     {"site_pc24": "0x039509", "target_pc24": "0x0395C2", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 739, "bail_hits": 0, "first_frame": 2037, "last_frame": 3344},
-    {"site_pc24": "0x00C515", "target_pc24": "0x00C735", "entry_mx": "M1X1", "site_kind": "call_gap", "clean_hits": 413, "bail_hits": 0, "first_frame": 2303, "last_frame": 3378}
+    {"site_pc24": "0x00C515", "target_pc24": "0x00C735", "entry_mx": "M1X1", "site_kind": "call_gap", "clean_hits": 413, "bail_hits": 0, "first_frame": 2303, "last_frame": 3378},
+    {"site_pc24": "0x03920A", "target_pc24": "0x008EB2", "entry_mx": "M1X1", "site_kind": "indirect_dispatch", "clean_hits": 5827, "bail_hits": 0, "first_frame": 1451, "last_frame": 10799},
+    {"site_pc24": "0x00C689", "target_pc24": "0x00C68C", "entry_mx": "M1X1", "site_kind": "indirect_goto", "clean_hits": 3886, "bail_hits": 0, "first_frame": 1451, "last_frame": 10763},
+    {"site_pc24": "0x039203", "target_pc24": "0x008EB2", "entry_mx": "M1X1", "site_kind": "indirect_dispatch", "clean_hits": 795, "bail_hits": 0, "first_frame": 1455, "last_frame": 9621},
+    {"site_pc24": "0x039207", "target_pc24": "0x008EB2", "entry_mx": "M1X1", "site_kind": "indirect_dispatch", "clean_hits": 213, "bail_hits": 0, "first_frame": 1665, "last_frame": 9597},
+    {"site_pc24": "0x00EBDC", "target_pc24": "0x00F0C5", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 2, "bail_hits": 0, "first_frame": 3767, "last_frame": 7647},
+    {"site_pc24": "0x00DB12", "target_pc24": "0x00DBC4", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 360, "bail_hits": 0, "first_frame": 3768, "last_frame": 7827},
+    {"site_pc24": "0x00DC23", "target_pc24": "0x00DCE3", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 360, "bail_hits": 0, "first_frame": 3768, "last_frame": 7827},
+    {"site_pc24": "0x00DC2C", "target_pc24": "0x00DCD9", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 360, "bail_hits": 0, "first_frame": 3768, "last_frame": 7827},
+    {"site_pc24": "0x00DC41", "target_pc24": "0x00DCD9", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 360, "bail_hits": 0, "first_frame": 3768, "last_frame": 7827},
+    {"site_pc24": "0x00DC4A", "target_pc24": "0x00DCE3", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 360, "bail_hits": 0, "first_frame": 3768, "last_frame": 7827},
+    {"site_pc24": "0x00DB5C", "target_pc24": "0x00D952", "entry_mx": "M0X1", "site_kind": "call_gap", "clean_hits": 156, "bail_hits": 0, "first_frame": 3870, "last_frame": 7827},
+    {"site_pc24": "0x00EBDF", "target_pc24": "0x00F128", "entry_mx": "M1X1", "site_kind": "call_gap", "clean_hits": 156, "bail_hits": 0, "first_frame": 3870, "last_frame": 7827},
+    {"site_pc24": "0x008046", "target_pc24": "0x00CA5C", "entry_mx": "M1X1", "site_kind": "call_gap", "clean_hits": 4, "bail_hits": 0, "first_frame": 3949, "last_frame": 7859},
+    {"site_pc24": "0x00CA60", "target_pc24": "0x00CB6C", "entry_mx": "M1X1", "site_kind": "goto_gap", "clean_hits": 2, "bail_hits": 0, "first_frame": 3949, "last_frame": 7829},
+    {"site_pc24": "0x00CA60", "target_pc24": "0x00CA7A", "entry_mx": "M1X1", "site_kind": "goto_gap", "clean_hits": 2, "bail_hits": 0, "first_frame": 3979, "last_frame": 7859}
   ],
   "ram_routines_overflow": 0,
   "ram_routines": [

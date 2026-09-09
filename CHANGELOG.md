@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.4.1 - 2026-09-08
+
+- Fixed distant scenery disappearing or changing abruptly in widescreen,
+  especially at 21:9. Both skyline layers now sample the full panorama across
+  section boundaries, including the partially filled final section.
+- Added 15 clean interpreter fallback observations to the static coverage
+  profile and regenerated with the native analyzer. The generated program now
+  contains 468 AOT-eligible variants, up from 410 in the previous build.
+- Preserved stock-width rendering, HUD placement, sprite visibility safeguards,
+  and the interpreter policy used for widescreen opponent projection.
+
+The skyline fix was accepted in an interactive owner playtest. Regression tests
+cover both background panoramas across all aspect modes; 104 captured
+frame/aspect comparisons preserve the original center and lower track/HUD.
+All five test suites pass after regeneration. A 10,800-frame 21:9 stock soak
+matches the previous build byte-for-byte in final WRAM and framebuffer, and a
+1,800-frame BS Deluxe desktop smoke run completes successfully.
+
 ## 1.4.0 - 2026-09-08
 
 - Added launcher Display shader support for F-Zero, including staged presets:
