@@ -79,11 +79,16 @@ reservation tails. Interpolation follows identity across OAM sorting changes,
 rejects changed attributes and large motion, and resets on discontinuities and
 loads. Camera interpolation handles periodic coordinates and rejects scene jumps.
 
-Loss phase `$55=6` reuses the temporary counter slots and centers its message.
+GP loss phase `$55=6,$58=0` reuses the temporary counter slots and centers its message.
 Keep the score left anchored and the counter right anchored, but do not apply
 the race power-meter copy or extend the collapsed colour window. Otherwise the
 one-column red/gray HDMA residue at the stock left edge becomes a wide panel.
 The original one-column edge residue remains; stock-width output is preserved.
+Training (`$58!=0`) instead retains the live race HUD on loss, so its timer
+keeps the right anchor. Training's course-selector map also reuses slots
+126/127; those are map pieces, not the GP spare-machine counter, and stay with
+the other centered map pieces. Attract exit `$54=3,$55=4/5` retains the race HUD
+through its fade instead of briefly centering it when the scene state changes.
 
 The opponent projection routine `$00:DBC4` runs through the interpreter so a
 pre-opcode policy at `$00:DCC6` can extend its horizontal interval `[-32,288)`

@@ -123,6 +123,17 @@ static void test_hud_transition(void) {
     CHECK(guarded[1 + 10 * v.width + v.extra + 24] == 0xff0000);
     CHECK(guarded[1 + 100 * v.width + v.extra + 24] == 0x00ff00);
     if (v.extra) CHECK(guarded[1 + 100 * v.width + 24] == 0);
+    /* Attract exit still displays the race HUD while scene 3 fades it. */
+    ram[0x54] = 3;
+    for (int phase = 4; phase <= 5; ++phase) {
+      ram[0x55] = phase; publish(4 + phase);
+      CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+      CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
+    }
+    /* Training loss retains the live race HUD, including OBJ timer tiles. */
+    ram[0x54] = 2; ram[0x55] = 6; ram[0x58] = 1; publish(10);
+    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+    CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
   }
 }
 static void test_adaptive_scenes(void) {
@@ -166,6 +177,12 @@ static void test_intro_counter(void) {
     publish(1); CHECK(FzeroRendererDraw(intro, v, 0.5));
     CHECK(intro[190 * v.width + 208 + 2 * v.extra] == 0x00ff00);
     CHECK(intro[198 * v.width + 232 + 2 * v.extra] == 0x00ff00);
+    /* Training reuses these slots for its course map, which stays together. */
+    ram[0x58] = 1; publish(2);
+    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+    CHECK(guarded[1 + 190 * v.width + 208 + v.extra] == 0x00ff00);
+    CHECK(guarded[1 + 198 * v.width + 232 + v.extra] == 0x00ff00);
+    ram[0x58] = 0;
     ram[0x55] = 6; publish(2); /* Loss reuses the same temporary counter. */
     CHECK(FzeroRendererDraw(guarded + 1, v, 1));
     CHECK(!memcmp(intro, guarded + 1, v.width * 224 * sizeof(*intro)));

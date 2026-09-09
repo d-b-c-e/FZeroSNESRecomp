@@ -235,7 +235,7 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     /* $B164 draws the intro's spare-machine icon/count in temporary slots
      * 126/127 ($03F8/$03FC); setup later transfers them to HUD slots 22/23.
      * They already belong to the right edge while the course name is centered. */
-    bool intro_counter = !race_hud &&
+    bool intro_counter = !race_hud && frame->ram[0x58] == 0 &&
         (frame->ram[0x55] <= 2 || frame->ram[0x55] == 6) && slot >= 126;
     int owner = intro_counter ? -1 : object_owner(frame, slot);
     /* The screen-locked player and unowned effects use offscreen X as a
@@ -340,8 +340,13 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   /* $81 selects live track scenery on the title screen as well as in races.
    * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
   bool scenery = f->ram[0x81] != 0;
-  bool world = scenery && f->ram[0x54] == 2;
-  bool loss_screen = world && f->ram[0x55] == 6;
+  /* Attract exit changes $54 to 3 before its race HUD fades out. */
+  bool race_exit = f->ram[0x54] == 3 &&
+      (f->ram[0x55] == 4 || f->ram[0x55] == 5);
+  bool world = scenery && (f->ram[0x54] == 2 || race_exit);
+  /* GP loss uses a black score screen; Training ($58!=0) keeps the live
+   * race HUD, including its timer, over the crashed car. */
+  bool loss_screen = world && f->ram[0x55] == 6 && f->ram[0x58] == 0;
   /* $8ACD installs the race HUD before $8B11 advances setup substate $56.
    * Setup phase $55=2 then displays it while waiting to enter active phase 3.
    * Anchor tiles, sprites and the power meter as soon as that HUD is ready;
