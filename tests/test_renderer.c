@@ -166,6 +166,9 @@ static void test_intro_counter(void) {
     publish(1); CHECK(FzeroRendererDraw(intro, v, 0.5));
     CHECK(intro[190 * v.width + 208 + 2 * v.extra] == 0x00ff00);
     CHECK(intro[198 * v.width + 232 + 2 * v.extra] == 0x00ff00);
+    ram[0x55] = 6; publish(2); /* Loss reuses the same temporary counter. */
+    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+    CHECK(!memcmp(intro, guarded + 1, v.width * 224 * sizeof(*intro)));
     /* Retail setup moves the same artwork into the permanent HUD slots. */
     memcpy(p.oam + 22 * 2, p.oam + 126 * 2, 4 * sizeof(*p.oam));
     p.highOam[5] &= ~0xf0;
@@ -185,6 +188,21 @@ static void test_intro_counter(void) {
     ram[0x55] = 3; ram[0x56] = 0; publish(4);
     CHECK(FzeroRendererDraw(guarded + 1, v, 1));
     CHECK(!memcmp(intro, guarded + 1, v.width * 224 * sizeof(*intro)));
+  }
+}
+static void test_loss_window(void) {
+  setup(); ram[0x55] = 6;
+  p.screenEnabled[0] = 0;
+  p.windowsel = 2u << 20; /* Colour window 1: collapsed to x=0. */
+  p.window1left = p.window1right = 0;
+  p.cgwsel = 0x10; p.cgadsub = 0x20; p.fixedColor = 31;
+  FzeroVideoSettings s; FzeroVideoDefaults(&s);
+  s.enhanced = true; s.aspect = FZERO_ASPECT_21_9;
+  FzeroViewport v = FzeroCalculateViewport(&s, 3440, 1440);
+  publish(1); CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+  for (int y = 0; y < 224; ++y) {
+    CHECK(guarded[1 + y * v.width] == 0xff0000);
+    for (int x = 1; x < v.width; ++x) CHECK(guarded[1 + y * v.width + x] == 0);
   }
 }
 int main(void) {
@@ -235,6 +253,7 @@ int main(void) {
   test_hud_transition();
   test_adaptive_scenes();
   test_intro_counter();
+  test_loss_window();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

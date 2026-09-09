@@ -79,6 +79,12 @@ reservation tails. Interpolation follows identity across OAM sorting changes,
 rejects changed attributes and large motion, and resets on discontinuities and
 loads. Camera interpolation handles periodic coordinates and rejects scene jumps.
 
+Loss phase `$55=6` reuses the temporary counter slots and centers its message.
+Keep the score left anchored and the counter right anchored, but do not apply
+the race power-meter copy or extend the collapsed colour window. Otherwise the
+one-column red/gray HDMA residue at the stock left edge becomes a wide panel.
+The original one-column edge residue remains; stock-width output is preserved.
+
 The opponent projection routine `$00:DBC4` runs through the interpreter so a
 pre-opcode policy at `$00:DCC6` can extend its horizontal interval `[-32,288)`
 by the current viewport's extra columns. Original callers own activation flags,

@@ -235,7 +235,8 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     /* $B164 draws the intro's spare-machine icon/count in temporary slots
      * 126/127 ($03F8/$03FC); setup later transfers them to HUD slots 22/23.
      * They already belong to the right edge while the course name is centered. */
-    bool intro_counter = !race_hud && frame->ram[0x55] <= 2 && slot >= 126;
+    bool intro_counter = !race_hud &&
+        (frame->ram[0x55] <= 2 || frame->ram[0x55] == 6) && slot >= 126;
     int owner = intro_counter ? -1 : object_owner(frame, slot);
     /* The screen-locked player and unowned effects use offscreen X as a
      * hiding mechanism, sometimes retaining Y and stale tile attributes.
@@ -340,11 +341,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
    * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
   bool scenery = f->ram[0x81] != 0;
   bool world = scenery && f->ram[0x54] == 2;
+  bool loss_screen = world && f->ram[0x55] == 6;
   /* $8ACD installs the race HUD before $8B11 advances setup substate $56.
    * Setup phase $55=2 then displays it while waiting to enter active phase 3.
    * Anchor tiles, sprites and the power meter as soon as that HUD is ready;
    * the preceding course-title/setup phase still uses centered reservations. */
-  bool race_hud = world && (f->ram[0x55] >= 3 ||
+  bool race_hud = world && !loss_screen && (f->ram[0x55] >= 3 ||
                             (f->ram[0x55] == 2 && f->ram[0x56] != 0));
   bool interpolate = world && previous->valid && previous->frame + 1 == f->frame &&
       !memcmp(previous->ram + 0x54, f->ram + 0x54, 3) &&
@@ -396,8 +398,8 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
             pixel = index ? 0x5000 | index : 0;
           } else {
             int bx = x;
-            if (layer == 2 && !race_hud && (x < 0 || x >= 256)) continue;
-            if (layer == 2 && race_hud) {
+            if (layer == 2 && !(race_hud || loss_screen) && (x < 0 || x >= 256)) continue;
+            if (layer == 2 && (race_hud || loss_screen)) {
               bx = sx < viewport.width / 2 ? sx : sx - 2 * viewport.extra;
               if ((sx < viewport.width / 2 && bx >= 128) ||
                   (sx >= viewport.width / 2 && bx < 128)) continue;
@@ -413,12 +415,14 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       }
       /* The power meter is filled by the colour window, not a BG tile.
        * Its HDMA band must travel with the right-anchored BG3 outline. */
-      int colour_x = x;
+      /* Loss keeps its score at the left edge, but its collapsed colour
+       * window must not expand into the former race meter/HDMA panel. */
+      int colour_x = loss_screen ? sx : x;
       if (race_hud && mode == 1 && y >= 19 && y <= 27 &&
           scanout.window1left >= 176 && scanout.window1right <= 239)
         colour_x -= viewport.extra;
       out[y * viewport.width + sx] = colour(&scanout, l->palette, screens[0], screens[1],
-                                           in_window(&scanout, 5, colour_x, viewport.extra));
+          in_window(&scanout, 5, colour_x, loss_screen ? 0 : viewport.extra));
     }
     /* Preserve the meter's composed fill, including its fixed-colour HDMA,
      * without letting a different section of skyline show through it. */
