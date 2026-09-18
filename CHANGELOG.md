@@ -1,6 +1,6 @@
-# Changelog
+﻿# Changelog
 
-## Unreleased
+## 1.5.0 - 2026-09-18
 
 - BS Deluxe is now compiled into the executable, so every download carries it
   and a missing or damaged `mods/bs-deluxe.dat` can no longer stop the game
@@ -130,7 +130,7 @@ Validated with direct unit test executables, no-shader and CRT shader desktop
 smoke runs, and a live CRT window capture after fixing the OpenGL VAO binding
 needed by the shared GLSL renderer.
 
-## 1.3.0 — 2026-09-07
+## 1.3.0 â€” 2026-09-07
 
 Private feature release, advancing two minor versions from 1.1.0 as requested.
 
@@ -155,7 +155,7 @@ The private release can include the locally verified Deluxe delta and upstream
 credits. The packaging tool refuses this payload unless the F-Zero repository
 is private. No stock/patched ROM or user save is included.
 
-## 1.1.0 — 2026-09-07
+## 1.1.0 â€” 2026-09-07
 
 - Added a native Mode 7 renderer for 16:9, 21:9, 32:9 and Fit to window.
 - Preserved stock 4:3 rendering. Race HUD groups anchor to the outer edges;
