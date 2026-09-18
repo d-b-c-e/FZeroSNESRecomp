@@ -49,10 +49,22 @@ int main(void) {
   CHECK(FzeroMode7Interpolate(a, b, 0.5).origin_x == 512 * 256);
   a.control = 0;
   CHECK(FzeroMode7Interpolate(a, b, 0.1).origin_x == b.origin_x);
+  /* Locate/Fetch must reproduce Sample exactly, and an explicit tile number
+   * must address character data the live tilemap no longer describes: this is
+   * what a course record recovered from retail's streamed window would supply
+   * for a margin texel outside it. */
+  line = FzeroMode7Transform(m, 0, 3);
+  for (int x = -213; x < 469; ++x) {
+    FzeroMode7Texel texel = FzeroMode7Locate(&line, x);
+    CHECK(FzeroMode7Fetch(&line, vram, texel, -1) == FzeroMode7Sample(&line, vram, x));
+    CHECK(FzeroMode7Fetch(&line, vram, texel, 0) == 200);
+    CHECK(FzeroMode7Fetch(&line, vram, texel, 256) == 200); /* tile is 8-bit */
+  }
   line = (FzeroMode7Line){0};
   CHECK(!FzeroMode7Project(&line, 1, 1, &sx, &residual));
   line.origin_x = NAN;
   CHECK(FzeroMode7Sample(&line, vram, 0) == 0);
-  puts("F-Zero Mode 7: signed margins, flips, overflow, projection, and interpolation passed");
+  CHECK(FzeroMode7Fetch(&line, vram, FzeroMode7Locate(&line, 0), 1) == 0);
+  puts("F-Zero Mode 7: signed margins, flips, overflow, projection, interpolation, and course tiles passed");
   return 0;
 }

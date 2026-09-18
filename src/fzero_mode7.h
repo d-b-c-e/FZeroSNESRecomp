@@ -12,6 +12,16 @@ typedef struct FzeroMode7Line {
 
 FzeroMode7Line FzeroMode7Transform(const int16_t matrix[8], uint8_t control,
                                    unsigned scanline);
+/* Unwrapped texture coordinates for one sample. The Mode 7 map repeats every
+ * 1024 units, so only the raw value carries the sample's offset from this
+ * scanline's rotation centre; the wrapped coordinate alone is ambiguous. */
+typedef struct FzeroMode7Texel { double x, y; } FzeroMode7Texel;
+FzeroMode7Texel FzeroMode7Locate(const FzeroMode7Line *line, double x);
+/* Read one texel. A non-negative `tile` replaces the tilemap lookup, so a
+ * caller holding a course map of its own can address character data the
+ * current tilemap no longer describes. Character data is read from VRAM. */
+uint8_t FzeroMode7Fetch(const FzeroMode7Line *line, const uint16_t vram[0x8000],
+                        FzeroMode7Texel texel, int tile);
 /* Returns a palette index; zero is transparent. X is a signed logical SNES
  * coordinate and may extend beyond either stock screen edge. */
 uint8_t FzeroMode7Sample(const FzeroMode7Line *line,

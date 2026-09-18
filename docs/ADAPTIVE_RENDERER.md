@@ -98,6 +98,62 @@ Depth/longitudinal limits and pool size retain original behavior. This changes
 actual game state, not just drawing; aspect changes can affect gameplay. No ROM
 patch or generated-C edit is used.
 
+## Mode 7 draw distance in the margins
+
+Retail streams the Mode 7 tilemap and sizes what it streams for the stock
+256-pixel viewport. `$03:9243` maintains exactly one 1024-by-1024-unit world
+square in the tilemap, anchored at `$0020`/`$0022`: `$00:97C3` takes the camera
+`$0B70`/`$0B90` minus 512, `$03:9268` adds the `$0A:ED00` look-ahead for the
+camera angle `$0BD1` (a trapezoid clamped to plus or minus 256 units), and
+`$03:92AA` clamps the anchor to one 16-unit block per frame. `$03:9327` and
+`$03:9362` then pick one block row and one block column, `$03:939E` and
+`$03:9417` build them at `$7F:4A00`/`$7F:4B00` from the course tables, and
+`$00:829B` uploads 256 cells each through DMA channel 0 to `$2118`. The
+tilemap is 128 by 128 tiles - 1024 by 1024 pixels - so that square fills it
+exactly and the map aliases the 8192-by-4096-unit world every 1024 units.
+
+A sample outside the square therefore does not read empty space: it reads the
+tiles some other part of the course left in the same cell. The stock viewport
+accepts a little of this in its aliased horizon band. A widened viewport
+samples much further to each side of the same scanlines, so its margins read
+outside the square far more often, and the course content there only becomes
+correct once it reaches the stock-width part of the screen. This is the
+reported pop-in, and it is not a compositor defect: the centre and margins of
+one frame are the same sampler over the same VRAM, and rendering one capture
+at 16:9, 21:9 and 32:9 leaves every shared column identical outside the
+anchored HUD.
+
+`tools/measure_draw_distance.py` reports the share of Mode 7 pixels sampling
+outside the streamed square for a directory of captures. Over 68 race captures
+of a stock Mute City I Grand Prix:
+
+| Aspect | Width | Stock centre columns | Widened margins | Whole frame |
+|---|---|---|---|---|
+| 4:3 | 256 | 1.747% | - | 1.747% |
+| 16:9 | 342 | 1.747% | 4.064% | 2.330% |
+| 21:9 | 448 | 1.747% | 5.190% | 3.223% |
+| 32:9 | 682 | 1.747% | 8.932% | 6.235% |
+
+Opponents are a separate question and are not affected. Their only horizontal
+visibility test is `$00:DCC6`, which the viewport policy already widens; over a
+2,600-frame race it admitted four projections, all on the starting grid. What
+removes an opponent is `$00:DC57`, a longitudinal window accepting depths in
+`[-639, +19)`, and `$00:DB85`, which deactivates a car whose projected row
+reaches `$C0`. Both are original and identical at every aspect, so cars do not
+additionally disappear into the widened margins.
+
+Widening the streamed square is not available: the tilemap is fully occupied
+by it, so a wider field of view needs either a coarser world-per-tile scale or
+storage outside VRAM. Recovering the missing cells in the compositor from what
+the stock columns have already shown was measured and rejected: the margins
+need world cells more than 512 units to the side of the camera, which the
+square never contains, so a record built from it leaves the margins unchanged.
+The remaining complete fix is to reproduce `$03:939E`'s three-level course
+lookup (`$B0`/`$B1` block grid, the `$7F:5000` row table, and its 2-by-2 tile
+groups) in the compositor and synthesise tiles for any world position. That
+reads guest data only, needs no ROM patch and no guest writes, and is tracked
+in `beads-8wg.5.10`.
+
 `fzero_video.c` schedules the original 60.098811862 Hz simulation independently
 from presentation. Bounded catch-up batches retain simulation debt; only overdue
 presentations are skipped. Pause, minimize and load explicitly reset pacing.
