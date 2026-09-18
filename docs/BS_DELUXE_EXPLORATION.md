@@ -222,3 +222,30 @@ Source references: the supplied archive's `readme.txt` and USA patches,
 `../psxrecomp/MegaManX6Recomp/docs/MMX6_TWEAKS_MODS.md` and
 `docs/PSXMOD_CONVERSION_GUIDE.md` in that repository, and this worktree's
 `snesrecomp/runner/src/mod_runtime.h`.
+
+## Embedded payload
+
+The imported payload ships inside the executable rather than beside it: a
+download can never be missing it, and the game can never fail to launch over
+it. `tools/embed_payload.py` turns `bs-deluxe.dat` into a C source that both
+hosts link, driven from CMake whenever `FZERO_DELUXE_GEN_DIR` is set;
+`FZERO_DELUXE_DATA_FILE` overrides where that payload is read from and defaults
+to the `mods/` directory `tools/regen_bs_deluxe.py` writes beside the generated
+sources.
+
+`FzeroDeluxePrepare` verifies the embedded bytes exactly as it verified a file
+- magic, declared sizes, the stock digest they were built against, ordered
+non-overlapping records, and the digest of the patched cartridge - and applies
+them from memory. A file at `mods/bs-deluxe.dat`, or the path in
+`FZERO_DELUXE_DATA`, is still tried first so an importer run can be checked
+without rebuilding; it is a development input, and the embedded copy is the
+fallback that always exists.
+
+Nothing about Deluxe is fatal any more. If preparation fails for any reason the
+host logs `[bs-deluxe] ... starting stock`, clears the setting for that session
+only, and runs the stock cartridge; the user's `fzero-video.ini` is left alone
+so fixing the build or removing the override brings Deluxe back. `mods/`
+continues to ship `BS-Deluxe-credits.txt` and `bs-deluxe-import.json` for
+credits and provenance, and `tools/make_release.py` refuses to package a build
+whose executable does not contain the payload magic and the expected target
+digest.

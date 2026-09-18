@@ -46,6 +46,66 @@ static uint32_t u32(const uint8_t *p) {
 }
 #endif
 
+#ifdef FZERO_HAS_DELUXE
+/* Compiled in by tools/embed_payload.py: the payload ships inside the
+ * executable so a download can never be missing it. */
+extern const uint8_t fzero_deluxe_payload[];
+extern const size_t fzero_deluxe_payload_size;
+
+/* Apply one payload image to the verified stock ROM. The bytes are checked the
+ * same way whether they came from a file or from the executable: magic,
+ * declared sizes, the stock digest they were built against, ordered
+ * non-overlapping records, and the digest of the result. */
+static uint8_t *deluxe_apply(const uint8_t *data, size_t size,
+                             const uint8_t *rom, size_t rom_size) {
+  if (size < 80 || memcmp(data, "BSDELX1\0", 8) || u32(data + 8) != 0x100000 ||
+      !u32(data + 12) || u32(data + 12) > 0x100000 ||
+      memcmp(data + 16, stock_hash, 32) || memcmp(data + 48, target_hash, 32))
+    return NULL;
+  uint8_t *mapped = calloc(1, 0x100000);
+  if (!mapped) return NULL;
+  memcpy(mapped, rom, rom_size);
+  size_t at = 80;
+  uint32_t end = 0;
+  for (uint32_t i = 0; i < u32(data + 12); ++i) {
+    if (size - at < 8) goto failed;
+    uint32_t offset = u32(data + at), length = u32(data + at + 4);
+    at += 8;
+    if (!length || offset < end || offset >= 0x100000 || length > 0x100000 - offset ||
+        size - at < length) goto failed;
+    memcpy(mapped + offset, data + at, length);
+    at += length;
+    end = offset + length;
+  }
+  if (at != size) goto failed;
+  uint8_t actual[32];
+  sha256_compute(mapped, 0x100000, actual);
+  if (memcmp(actual, target_hash, 32)) goto failed;
+  return mapped;
+failed:
+  free(mapped);
+  return NULL;
+}
+
+/* A file beside the executable, or FZERO_DELUXE_DATA, stays supported so an
+ * importer run can be tried without rebuilding. Both are development inputs:
+ * the embedded copy is what ships and what is used when they are absent. */
+static uint8_t *deluxe_read_file(const char *path, size_t *size) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return NULL;
+  uint8_t *data = NULL;
+  if (fseek(f, 0, SEEK_END)) goto done;
+  long length = ftell(f);
+  if (length <= 0 || length > 0x200000 || fseek(f, 0, SEEK_SET)) goto done;
+  data = malloc((size_t)length);
+  if (data && fread(data, 1, (size_t)length, f) == (size_t)length) *size = (size_t)length;
+  else { free(data); data = NULL; }
+done:
+  fclose(f);
+  return data;
+}
+#endif
+
 bool FzeroDeluxePrepare(uint8_t **rom, size_t *size, bool enabled, const char *path) {
   active = false;
   error[0] = 0;
@@ -57,36 +117,30 @@ bool FzeroDeluxePrepare(uint8_t **rom, size_t *size, bool enabled, const char *p
   snprintf(error, sizeof(error), "This build does not include the BS Deluxe native module.");
   return false;
 #else
-  uint8_t actual[32], header[80];
-  if (!rom || !*rom || !size || *size != 0x80000) goto invalid;
+  uint8_t actual[32];
+  if (!rom || !*rom || !size || *size != 0x80000) {
+    snprintf(error, sizeof(error), "BS Deluxe needs the verified stock ROM.");
+    return false;
+  }
   sha256_compute(*rom, *size, actual);
-  if (memcmp(actual, stock_hash, 32)) goto invalid;
-  FILE *f = fopen(path, "rb");
-  if (!f) {
-    snprintf(error, sizeof(error), "BS Deluxe data missing. Import the supplied USA 1.1 archive first.");
+  if (memcmp(actual, stock_hash, 32)) {
+    snprintf(error, sizeof(error), "BS Deluxe needs the verified stock ROM.");
     return false;
   }
   uint8_t *mapped = NULL;
-  if (fread(header, 1, sizeof(header), f) != sizeof(header) ||
-      memcmp(header, "BSDELX1\0", 8) || u32(header+8) != 0x100000 ||
-      !u32(header+12) || u32(header+12) > 0x100000 ||
-      memcmp(header+16, stock_hash, 32) || memcmp(header+48, target_hash, 32)) goto failed;
-  mapped = calloc(1, 0x100000);
-  if (!mapped) goto failed;
-  memcpy(mapped, *rom, *size);
-  uint32_t end = 0;
-  for (uint32_t i = 0; i < u32(header+12); ++i) {
-    uint8_t row[8];
-    if (fread(row, 1, 8, f) != 8) goto failed;
-    uint32_t offset = u32(row), length = u32(row+4);
-    if (!length || offset < end || offset >= 0x100000 || length > 0x100000-offset) goto failed;
-    if (fread(mapped+offset, 1, length, f) != length) goto failed;
-    end = offset+length;
+  size_t file_size = 0;
+  uint8_t *file_data = path ? deluxe_read_file(path, &file_size) : NULL;
+  if (file_data) {
+    mapped = deluxe_apply(file_data, file_size, *rom, *size);
+    free(file_data);
+    if (!mapped)
+      fprintf(stderr, "[bs-deluxe] %s failed verification; using the embedded copy\n", path);
   }
-  if (fgetc(f) != EOF || ferror(f)) goto failed;
-  sha256_compute(mapped, 0x100000, actual);
-  if (memcmp(actual, target_hash, 32)) goto failed;
-  fclose(f);
+  if (!mapped) mapped = deluxe_apply(fzero_deluxe_payload, fzero_deluxe_payload_size, *rom, *size);
+  if (!mapped) {
+    snprintf(error, sizeof(error), "BS Deluxe data verification failed; nothing activated.");
+    return false;
+  }
   free(*rom);
   *rom = mapped;
   *size = 0x100000;
@@ -99,11 +153,5 @@ bool FzeroDeluxePrepare(uint8_t **rom, size_t *size, bool enabled, const char *p
   interp_bridge_set_scheduler_aot_policy(0);
   fprintf(stderr, "[bs-deluxe] USA 1.1 native module active; separate 32 KiB saves\n");
   return true;
-failed:
-  free(mapped);
-  fclose(f);
-invalid:
-  snprintf(error, sizeof(error), "BS Deluxe stock/data verification failed; nothing activated.");
-  return false;
 #endif
 }

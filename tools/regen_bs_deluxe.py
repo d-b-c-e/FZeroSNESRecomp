@@ -14,8 +14,12 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument("--archive", type=Path, required=True)
 p.add_argument("--stock", type=Path, default=ROOT / "fzero.sfc")
 p.add_argument("--work", type=Path, default=ROOT / "captures/bs-deluxe")
-p.add_argument("--out", type=Path, default=ROOT / "build-deluxe/mods")
+# The build embeds this file, so it belongs beside the generated sources
+# where FZERO_DELUXE_DATA_FILE looks for it by default.
+p.add_argument("--out", type=Path, default=None)
 a = p.parse_args()
+if a.out is None:
+    a.out = a.work / "mods"
 a.work.mkdir(parents=True, exist_ok=True)
 
 def run(*args):

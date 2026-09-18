@@ -658,12 +658,15 @@ int main(int argc, char **argv) {
 #if !SNESRECOMP_SDL3
   SDL_free((void *)deluxe_base);
 #endif
+  /* Deluxe never stops the game from starting. The payload is compiled in, so
+   * a failure here means a deliberately damaged build or an override file that
+   * does not verify; say so on stderr and run the stock cartridge for this
+   * session. The user's settings file is left alone, so fixing the build or
+   * removing the override brings Deluxe back without touching it. */
   if (!FzeroDeluxePrepare(&rom, &rom_size, g_video.bs_deluxe,
                           deluxe_override ? deluxe_override : deluxe_path)) {
-    fprintf(stderr, "[bs-deluxe] %s\n", FzeroDeluxeError());
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "BS Deluxe", FzeroDeluxeError(), NULL);
-    free(rom);
-    return 2;
+    fprintf(stderr, "[bs-deluxe] %s starting stock\n", FzeroDeluxeError());
+    g_video.bs_deluxe = false;
   }
 
   /* SDL_Init flipped to true-on-success in SDL3 and inverts silently in its

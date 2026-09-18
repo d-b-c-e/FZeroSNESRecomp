@@ -81,7 +81,27 @@ list(REMOVE_ITEM SNESRECOMP_RUNNER_SOURCES
     "${SNESRECOMP_ROOT}/runner/src/host_report.c")
 
 set(FZERO_DELUXE_GEN_DIR "" CACHE PATH "Private generated BS Deluxe native sources")
+set(FZERO_DELUXE_DATA_FILE "" CACHE FILEPATH "Imported BS Deluxe payload to embed")
 if(FZERO_DELUXE_GEN_DIR)
+    # The payload ships inside the executable: a download can never be missing
+    # it and the game can never fail to launch over it. Default to the file the
+    # importer writes beside the generated sources.
+    if(NOT FZERO_DELUXE_DATA_FILE)
+        get_filename_component(FZERO_DELUXE_WORK "${FZERO_DELUXE_GEN_DIR}" DIRECTORY)
+        set(FZERO_DELUXE_DATA_FILE "${FZERO_DELUXE_WORK}/mods/bs-deluxe.dat")
+    endif()
+    if(NOT EXISTS "${FZERO_DELUXE_DATA_FILE}")
+        message(FATAL_ERROR "BS Deluxe payload not found at ${FZERO_DELUXE_DATA_FILE}. "
+                            "Run tools/regen_bs_deluxe.py, or set FZERO_DELUXE_DATA_FILE.")
+    endif()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(FZERO_DELUXE_PAYLOAD_SOURCE "${CMAKE_BINARY_DIR}/generated/bs_deluxe_payload.c")
+    add_custom_command(OUTPUT "${FZERO_DELUXE_PAYLOAD_SOURCE}"
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/tools/embed_payload.py"
+                "${FZERO_DELUXE_DATA_FILE}" "${FZERO_DELUXE_PAYLOAD_SOURCE}"
+        DEPENDS "${FZERO_DELUXE_DATA_FILE}" "${CMAKE_SOURCE_DIR}/tools/embed_payload.py"
+        COMMENT "Embedding BS Deluxe payload" VERBATIM)
+    add_custom_target(fzero_deluxe_payload_source DEPENDS "${FZERO_DELUXE_PAYLOAD_SOURCE}")
     file(GLOB DELUXE_SOURCES CONFIGURE_DEPENDS "${FZERO_DELUXE_GEN_DIR}/*.c")
     if(NOT DELUXE_SOURCES OR NOT EXISTS "${FZERO_DELUXE_GEN_DIR}/deluxe_namespace.h")
         message(FATAL_ERROR "Generate and import BS Deluxe before enabling its native module")
@@ -121,7 +141,9 @@ add_executable(FZeroSNESRecomp
 function(configure_fzero_target target)
     target_sources(${target} PRIVATE src/fzero_deluxe.c)
     if(FZERO_DELUXE_GEN_DIR)
-        target_sources(${target} PRIVATE $<TARGET_OBJECTS:fzero_deluxe_native>)
+        target_sources(${target} PRIVATE $<TARGET_OBJECTS:fzero_deluxe_native>
+                                         "${FZERO_DELUXE_PAYLOAD_SOURCE}")
+        add_dependencies(${target} fzero_deluxe_payload_source)
         target_compile_definitions(${target} PRIVATE FZERO_HAS_DELUXE=1)
     endif()
     target_sources(${target} PRIVATE src/fzero_renderer.c)
@@ -169,4 +191,22 @@ add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
 if(SNESRECOMP_BUILD_VERSION)
     target_compile_definitions(FZeroSNESRecomp PRIVATE
         SNESRECOMP_BUILD_VERSION="${SNESRECOMP_BUILD_VERSION}")
+endif()
+
+if(BUILD_TESTING AND FZERO_DELUXE_GEN_DIR)
+    # Locks the contract that matters for a download: the payload is in the
+    # binary, a file beside it is only an override, and nothing here can
+    # stop the game starting.
+    add_executable(fzero_deluxe_tests tests/test_deluxe.c tests/deluxe_stubs.c
+        src/fzero_deluxe.c "${SNESRECOMP_ROOT}/runner/src/sha256.c"
+        "${FZERO_DELUXE_PAYLOAD_SOURCE}")
+    add_dependencies(fzero_deluxe_tests fzero_deluxe_payload_source)
+    target_compile_definitions(fzero_deluxe_tests PRIVATE FZERO_HAS_DELUXE=1)
+    target_include_directories(fzero_deluxe_tests PRIVATE
+        "${CMAKE_SOURCE_DIR}/src" ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+    if(NOT MSVC)
+        target_compile_options(fzero_deluxe_tests PRIVATE -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME fzero_deluxe COMMAND fzero_deluxe_tests
+             WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()
