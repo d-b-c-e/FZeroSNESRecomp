@@ -288,17 +288,23 @@ typedef struct FzeroCourseCache { int cell_x, cell_y, tile; } FzeroCourseCache;
 static const FzeroCourseCache kCourseCacheEmpty = {-1, -1, -1};
 
 /* What one scanline measures its texels against. The per-line blend keeps the
- * texel and this pair in the same frame; the camera anchors them to the world. */
-typedef struct FzeroCourseLine {
-  double camera_x, camera_y, centre_x, centre_y;
-} FzeroCourseLine;
+ * texel and the centre in the same frame and the camera anchors them to the
+ * world; a texel is already whole, so the whole conversion collapses to one
+ * integer offset per scanline instead of two floors per sample. */
+typedef struct FzeroCourseLine { int offset_x, offset_y; } FzeroCourseLine;
+
+static FzeroCourseLine course_line(double camera_x, double camera_y,
+                                   double centre_x, double centre_y) {
+  return (FzeroCourseLine){(int)floor(camera_x - centre_x),
+                           (int)floor(camera_y - centre_y)};
+}
 
 static int course_sample(const FzeroCourse *course, const FzeroCourseLine *line,
                          FzeroCourseCache *cache, FzeroMode7Texel texel) {
-  if (!course->valid || !isfinite(texel.x) || !isfinite(texel.y) ||
-      fabs(texel.x) > 1e6 || fabs(texel.y) > 1e6) return -1;
-  int world_x = (int)floor(line->camera_x + texel.x - line->centre_x) & 0x1fff;
-  int world_y = (int)floor(line->camera_y + texel.y - line->centre_y) & 0x0fff;
+  /* Written so a NaN fails the comparison rather than reaching the cast. */
+  if (!course->valid || !(fabs(texel.x) < 1e6 && fabs(texel.y) < 1e6)) return -1;
+  int world_x = ((int)texel.x + line->offset_x) & 0x1fff;
+  int world_y = ((int)texel.y + line->offset_y) & 0x0fff;
   if (((world_x - course->anchor_x) & 0x1fff) < 1024 &&
       ((world_y - course->anchor_y) & 0x0fff) < 1024) return -1;
   int cell_x = world_x >> 3, cell_y = world_y >> 3;
@@ -502,9 +508,9 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       continue;
     }
     FzeroMode7Line transform = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, y + 1);
-    FzeroCourseLine reference = {course.camera_x, course.camera_y,
-                                 course_centre(scanout.m7matrix, 4),
-                                 course_centre(scanout.m7matrix, 5)};
+    double camera_x = course.camera_x, camera_y = course.camera_y;
+    double centre_x = course_centre(scanout.m7matrix, 4);
+    double centre_y = course_centre(scanout.m7matrix, 5);
     FzeroCourseCache cache = kCourseCacheEmpty;
     if (mode == 7 && interpolate && alpha < 1) {
       Ppu old;
@@ -518,17 +524,14 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
         double blend = FzeroMode7Blend(&before, &transform, alpha);
         transform = FzeroMode7Interpolate(before, transform, alpha);
         if (blend < 1) {
-          reference.centre_x = periodic_blend(course_centre(old.m7matrix, 4),
-                                              reference.centre_x, blend, 1024);
-          reference.centre_y = periodic_blend(course_centre(old.m7matrix, 5),
-                                              reference.centre_y, blend, 1024);
-          reference.camera_x = periodic_blend(read_i16(previous->ram + 0xb70),
-                                              reference.camera_x, blend, 8192);
-          reference.camera_y = periodic_blend(read_i16(previous->ram + 0xb90),
-                                              reference.camera_y, blend, 4096);
+          centre_x = periodic_blend(course_centre(old.m7matrix, 4), centre_x, blend, 1024);
+          centre_y = periodic_blend(course_centre(old.m7matrix, 5), centre_y, blend, 1024);
+          camera_x = periodic_blend(read_i16(previous->ram + 0xb70), camera_x, blend, 8192);
+          camera_y = periodic_blend(read_i16(previous->ram + 0xb90), camera_y, blend, 4096);
         }
       }
     }
+    FzeroCourseLine reference = course_line(camera_x, camera_y, centre_x, centre_y);
     if (world)
       sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
     else

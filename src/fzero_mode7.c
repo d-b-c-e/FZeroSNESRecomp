@@ -25,26 +25,6 @@ FzeroMode7Line FzeroMode7Transform(const int16_t m[8], uint8_t control,
   return (FzeroMode7Line){ox, oy, dx, dy, control};
 }
 
-FzeroMode7Texel FzeroMode7Locate(const FzeroMode7Line *line, double x) {
-  return (FzeroMode7Texel){floor((line->origin_x + x * line->step_x) / 256),
-                           floor((line->origin_y + x * line->step_y) / 256)};
-}
-
-uint8_t FzeroMode7Fetch(const FzeroMode7Line *line, const uint16_t vram[0x8000],
-                        FzeroMode7Texel texel, int tile) {
-  double qx = texel.x, qy = texel.y;
-  if (!isfinite(qx) || !isfinite(qy)) return 0;
-  bool outside = qx < 0 || qx >= 1024 || qy < 0 || qy >= 1024;
-  if (outside && (line->control & 0x80) && !(line->control & 0x40)) return 0;
-  /* Reduce before conversion so even an invalid large transform cannot
-   * overflow the integer conversion or escape the immutable VRAM snapshot. */
-  int tx = (int)fmod(qx, 1024), ty = (int)fmod(qy, 1024);
-  tx = (tx + 1024) & 1023; ty = (ty + 1024) & 1023;
-  unsigned number = outside && (line->control & 0x80) ? 0 :
-      tile >= 0 ? (unsigned)tile & 255 : vram[(ty / 8) * 128 + tx / 8] & 255;
-  return vram[number * 64 + (ty & 7) * 8 + (tx & 7)] >> 8;
-}
-
 uint8_t FzeroMode7Sample(const FzeroMode7Line *line,
                          const uint16_t vram[0x8000], double x) {
   return FzeroMode7Fetch(line, vram, FzeroMode7Locate(line, x), -1);
