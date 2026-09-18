@@ -36,9 +36,11 @@ extern const unsigned deluxe_g_ram_routine_guard_count;
 static const uint8_t stock_hash[32] = {
   0xbf,0x16,0xc3,0xc8,0x67,0xc5,0x8e,0x2a,0xb0,0x61,0xc7,0x0d,0xe9,0x29,0x5b,0x69,
   0x30,0xd6,0x3f,0x29,0xf8,0x1c,0xc9,0x86,0xf5,0xec,0xae,0x03,0xe0,0xad,0x18,0xd2};
+/* BS F-Zero Deluxe USA v1.1 (April 1, 2025). Must match DELUXE_SHA256 in
+ * tools/import_bs_deluxe.py and the native module in FZERO_DELUXE_GEN_DIR. */
 static const uint8_t target_hash[32] = {
-  0x77,0xbb,0x37,0xbc,0xde,0xdd,0x3e,0x17,0x32,0x17,0x27,0xd5,0xed,0x6a,0x14,0x79,
-  0x2a,0xa7,0xa4,0x5a,0xc0,0x4e,0x90,0x40,0xb1,0x6b,0xf5,0x64,0xbd,0x6d,0xea,0x24};
+  0x55,0x21,0x59,0xa1,0x99,0x55,0xe8,0x8a,0x83,0x37,0xf7,0xc4,0x73,0xcc,0xc5,0x3e,
+  0x5d,0xce,0xf1,0x5b,0x87,0xda,0xab,0x8e,0x89,0xe1,0x89,0x46,0x94,0x54,0x2f,0xe6};
 static uint32_t u32(const uint8_t *p) {
   return (uint32_t)p[0] | (uint32_t)p[1]<<8 | (uint32_t)p[2]<<16 | (uint32_t)p[3]<<24;
 }
@@ -61,7 +63,7 @@ bool FzeroDeluxePrepare(uint8_t **rom, size_t *size, bool enabled, const char *p
   if (memcmp(actual, stock_hash, 32)) goto invalid;
   FILE *f = fopen(path, "rb");
   if (!f) {
-    snprintf(error, sizeof(error), "BS Deluxe data missing. Import the supplied USA 1.0 archive first.");
+    snprintf(error, sizeof(error), "BS Deluxe data missing. Import the supplied USA 1.1 archive first.");
     return false;
   }
   uint8_t *mapped = NULL;
@@ -95,7 +97,7 @@ bool FzeroDeluxePrepare(uint8_t **rom, size_t *size, bool enabled, const char *p
    * Keep native interrupt helpers; the main scheduler uses the faithful floor.
    * No process environment override or effect on the stock module. */
   interp_bridge_set_scheduler_aot_policy(0);
-  fprintf(stderr, "[bs-deluxe] USA 1.0 native module active; separate 32 KiB saves\n");
+  fprintf(stderr, "[bs-deluxe] USA 1.1 native module active; separate 32 KiB saves\n");
   return true;
 failed:
   free(mapped);

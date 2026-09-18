@@ -65,7 +65,7 @@ GuyPerfect, Porthor, and PowerPanda.
 The release includes two BS Deluxe files:
 
 - `mods/bs-deluxe.dat` is used by this app.
-- `patches/bs-deluxe-usa.ips` is the SNES patch for your own ROM.
+- `patches/bs-deluxe-usa.ips` is the upstream v1.1 USA SNES patch for your own ROM.
 
 No patched ROM is included.
 

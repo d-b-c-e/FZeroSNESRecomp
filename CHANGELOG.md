@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.4.3 - 2026-09-18
+
+- Updated the bundled BS F-Zero Deluxe mod from upstream USA v1.0 to v1.1
+  (upstream April 1, 2025). v1.1 adds the recovered BS F-Zero Grand Prix 2
+  Week 1 data (Forest course graphics, Forest I/II track and path, BS-1 League
+  race parameters, adjusted Forest III), fixes an upstream course-load CPU
+  crash and garbled records graphics, and makes opponent speeds and Exploding
+  Bumper spawn rates league-aware.
+- Regenerated the namespaced Deluxe native module and the guarded cartridge
+  delta from the v1.1 image; the runtime now verifies the v1.1 digest and
+  rejects v1.0 data. `patches/bs-deluxe-usa.ips` is now the upstream v1.1 USA
+  patch.
+- The Deluxe import tools accept both the v1.0 and v1.1 archive layouts and
+  read the upstream version from the archive readme.
+
+Validated on the regenerated 1.4.3 build: all five test suites pass, plus the
+patch-tool unit tests for both archive layouts. A scripted power-on route
+reaches a BS-1 League Forest I Grand Prix race with Deluxe enabled and runs
+1,800 frames in the desktop host at 21:9 (144 Hz presentation, SDL dummy
+drivers) and in the headless host at 16:9; captured frames show the eight-
+machine grid, the BS-1/BS-2 league list, the Forest I course card and the
+race. A 600-frame stock boot without Deluxe stays on the stock cartridge and
+writes no Deluxe save directory. The v1.1 module keeps the interpreter-floor
+scheduler policy from 1.3.0. Full-cup coverage remains a user playtest item.
+
 ## 1.4.2 - 2026-09-08
 
 - Extended live title and start-sequence scenery to the selected aspect ratio

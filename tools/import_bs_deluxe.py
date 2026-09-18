@@ -10,9 +10,15 @@ import re
 import struct
 import zipfile
 
-from inspect_bs_deluxe import STOCK_SHA256, apply_bps, apply_ips, sha
+from inspect_bs_deluxe import (STOCK_SHA256, apply_bps, apply_ips, sha,
+                               usa_patch_names, readme_version)
 
-DELUXE_SHA256 = "77bb37bcdedd3e17321727d5ed6a14792aa7a45ac04e9040b16bf564bd6dea24"
+# Pinned upstream revision. The native module, runtime target hash in
+# src/fzero_deluxe.c and the tracked patches/bs-deluxe-usa.ips must all move
+# together when this changes.
+DELUXE_VERSION = "1.1"
+DELUXE_SHA256 = "552159a19955e88a8337f7c473ccc53e5dcef15b87daab8e89e1894694542fe6"
+# Previous pin, USA 1.0 (February 10, 2024): 77bb37bcdedd3e17321727d5ed6a14792aa7a45ac04e9040b16bf564bd6dea24
 
 
 def namespace(gen):
@@ -40,12 +46,14 @@ def main():
     if sha(source) != STOCK_SHA256:
         raise ValueError("Unsupported stock ROM")
     with zipfile.ZipFile(a.archive) as z:
-        target = apply_bps(source, z.read("patches/bs-deluxe-usa.bps"))
-        if target != apply_ips(source, z.read("patches/bs-deluxe-usa.ips")):
+        bps_name, ips_name = usa_patch_names(z)
+        target = apply_bps(source, z.read(bps_name))
+        if target != apply_ips(source, z.read(ips_name)):
             raise ValueError("Patch formats disagree")
         credits = z.read("readme.txt")
-    if sha(target) != DELUXE_SHA256:
-        raise ValueError("Unsupported Deluxe revision: native module is pinned to USA 1.0")
+        version = readme_version(z)
+    if sha(target) != DELUXE_SHA256 or version != DELUXE_VERSION:
+        raise ValueError(f"Unsupported Deluxe revision {version}: native module is pinned to USA {DELUXE_VERSION}")
     baseline = source + bytes(len(target) - len(source))
     records = []
     start = None
@@ -66,9 +74,10 @@ def main():
     (a.out / "bs-deluxe.dat").write_bytes(payload)
     (a.out / "BS-Deluxe-credits.txt").write_bytes(credits)
     (a.out / "bs-deluxe-import.json").write_text(json.dumps({
-        "format": 1, "package": "bs-deluxe", "version": "1.0-USA",
+        "format": 1, "package": "bs-deluxe", "version": f"{DELUXE_VERSION}-USA",
         "ownership": "Entire Deluxe cartridge delta; indivisible launch-time feature",
         "archive_sha256": sha(a.archive.read_bytes()), "stock_sha256": sha(source),
+        "bps_member": bps_name, "ips_member": ips_name,
         "target_sha256": sha(target), "delta_sha256": sha(payload),
         "records": len(records), "payload_bytes": len(payload),
     }, indent=2) + "\n")

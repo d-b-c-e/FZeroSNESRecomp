@@ -15,7 +15,7 @@ static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe
 static const char *const descriptions[] = {
   "Expand the race view and anchor the HUD at its outer edges.",
   "Choose the presentation rate independently of widescreen and game speed.",
-  "Full BS Deluxe: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves."
+  "Full BS Deluxe v1.1: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves."
 };
 static int count(void *ctx) { (void)ctx; return 3; }
 static int identity(const char *package, const char *feature) {

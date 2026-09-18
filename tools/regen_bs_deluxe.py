@@ -23,14 +23,15 @@ def run(*args):
 
 # Inspector refuses oracle overwrites. A prior oracle must match the importer
 # target before it can be used as a generation reference.
-from import_bs_deluxe import DELUXE_SHA256
+from import_bs_deluxe import DELUXE_SHA256, DELUXE_VERSION
 from inspect_bs_deluxe import sha
 oracle = a.work / "oracle.sfc"
 extra = [] if oracle.exists() else ["--oracle", oracle]
 run(ROOT / "tools/inspect_bs_deluxe.py", "--archive", a.archive,
     "--stock", a.stock, "--out", a.work / "audit.json", *extra)
 if sha(oracle.read_bytes()) != DELUXE_SHA256:
-    raise ValueError("Existing private oracle does not match pinned USA Deluxe 1.0")
+    raise ValueError(f"Existing private oracle does not match pinned USA Deluxe {DELUXE_VERSION}; "
+                     f"delete {oracle} to regenerate from the current archive")
 cfg = a.work / "cfg"
 cfg.mkdir(exist_ok=True)
 for source in (ROOT / "recomp").glob("*.cfg"):

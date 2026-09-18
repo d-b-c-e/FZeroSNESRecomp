@@ -21,6 +21,30 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def usa_patch_names(archive):
+    """Return (bps, ips) member names for the USA patch pair.
+
+    v1.0 shipped patches/bs-deluxe-usa.{bps,ips}; v1.1 renamed them to
+    patches/bs-deluxe-v1.1-usa.{bps,ips}. Exactly one pair must exist.
+    """
+    names = [n for n in archive.namelist() if n.lower().startswith("patches/") and "usa" in n.lower()]
+    bps = [n for n in names if n.lower().endswith(".bps")]
+    ips = [n for n in names if n.lower().endswith(".ips")]
+    if len(bps) != 1 or len(ips) != 1:
+        raise ValueError(f"Expected exactly one USA BPS and IPS patch, found {names}")
+    return bps[0], ips[0]
+
+
+def readme_version(archive):
+    """Parse the upstream version from the readme title line, e.g. 'v1.1' -> '1.1'."""
+    import re
+    first = archive.read("readme.txt").decode("utf-8-sig", errors="replace").splitlines()[0]
+    match = re.search(r"\bv(\d+\.\d+)\b", first)
+    if not match:
+        raise ValueError(f"Cannot parse Deluxe version from readme title: {first!r}")
+    return match.group(1)
+
+
 def apply_bps(source, patch):
     if len(patch) < 16 or patch[:4] != b"BPS1":
         raise ValueError("Invalid BPS header")
@@ -182,12 +206,15 @@ def main():
         raise ValueError("Unsupported stock USA ROM")
     archive = a.archive.read_bytes()
     with zipfile.ZipFile(a.archive) as z:
-        bps, ips = z.read("patches/bs-deluxe-usa.bps"), z.read("patches/bs-deluxe-usa.ips")
+        bps_name, ips_name = usa_patch_names(z)
+        bps, ips = z.read(bps_name), z.read(ips_name)
+        version = readme_version(z)
     target = apply_bps(source, bps)
     if target != apply_ips(source, ips):
         raise ValueError("Independent IPS and BPS results disagree")
     report = analyze(source, target, json.loads(a.manifest.read_text()) if a.manifest else None)
     report.update(archive_sha256=sha(archive), stock_sha256=sha(source),
+                  upstream_version=version, bps_member=bps_name, ips_member=ips_name,
                   bps_sha256=sha(bps), ips_sha256=sha(ips), oracle_sha256=sha(target),
                   ips_bps_agree=True, bps_crcs_verified=True)
     a.out.parent.mkdir(parents=True, exist_ok=True)

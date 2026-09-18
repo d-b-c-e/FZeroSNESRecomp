@@ -20,7 +20,8 @@ its own launcher configuration. Open **Mods** to enable or disable **BS Deluxe**
 **Widescreen** and **Presentation FPS** remain independent.
 
 The user simplified the scope to **one all-or-nothing package**. There are no
-individual feature switches or Custom preset. The complete USA Deluxe 1.0 delta
+individual feature switches or Custom preset. The complete USA Deluxe delta
+(pinned to v1.1 since release 1.4.3; v1.0 through 1.4.2)
 is the package's ownership boundary: original and additional courses, eight
 machines, alternate courses/cups, records, and Practice ghosts together.
 The included upstream readme describes the controls in
@@ -111,6 +112,42 @@ failures rather than delaying this hands-on checkpoint.
 
 ## Verified archive evidence
 
+### Current pin: USA v1.1 (release 1.4.3 onward)
+
+Input: user-supplied `E:/Downloads/BS F-Zero Deluxe.zip` (upstream v1.1,
+readme dated March 29, 2025; version history entry April 1, 2025). The archive
+renames the patches to `patches/bs-deluxe-v1.1-<region>.{bps,ips}`; the tools
+now locate the single USA BPS/IPS pair by name pattern and parse the version
+from the readme title, so both layouts import. Upstream v1.1 changes per its
+readme: official BS F-Zero Grand Prix 2 Week 1 data (Forest course graphics,
+Forest I/II track and path, BS-1 League race parameters, adjusted Forest III),
+fixes for a CPU crash when loading courses and garbled records graphics on
+first-generation consoles, and league-aware opponent speeds and Exploding
+Bumper spawn rates.
+
+USA IPS and BPS produce the same 1 MiB image; BPS CRCs verify. Against the
+v1.0 image, v1.1 changes 281,720 bytes in 14,411 ranges: 113 bytes in bank 00,
+14 in bank 03, and the rest in the appended banks 14-1F. Against stock the
+changed original-region byte count is 58,222 (v1.0: 58,209); the 00:C339
+renderer hook still differs from stock and the other five hooks still match.
+The Deluxe native module was regenerated from the v1.1 oracle (9 roots,
+37 exact AOT variants, 1 LLE variant, same shape as v1.0); the importer
+produced 47,168 guarded delta records (791,073 bytes).
+
+| Artifact | SHA-256 |
+|---|---|
+| Archive (v1.1) | `86b39e75186b68f8ff2a848cd7d42b66366720aad7d1fdabea2c3735ba4f3cda` |
+| USA BPS (v1.1) | `3eb3ead8b5452d95f35c8c477a101984fdc49653e6da7ead2619d160416f1478` |
+| USA IPS (v1.1, tracked as `patches/bs-deluxe-usa.ips`) | `2f0217a96209b5d9fd3f0f2ed348086fdc5002a478a9557d3fd522ff5fddd2f6` |
+| Private patched reference (v1.1) | `552159a19955e88a8337f7c473ccc53e5dcef15b87daab8e89e1894694542fe6` |
+
+The pin lives in three places that must move together: `DELUXE_SHA256` /
+`DELUXE_VERSION` in `tools/import_bs_deluxe.py`, `target_hash` in
+`src/fzero_deluxe.c`, and the regenerated module in `captures/bs-deluxe/gen`.
+A v1.0 payload is rejected by the v1.1 build and vice versa.
+
+### Previous pin: USA v1.0 (releases 1.3.0 through 1.4.2)
+
 Input: user-supplied `E:/Downloads/bs_f-zero_deluxe_v1.0.zip`.
 The included readme identifies version 1.0, February 10, 2024, and credits
 GuyPerfect, PowerPanda, Porthor, Catador and footage contributor kukun kun.
@@ -154,7 +191,7 @@ and generate stock sources with `tools/regen.sh`. Build the native analyzer with
 to a compatible pinned executable). Then run:
 
 ```powershell
-python tools/regen_bs_deluxe.py --archive E:/Downloads/bs_f-zero_deluxe_v1.0.zip
+python tools/regen_bs_deluxe.py --archive "E:/Downloads/BS F-Zero Deluxe.zip"
 cmake -S . -B build-deluxe -G Ninja -DCMAKE_BUILD_TYPE=Release `
   "-DFZERO_DELUXE_GEN_DIR=$PWD/captures/bs-deluxe/gen"
 cmake --build build-deluxe
@@ -172,7 +209,7 @@ From this worktree, using a Python 3 executable:
 
 ```powershell
 python tools/inspect_bs_deluxe.py `
-  --archive E:/Downloads/bs_f-zero_deluxe_v1.0.zip `
+  --archive "E:/Downloads/BS F-Zero Deluxe.zip" `
   --stock ../_wt-fzero-adaptive-renderer/fzero.sfc `
   --manifest ../_wt-fzero-adaptive-renderer/src/gen/program_manifest.json `
   --out captures/bs-deluxe/audit.json

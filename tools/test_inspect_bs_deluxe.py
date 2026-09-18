@@ -1,9 +1,41 @@
 """Small synthetic patch tests; no game assets required."""
+import io
 import struct
 import unittest
+import zipfile
 import zlib
 
-from inspect_bs_deluxe import apply_bps, apply_ips
+from inspect_bs_deluxe import apply_bps, apply_ips, readme_version, usa_patch_names
+
+
+def _zip(members):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as z:
+        for name, data in members.items():
+            z.writestr(name, data)
+    buffer.seek(0)
+    return zipfile.ZipFile(buffer)
+
+
+class ArchiveLayoutTests(unittest.TestCase):
+    def test_v10_and_v11_patch_names(self):
+        v10 = _zip({"patches/bs-deluxe-usa.bps": b"", "patches/bs-deluxe-usa.ips": b"",
+                    "patches/bs-deluxe-eur.bps": b"", "readme.txt": "﻿BS F-Zero Deluxe - v1.0\n"})
+        self.assertEqual(usa_patch_names(v10), ("patches/bs-deluxe-usa.bps", "patches/bs-deluxe-usa.ips"))
+        self.assertEqual(readme_version(v10), "1.0")
+        v11 = _zip({"patches/bs-deluxe-v1.1-usa.bps": b"", "patches/bs-deluxe-v1.1-usa.ips": b"",
+                    "patches/bs-deluxe-v1.1-jpn.ips": b"", "readme.txt": "﻿BS F-Zero Deluxe - v1.1\n"})
+        self.assertEqual(usa_patch_names(v11), ("patches/bs-deluxe-v1.1-usa.bps", "patches/bs-deluxe-v1.1-usa.ips"))
+        self.assertEqual(readme_version(v11), "1.1")
+
+    def test_ambiguous_or_missing_usa_pair_rejected(self):
+        with self.assertRaises(ValueError):
+            usa_patch_names(_zip({"patches/bs-deluxe-usa.bps": b"", "patches/bs-deluxe-v1.1-usa.bps": b"",
+                                  "patches/bs-deluxe-usa.ips": b""}))
+        with self.assertRaises(ValueError):
+            usa_patch_names(_zip({"patches/bs-deluxe-eur.bps": b"", "patches/bs-deluxe-eur.ips": b""}))
+        with self.assertRaises(ValueError):
+            readme_version(_zip({"readme.txt": "BS F-Zero Deluxe\n"}))
 
 
 class PatchTests(unittest.TestCase):
