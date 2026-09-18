@@ -58,7 +58,7 @@ shutil.copytree(build / "assets", stage / "assets")
 patches = ROOT / "patches"
 if patches.is_dir():
     shutil.copytree(patches, stage / "patches")
-for filename in ("README.md", "CHANGELOG.md", "VERSION"):
+for filename in ("README.md", "CHANGELOG.md", "VERSION", "LICENSE"):
     shutil.copy2(ROOT / filename, stage / filename)
 (stage / "docs").mkdir()
 shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER.md")
