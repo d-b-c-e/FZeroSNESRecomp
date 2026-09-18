@@ -222,6 +222,68 @@ static void test_loss_window(void) {
     for (int x = 1; x < v.width; ++x) CHECK(guarded[1 + y * v.width + x] == 0);
   }
 }
+/* Retail streams the Mode 7 tilemap for the stock 256-pixel viewport only:
+ * $03:9243 keeps one 1024x1024-unit world square uploaded, anchored at
+ * $00A8/$00AA, and the tilemap aliases the 8192x4096 world every 1024 units.
+ * Give the live tilemap one tile everywhere and the course tables ($00B0 block
+ * grid -> $7F:5000 sub-row pointers -> 2x2 tile groups) a different one, then
+ * check that only the samples outside the square follow the tables. */
+static void test_course_streaming(void) {
+  setup();
+  ram[0x55] = 3;
+  p.m7matrix[0] = p.m7matrix[3] = 256;
+  p.m7matrix[1] = p.m7matrix[2] = 0;
+  p.m7matrix[4] = p.m7matrix[5] = p.m7matrix[6] = p.m7matrix[7] = 0;
+  p.cgram[1] = 0x001f; p.cgram[2] = 0x03e0;
+  /* Tile 1 everywhere in the tilemap; character data for tiles 1 and 7. */
+  for (unsigned i = 0; i < 0x4000; ++i) p.vram[i] = 1;
+  for (unsigned i = 0; i < 64; ++i) {
+    p.vram[1 * 64 + i] |= 1 << 8;
+    p.vram[7 * 64 + i] |= 2 << 8;
+  }
+  /* Camera and streaming anchor at the world origin, so world x in [0,1024)
+   * is inside the square and the left margin (x negative, wrapping to the top
+   * of the 8192-unit world) is outside it. */
+  word(0xb70, 0); word(0xb90, 0); word(0xa8, 0); word(0xaa, 0);
+  uint8_t *bank = ram + 0x10000;
+  ram[0xb0] = 0x00; ram[0xb1] = 0x40;          /* block grid at $7F:4000 */
+  for (unsigned i = 0; i < 32 * 16; ++i) bank[0x4000 + i] = 3;
+  for (unsigned i = 0; i < 16; ++i) {          /* block 3's sixteen sub-rows */
+    bank[0x5000 + 3 * 32 + i * 2] = 0x00;
+    bank[0x5000 + 3 * 32 + i * 2 + 1] = 0x60;  /* -> $7F:6000 */
+    bank[0x6000 + i * 2] = 0x00;
+    bank[0x6000 + i * 2 + 1] = 0x61;           /* -> $7F:6100 */
+  }
+  for (unsigned i = 0; i < 4; ++i) bank[0x6100 + i] = 7;
+  publish(1);
+  FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true;
+  s.aspect = FZERO_ASPECT_21_9;
+  FzeroViewport v = FzeroCalculateViewport(&s, 3840, 1646);
+  CHECK(v.width == 448 && v.extra == 96);
+  uint32_t *out = guarded + 1;
+  memcpy(before, ram, sizeof(ram));
+  CHECK(FzeroRendererDraw(out, v, 1));
+  CHECK(!memcmp(ram, before, sizeof(ram)));
+  for (int y = 0; y < 224; ++y) {
+    const uint32_t *row = out + y * v.width;
+    /* Left margin: outside the square, so the course tables supply tile 7. */
+    for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
+    /* Stock columns and the right margin stay inside it and keep tile 1. */
+    for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
+  }
+  /* Stock width never consults the tables. */
+  s.enhanced = false;
+  v = FzeroCalculateViewport(&s, 1024, 768);
+  CHECK(v.width == 256 && FzeroRendererDraw(out, v, 1));
+  for (int x = 0; x < 256; ++x) CHECK(out[x] == 0xff0000);
+  /* Neither does a scene that is not a live race. */
+  ram[0x54] = 1; publish(2);
+  s.enhanced = true; s.aspect = FZERO_ASPECT_21_9;
+  v = FzeroCalculateViewport(&s, 3840, 1646);
+  CHECK(FzeroRendererDraw(out, v, 1));
+  CHECK(out[0] == 0xff0000 && out[v.extra] == 0x123456);
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -271,6 +333,7 @@ int main(void) {
   test_adaptive_scenes();
   test_intro_counter();
   test_loss_window();
+  test_course_streaming();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

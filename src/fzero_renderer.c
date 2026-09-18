@@ -191,6 +191,78 @@ static bool in_window(const Ppu *p, int layer, int x, int extra) {
 
 static int read_i16(const uint8_t *p) { return (int16_t)(p[0] | (p[1] << 8)); }
 
+/* Retail streams the Mode 7 tilemap and sizes what it streams for the stock
+ * 256-pixel viewport. $03:9243 keeps exactly one 1024-by-1024-unit world
+ * square uploaded, anchored at $00A8/$00AA ($00:97C3 camera minus 512 plus the
+ * $0A:ED00 look-ahead, slew-clamped by $03:92AA). The tilemap is 128 by 128
+ * tiles - 1024 by 1024 pixels - so that square fills it exactly and the map
+ * aliases the 8192-by-4096-unit world every 1024 units: a sample outside the
+ * square reads the tiles another part of the course left in the same cell.
+ * A widened viewport reaches outside it, which is the reported pop-in.
+ *
+ * $03:939E and $03:9417 build their uploads from course tables in WRAM bank
+ * $7F, which the frame snapshot already carries, so the compositor can resolve
+ * the same tile for any world position instead. Guest state is never written,
+ * and a sample inside the square still reads the live tilemap.
+ *
+ * $0020/$0022 hold the same anchor but are reused as scratch afterwards and do
+ * not survive every frame; $00A8/$00AA ($03:9254, $03:925E) do. */
+typedef struct FzeroCourse {
+  const uint8_t *bank;  /* WRAM bank $7F. */
+  unsigned grid;        /* $00B0/$00B1: the block grid, placed by $00:9F4C. */
+  int anchor_x, anchor_y;
+  bool valid;
+} FzeroCourse;
+
+static FzeroCourse course_open(const FzeroSourceFrame *f, bool world) {
+  FzeroCourse course = {NULL, 0, 0, 0, false};
+  if (!world) return course;
+  course.bank = f->ram + 0x10000;
+  course.grid = (unsigned)f->ram[0xb0] | ((unsigned)f->ram[0xb1] << 8);
+  course.anchor_x = read_i16(f->ram + 0xa8) & 0x1fff;
+  course.anchor_y = read_i16(f->ram + 0xaa) & 0x0fff;
+  course.valid = true;
+  return course;
+}
+
+static unsigned course_word(const FzeroCourse *course, unsigned address) {
+  return (unsigned)course->bank[address & 0xffff] |
+         ((unsigned)course->bank[(address + 1) & 0xffff] << 8);
+}
+
+/* Three indirections, all in bank $7F, following $03:93BF..$03:93E7 (and
+ * $03:9438..$03:9463, which resolves the same tile for the column strip):
+ * ($B0),Y selects a block from a 32-by-16 grid of 256-unit cells; the block id
+ * times 32 picks one of sixteen 16-unit sub-rows in the $5000 pointer table;
+ * that sub-row lists sixteen pointers to 2-by-2 tile groups. Each group's four
+ * bytes go to $4A00/$4A80 at X and X+1, so they read (x0,y0) (x0,y1) (x1,y0)
+ * (x1,y1). Every world position resolves - the grid spans the whole 8192-by-
+ * 4096-unit world - so there is no void case to handle. */
+static unsigned course_tile(const FzeroCourse *course, int world_x, int world_y) {
+  unsigned block = course->bank[(course->grid + ((world_y >> 8) & 15) * 32 +
+                                 ((world_x >> 8) & 31)) & 0xffff];
+  unsigned row = course_word(course, 0x5000 + block * 32 + ((world_y >> 4) & 15) * 2);
+  unsigned group = course_word(course, row + ((world_x >> 4) & 15) * 2);
+  return course->bank[(group + ((world_x >> 3) & 1) * 2 +
+                       ((world_y >> 3) & 1)) & 0xffff];
+}
+
+/* Tile number for one Mode 7 texel, or -1 to keep the live tilemap. The
+ * transform is centred on the camera, so the texel's offset from the 13-bit
+ * centre is exact even where the wrapped coordinate is ambiguous. */
+static int course_sample(const FzeroCourse *course, const FzeroSourceFrame *f,
+                         const int16_t matrix[8], FzeroMode7Texel texel) {
+  if (!course->valid || !isfinite(texel.x) || !isfinite(texel.y) ||
+      fabs(texel.x) > 1e6 || fabs(texel.y) > 1e6) return -1;
+  int centre_x = ((int)(matrix[4] & 0x1fff) ^ 0x1000) - 0x1000;
+  int centre_y = ((int)(matrix[5] & 0x1fff) ^ 0x1000) - 0x1000;
+  int world_x = (read_i16(f->ram + 0xb70) + ((int)texel.x - centre_x)) & 0x1fff;
+  int world_y = (read_i16(f->ram + 0xb90) + ((int)texel.y - centre_y)) & 0x0fff;
+  if (((world_x - course->anchor_x) & 0x1fff) < 1024 &&
+      ((world_y - course->anchor_y) & 0x0fff) < 1024) return -1;
+  return (int)course_tile(course, world_x, world_y);
+}
+
 /* $0081DE DMA-orders six 32-byte vehicle reservations using $0AC0..$0ACA.
  * Resolve the reservation, not screen proximity: nearby cars may overlap or
  * swap drawing order. $F468 records the used opponent tiles at $11D0+2*car. */
@@ -364,6 +436,9 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
         abs((int)remainder(read_i16(previous->ram + 0xb90) - read_i16(f->ram + 0xb90), 4096)) > 128)
       interpolate = false;
   }
+  /* Only a widened viewport reaches outside retail's streamed square, and
+   * only a live race scene has course tables to resolve it from. */
+  FzeroCourse course = course_open(f, world && viewport.enhanced);
   uint16_t object_pixels[FZERO_MAX_WIDTH];
   for (int y = 0; y < 224; ++y) {
     const FzeroRasterLine *l = &f->lines[y];
@@ -399,7 +474,9 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
           if ((scanout.screenWindowed[sub] & (1u << layer)) && in_window(&scanout, layer, x, viewport.extra)) continue;
           uint16_t pixel;
           if (mode == 7) {
-            unsigned index = FzeroMode7Sample(&transform, f->vram, x);
+            FzeroMode7Texel texel = FzeroMode7Locate(&transform, x);
+            unsigned index = FzeroMode7Fetch(&transform, f->vram, texel,
+                course_sample(&course, f, scanout.m7matrix, texel));
             pixel = index ? 0x5000 | index : 0;
           } else {
             int bx = x;

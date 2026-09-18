@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Fixed the widescreen Mode 7 draw distance, reported by PowerPanda: pieces of
+  the track were missing in the margins and appeared only once they reached the
+  middle of the screen. Retail streams the tilemap for the stock 256-pixel
+  viewport - `$03:9243` keeps one 1024-by-1024-unit world square uploaded, which
+  fills the tilemap exactly - so a widened viewport sampled outside it and read
+  the tiles another part of the course had left behind. The compositor now
+  resolves those samples through retail's own course tables in WRAM bank `$7F`,
+  which the frame snapshot already carries. Samples inside the streamed square
+  still read the live tilemap, stock 4:3 output is byte-identical, and no guest
+  state is written. Non-player cars were measured and are unaffected: their only
+  horizontal visibility test is already widened, and what removes them is
+  retail's longitudinal window and proximity cull, identical at every aspect.
+- Added `tools/measure_draw_distance.py` and a `--sequence` mode for
+  `FZeroRenderCapture` that replays a whole race through the compositor in order.
+
 ## 1.4.3 - 2026-09-18
 
 - Updated the bundled BS F-Zero Deluxe mod from upstream USA v1.0 to v1.1
