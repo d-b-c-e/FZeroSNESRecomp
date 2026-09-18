@@ -107,6 +107,15 @@ static void config_tests(void) {
   fclose(f);
   CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 0); /* invalid fields fall back to shipped defaults */
+  /* Only absent or invalid fields take a default: a setting the file turned
+   * off stays off however corrupt its neighbours are. */
+  f = fopen("test-video.ini", "w");
+  CHECK(f);
+  fputs("EnhancedRenderer=0\nBSDeluxe=0\nAspect=99:1\nPresentationFPS=nope\n", f);
+  fclose(f);
+  CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
+  CHECK(!b.enhanced && !b.bs_deluxe);
+  CHECK(b.aspect == FZERO_ASPECT_FIT && b.fps == 0 && !b.fps_enabled);
   remove("test-video.ini");
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.fps_enabled && b.bs_deluxe && b.aspect == FZERO_ASPECT_FIT); /* first run: all mods on */
