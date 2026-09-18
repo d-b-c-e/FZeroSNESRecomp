@@ -30,6 +30,11 @@ uint8_t FzeroMode7Sample(const FzeroMode7Line *line,
  * publisher. Wrap periodic texture coordinates, never linearly blend pixels. */
 FzeroMode7Line FzeroMode7Interpolate(FzeroMode7Line previous,
                                      FzeroMode7Line current, double alpha);
+/* The factor FzeroMode7Interpolate will actually apply: 1 where it keeps the
+ * current line unchanged and 0 where it keeps the previous one. Anything a
+ * caller measures a blended texel against has to use the same factor. */
+double FzeroMode7Blend(const FzeroMode7Line *previous,
+                       const FzeroMode7Line *current, double alpha);
 /* Solve this scanline's world-to-screen transform. Residual is measured in
  * texture pixels and lets the object projector find the matching scanline. */
 bool FzeroMode7Project(const FzeroMode7Line *line, double world_x,

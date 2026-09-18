@@ -279,15 +279,35 @@ static unsigned course_tile(const FzeroCourse *course, int world_x, int world_y)
 /* Tile number for one Mode 7 texel, or -1 to keep the live tilemap. The
  * transform is centred on the camera, so the texel's offset from the 13-bit
  * centre is exact even where the wrapped coordinate is ambiguous. */
-static int course_sample(const FzeroCourse *course, FzeroMode7Texel texel,
-                         double centre_x, double centre_y) {
+/* Neighbouring samples on a scanline share an eight-unit cell - hundreds of
+ * them in the near field, where a pixel advances a third of a unit - and the
+ * tile depends on nothing finer, so one entry retires the three dependent
+ * loads for every sample after the first in each cell. */
+typedef struct FzeroCourseCache { int cell_x, cell_y, tile; } FzeroCourseCache;
+
+static const FzeroCourseCache kCourseCacheEmpty = {-1, -1, -1};
+
+/* What one scanline measures its texels against. The per-line blend keeps the
+ * texel and this pair in the same frame; the camera anchors them to the world. */
+typedef struct FzeroCourseLine {
+  double camera_x, camera_y, centre_x, centre_y;
+} FzeroCourseLine;
+
+static int course_sample(const FzeroCourse *course, const FzeroCourseLine *line,
+                         FzeroCourseCache *cache, FzeroMode7Texel texel) {
   if (!course->valid || !isfinite(texel.x) || !isfinite(texel.y) ||
       fabs(texel.x) > 1e6 || fabs(texel.y) > 1e6) return -1;
-  int world_x = (int)floor(course->camera_x + texel.x - centre_x) & 0x1fff;
-  int world_y = (int)floor(course->camera_y + texel.y - centre_y) & 0x0fff;
+  int world_x = (int)floor(line->camera_x + texel.x - line->centre_x) & 0x1fff;
+  int world_y = (int)floor(line->camera_y + texel.y - line->centre_y) & 0x0fff;
   if (((world_x - course->anchor_x) & 0x1fff) < 1024 &&
       ((world_y - course->anchor_y) & 0x0fff) < 1024) return -1;
-  return (int)course_tile(course, world_x, world_y);
+  int cell_x = world_x >> 3, cell_y = world_y >> 3;
+  if (cell_x != cache->cell_x || cell_y != cache->cell_y) {
+    cache->cell_x = cell_x;
+    cache->cell_y = cell_y;
+    cache->tile = (int)course_tile(course, world_x, world_y);
+  }
+  return cache->tile;
 }
 
 /* $0081DE DMA-orders six 32-byte vehicle reservations using $0AC0..$0ACA.
@@ -466,12 +486,6 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   /* Only a widened viewport reaches outside retail's streamed square, and
    * only a live race scene has course tables to resolve it from. */
   FzeroCourse course = course_open(f, world && viewport.enhanced);
-  if (course.valid && interpolate && alpha < 1) {
-    course.camera_x = periodic_blend(read_i16(previous->ram + 0xb70),
-                                     course.camera_x, alpha, 8192);
-    course.camera_y = periodic_blend(read_i16(previous->ram + 0xb90),
-                                     course.camera_y, alpha, 4096);
-  }
   uint16_t object_pixels[FZERO_MAX_WIDTH];
   for (int y = 0; y < 224; ++y) {
     const FzeroRasterLine *l = &f->lines[y];
@@ -488,15 +502,31 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       continue;
     }
     FzeroMode7Line transform = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, y + 1);
-    double centre_x = course_centre(scanout.m7matrix, 4);
-    double centre_y = course_centre(scanout.m7matrix, 5);
+    FzeroCourseLine reference = {course.camera_x, course.camera_y,
+                                 course_centre(scanout.m7matrix, 4),
+                                 course_centre(scanout.m7matrix, 5)};
+    FzeroCourseCache cache = kCourseCacheEmpty;
     if (mode == 7 && interpolate && alpha < 1) {
       Ppu old;
       memcpy(&old, previous->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
       if ((old.bgmode & 7) == 7) {
-        transform = FzeroMode7Interpolate(FzeroMode7Transform(old.m7matrix, old.m7sel, y + 1), transform, alpha);
-        centre_x = periodic_blend(course_centre(old.m7matrix, 4), centre_x, alpha, 1024);
-        centre_y = periodic_blend(course_centre(old.m7matrix, 5), centre_y, alpha, 1024);
+        FzeroMode7Line before = FzeroMode7Transform(old.m7matrix, old.m7sel, y + 1);
+        /* FzeroMode7Interpolate keeps the current scanline whenever it cannot
+         * blend, so the centre and the camera must follow the same decision:
+         * measuring a blended texel against an unblended centre, or the other
+         * way round, moves every sample a whole map period. */
+        double blend = FzeroMode7Blend(&before, &transform, alpha);
+        transform = FzeroMode7Interpolate(before, transform, alpha);
+        if (blend < 1) {
+          reference.centre_x = periodic_blend(course_centre(old.m7matrix, 4),
+                                              reference.centre_x, blend, 1024);
+          reference.centre_y = periodic_blend(course_centre(old.m7matrix, 5),
+                                              reference.centre_y, blend, 1024);
+          reference.camera_x = periodic_blend(read_i16(previous->ram + 0xb70),
+                                              reference.camera_x, blend, 8192);
+          reference.camera_y = periodic_blend(read_i16(previous->ram + 0xb90),
+                                              reference.camera_y, blend, 4096);
+        }
       }
     }
     if (world)
@@ -514,7 +544,7 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
           if (mode == 7) {
             FzeroMode7Texel texel = FzeroMode7Locate(&transform, x);
             unsigned index = FzeroMode7Fetch(&transform, f->vram, texel,
-                course_sample(&course, texel, centre_x, centre_y));
+                course_sample(&course, &reference, &cache, texel));
             pixel = index ? 0x5000 | index : 0;
           } else {
             int bx = x;

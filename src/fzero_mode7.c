@@ -53,6 +53,13 @@ uint8_t FzeroMode7Sample(const FzeroMode7Line *line,
 static double periodic_delta(double from, double to) {
   return remainder(to - from, 1024.0 * 256.0);
 }
+double FzeroMode7Blend(const FzeroMode7Line *a, const FzeroMode7Line *b,
+                       double alpha) {
+  if (!isfinite(alpha) || alpha >= 1 || a->control != b->control) return 1;
+  if (alpha <= 0) return 0;
+  return alpha;
+}
+
 FzeroMode7Line FzeroMode7Interpolate(FzeroMode7Line a, FzeroMode7Line b,
                                      double alpha) {
   if (!isfinite(alpha) || alpha >= 1 || a.control != b.control) return b;

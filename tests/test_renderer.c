@@ -227,13 +227,33 @@ static void test_loss_window(void) {
  * $00A8/$00AA, and the tilemap aliases the 8192x4096 world every 1024 units.
  * Give the live tilemap one tile everywhere and the course tables ($00B0 block
  * grid -> $7F:5000 sub-row pointers -> 2x2 tile groups) a different one, then
- * check that only the samples outside the square follow the tables. */
+ * check that only the samples outside the square follow the tables.
+ *
+ * The matrix is retail's shape - a quarter turn, so a=d=0 - because an
+ * identity matrix cancels the rotation centre out of the origin and would hide
+ * every mistake in how a texel is measured against it. Here the camera sits at
+ * (512,512) with the square at the world origin, so a scanline samples world x
+ * 1024-line and world y equal to the screen coordinate: the left margin falls
+ * outside the square and everything from the stock columns rightwards does not. */
+static void course_matrix(int centre_y, int scroll_y) {
+  p.m7matrix[0] = 0; p.m7matrix[1] = -256;
+  p.m7matrix[2] = 256; p.m7matrix[3] = 0;
+  p.m7matrix[4] = 512; p.m7matrix[5] = (int16_t)centre_y;
+  p.m7matrix[6] = 0; p.m7matrix[7] = (int16_t)scroll_y;
+}
+
+static void course_expect(const uint32_t *out, FzeroViewport v) {
+  for (int y = 0; y < 224; ++y) {
+    const uint32_t *row = out + y * v.width;
+    for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
+    for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
+  }
+}
+
 static void test_course_streaming(void) {
   setup();
   ram[0x55] = 3;
-  p.m7matrix[0] = p.m7matrix[3] = 256;
-  p.m7matrix[1] = p.m7matrix[2] = 0;
-  p.m7matrix[4] = p.m7matrix[5] = p.m7matrix[6] = p.m7matrix[7] = 0;
+  course_matrix(512, 0);
   p.cgram[1] = 0x001f; p.cgram[2] = 0x03e0;
   /* Tile 1 everywhere in the tilemap; character data for tiles 1 and 7. */
   for (unsigned i = 0; i < 0x4000; ++i) p.vram[i] = 1;
@@ -241,10 +261,8 @@ static void test_course_streaming(void) {
     p.vram[1 * 64 + i] |= 1 << 8;
     p.vram[7 * 64 + i] |= 2 << 8;
   }
-  /* Camera and streaming anchor at the world origin, so world x in [0,1024)
-   * is inside the square and the left margin (x negative, wrapping to the top
-   * of the 8192-unit world) is outside it. */
-  word(0xb70, 0); word(0xb90, 0); word(0xa8, 0); word(0xaa, 0);
+  word(0xb70, 512); word(0xb90, 512);   /* camera */
+  word(0xa8, 0); word(0xaa, 0);         /* streaming anchor */
   uint8_t *bank = ram + 0x10000;
   ram[0xb0] = 0x00; ram[0xb1] = 0x40;          /* block grid at $7F:4000 */
   for (unsigned i = 0; i < 32 * 16; ++i) bank[0x4000 + i] = 3;
@@ -256,7 +274,7 @@ static void test_course_streaming(void) {
   }
   for (unsigned i = 0; i < 4; ++i) bank[0x6100 + i] = 7;
   publish(1);
-  FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true;
+  FzeroVideoSettings s; FzeroVideoStock(&s); s.enhanced = true;
   s.aspect = FZERO_ASPECT_21_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 3840, 1646);
   CHECK(v.width == 448 && v.extra == 96);
@@ -264,56 +282,72 @@ static void test_course_streaming(void) {
   memcpy(before, ram, sizeof(ram));
   CHECK(FzeroRendererDraw(out, v, 1));
   CHECK(!memcmp(ram, before, sizeof(ram)));
-  for (int y = 0; y < 224; ++y) {
-    const uint32_t *row = out + y * v.width;
-    /* Left margin: outside the square, so the course tables supply tile 7. */
-    for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
-    /* Stock columns and the right margin stay inside it and keep tile 1. */
-    for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
-  }
+  course_expect(out, v);
+
   /* The anchor's low bits do not move the square: $03:9346 and $03:9381 select
    * the streamed strip with ($14 & $03F0) and ($12 & $03F0), so it always
    * starts on a 16-unit block boundary. An unaligned anchor must not push the
-   * first block row and column out of the square. */
+   * first block row out of the square. */
   word(0xa8, 8); word(0xaa, 8);
   publish(2);
   CHECK(FzeroRendererDraw(out, v, 1));
-  for (int y = 0; y < 224; ++y) {
-    const uint32_t *row = out + y * v.width;
-    for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
-    for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
-  }
+  course_expect(out, v);
   word(0xa8, 0); word(0xaa, 0);
   publish(3);
   CHECK(FzeroRendererDraw(out, v, 1));
 
   /* Retail writes either representative of the camera's map position: some
-   * frames carry the camera's own value and some that plus 1024. An
-   * interpolated origin takes the shortest path across that seam, so a
-   * presentation between two such frames must still resolve the same world
-   * cells - subtracting the wrong representative moved every sample a whole
-   * map period and repainted the screen from elsewhere on the course. */
-  p.m7matrix[5] += 1024;
-  word(0xb90, 0);
+   * frames carry the camera's own value and some that plus 1024. A frame's own
+   * origin and centre always agree, but an interpolated origin takes the
+   * shortest path across the seam, so a presentation between two such frames
+   * must still resolve the same world cells. Raising the centre and the
+   * vertical scroll together leaves the geometry alone and moves only the
+   * representative. */
+  course_matrix(512 + 1024, 1024);
   publish(4);
   for (double blend = 0; blend < 1.0; blend += 0.25) {
     CHECK(FzeroRendererDraw(out, v, blend));
-    for (int y = 0; y < 224; ++y) {
-      const uint32_t *row = out + y * v.width;
-      for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
-      for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
-    }
+    course_expect(out, v);
   }
-  p.m7matrix[5] -= 1024;
-  publish(5);
   CHECK(FzeroRendererDraw(out, v, 1));
+  course_expect(out, v);
+
+  /* FzeroMode7Interpolate keeps the current scanline when the two lines carry
+   * different control bits, and the compositor does not blend at all when the
+   * previous line was not Mode 7. The centre and the camera have to follow the
+   * same decision, or a current-frame texel is measured against a blended
+   * centre and every sample moves a whole map period. */
+  course_matrix(512, 0);
+  publish(5);
+  course_matrix(512 + 1024, 1024);
+  p.m7sel ^= 0x04; /* read by neither the transform nor the fetch */
+  publish(6);
+  for (double blend = 0; blend < 1.0; blend += 0.25) {
+    CHECK(FzeroRendererDraw(out, v, blend));
+    course_expect(out, v);
+  }
+  p.m7sel ^= 0x04;
+  course_matrix(512, 0);
+  p.bgmode = 1;
+  publish(7);
+  course_matrix(512 + 1024, 1024);
+  p.bgmode = 7;
+  publish(8);
+  for (double blend = 0; blend < 1.0; blend += 0.25) {
+    CHECK(FzeroRendererDraw(out, v, blend));
+    course_expect(out, v);
+  }
+  course_matrix(512, 0);
+  publish(9);
+  CHECK(FzeroRendererDraw(out, v, 1));
+
   /* Stock width never consults the tables. */
   s.enhanced = false;
   v = FzeroCalculateViewport(&s, 1024, 768);
   CHECK(v.width == 256 && FzeroRendererDraw(out, v, 1));
   for (int x = 0; x < 256; ++x) CHECK(out[x] == 0xff0000);
   /* Neither does a scene that is not a live race. */
-  ram[0x54] = 1; publish(6);
+  ram[0x54] = 1; publish(10);
   s.enhanced = true; s.aspect = FZERO_ASPECT_21_9;
   v = FzeroCalculateViewport(&s, 3840, 1646);
   CHECK(FzeroRendererDraw(out, v, 1));
