@@ -271,6 +271,22 @@ static void test_course_streaming(void) {
     /* Stock columns and the right margin stay inside it and keep tile 1. */
     for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
   }
+  /* The anchor's low bits do not move the square: $03:9346 and $03:9381 select
+   * the streamed strip with ($14 & $03F0) and ($12 & $03F0), so it always
+   * starts on a 16-unit block boundary. An unaligned anchor must not push the
+   * first block row and column out of the square. */
+  word(0xa8, 8); word(0xaa, 8);
+  publish(2);
+  CHECK(FzeroRendererDraw(out, v, 1));
+  for (int y = 0; y < 224; ++y) {
+    const uint32_t *row = out + y * v.width;
+    for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
+    for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
+  }
+  word(0xa8, 0); word(0xaa, 0);
+  publish(3);
+  CHECK(FzeroRendererDraw(out, v, 1));
+
   /* Retail writes either representative of the camera's map position: some
    * frames carry the camera's own value and some that plus 1024. An
    * interpolated origin takes the shortest path across that seam, so a
@@ -279,7 +295,7 @@ static void test_course_streaming(void) {
    * map period and repainted the screen from elsewhere on the course. */
   p.m7matrix[5] += 1024;
   word(0xb90, 0);
-  publish(2);
+  publish(4);
   for (double blend = 0; blend < 1.0; blend += 0.25) {
     CHECK(FzeroRendererDraw(out, v, blend));
     for (int y = 0; y < 224; ++y) {
@@ -289,7 +305,7 @@ static void test_course_streaming(void) {
     }
   }
   p.m7matrix[5] -= 1024;
-  publish(3);
+  publish(5);
   CHECK(FzeroRendererDraw(out, v, 1));
   /* Stock width never consults the tables. */
   s.enhanced = false;
@@ -297,7 +313,7 @@ static void test_course_streaming(void) {
   CHECK(v.width == 256 && FzeroRendererDraw(out, v, 1));
   for (int x = 0; x < 256; ++x) CHECK(out[x] == 0xff0000);
   /* Neither does a scene that is not a live race. */
-  ram[0x54] = 1; publish(2);
+  ram[0x54] = 1; publish(6);
   s.enhanced = true; s.aspect = FZERO_ASPECT_21_9;
   v = FzeroCalculateViewport(&s, 3840, 1646);
   CHECK(FzeroRendererDraw(out, v, 1));

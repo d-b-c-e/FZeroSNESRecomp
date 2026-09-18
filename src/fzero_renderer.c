@@ -238,8 +238,12 @@ static FzeroCourse course_open(const FzeroSourceFrame *f, bool world) {
   if (!world) return course;
   course.bank = f->ram + 0x10000;
   course.grid = (unsigned)f->ram[0xb0] | ((unsigned)f->ram[0xb1] << 8);
-  course.anchor_x = read_i16(f->ram + 0xa8) & 0x1fff;
-  course.anchor_y = read_i16(f->ram + 0xaa) & 0x0fff;
+  /* $03:9346 and $03:9381 select the streamed strip with ($14 & $03F0) and
+   * ($12 & $03F0), so the square starts on a 16-unit block boundary whatever
+   * the anchor's low bits are. Align down, or the last block row and column
+   * are classified outside and resolved twice over. */
+  course.anchor_x = read_i16(f->ram + 0xa8) & 0x1ff0;
+  course.anchor_y = read_i16(f->ram + 0xaa) & 0x0ff0;
   course.camera_x = read_i16(f->ram + 0xb70);
   course.camera_y = read_i16(f->ram + 0xb90);
   course.valid = true;

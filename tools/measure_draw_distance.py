@@ -50,8 +50,10 @@ class Capture:
         self.frame = struct.unpack_from("<I", self.data, OFFSET_FRAME)[0]
         self.bank7f = OFFSET_RAM + 0x10000
         self.grid = self.byte(0xB0) | (self.byte(0xB1) << 8)
-        self.anchor_x = self.word(0xA8) & 0x1FFF
-        self.anchor_y = self.word(0xAA) & 0x0FFF
+        # $03:9346/$03:9381 select the streamed strip with ($14 & $03F0) and
+        # ($12 & $03F0), so the square starts on a 16-unit block boundary.
+        self.anchor_x = self.word(0xA8) & 0x1FF0
+        self.anchor_y = self.word(0xAA) & 0x0FF0
 
     def register(self, line, name):
         return self.data[line * LINE + REGISTER[name]]
@@ -153,9 +155,9 @@ def verify(capture):
     """Table walk against the live tilemap for every cell inside the square."""
     agree = total = 0
     for row in range(128):
-        sample_y = (capture.anchor_y & ~15) + row * 8
+        sample_y = capture.anchor_y + row * 8
         for column in range(128):
-            sample_x = (capture.anchor_x & ~15) + column * 8
+            sample_x = capture.anchor_x + column * 8
             total += 1
             agree += capture.course_tile(sample_x, sample_y) == \
                 capture.tilemap((sample_x & 1023) >> 3, (sample_y & 1023) >> 3)
