@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- BS Deluxe is now compiled into the executable, so every download carries it
+  and a missing or damaged `mods/bs-deluxe.dat` can no longer stop the game
+  from starting. The embedded bytes are verified exactly as a file was: magic,
+  declared sizes, the stock digest they were built against, ordered
+  non-overlapping records, and the digest of the patched cartridge. A file
+  beside the executable, or `FZERO_DELUXE_DATA`, is still tried first as a
+  development override; if anything fails, the game logs and runs stock for
+  that session without rewriting the settings file. Release packaging now
+  refuses to build without the embedded payload.
+- Corrected the streamed-square test to retail's 16-unit block grid. The
+  anchor's low bits do not move the square, so 138,481 of 7,323,648 measured
+  cells were classified outside it and up to 0.106% of 32:9 margin samples kept
+  a stale tile; both are zero now.
 - Every mod now ships on by default and the aspect defaults to Fit, which
   follows the window between 4:3 and 32:9. A first run with no
   `fzero-video.ini` therefore starts with Widescreen on at Fit, Presentation

@@ -138,6 +138,18 @@ every position resolves and there is no void case. Samples inside the square
 still read the live tilemap, stock-width output is untouched, and no guest state
 is written.
 
+The square starts on a 16-unit block boundary - `$03:9346` and `$03:9381`
+select the streamed strip with `($14 & $03F0)` and `($12 & $03F0)` - so the
+anchor is aligned down before it is used. Taking it raw put the last block row
+and column outside the square: 138,481 of 7,323,648 cells measured across three
+race captures, and up to 0.106% of 32:9 margin samples kept a stale tile.
+
+Resolving a tile happens once per eight-unit cell rather than once per sample,
+and the texel-to-world conversion collapses to one integer offset per scanline,
+so the whole feature is free: at 682 pixels wide a draw costs 2.93 ms against
+2.92 ms for the same compositor without it, and 2.99 ms against 3.00 ms at a
+half blend (400 repetitions, same capture).
+
 The walk was verified against retail two ways over 68 race captures of a stock
 Mute City I Grand Prix: it reproduces the game's own `$7F:4A00`/`$7F:4B00`
 staging buffers on 34,816 of 34,816 bytes, and it matches the live tilemap on
