@@ -11,8 +11,16 @@
 
 static const char *const aspect_names[] = {"4:3", "16:9", "21:9", "32:9", "Fit"};
 
+/* Shipped defaults (owner request 2026-09-18): every mod on, aspect follows
+ * the window, presentation rate follows the display. Hosts that need the
+ * stock baseline (headless captures, tools) call FzeroVideoStock(). */
 void FzeroVideoDefaults(FzeroVideoSettings *s) {
-  *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_16_9};
+  *s = (FzeroVideoSettings){.enhanced = true, .aspect = FZERO_ASPECT_FIT,
+                            .fps = 0, .fps_enabled = true, .bs_deluxe = true};
+}
+
+void FzeroVideoStock(FzeroVideoSettings *s) {
+  *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_STOCK};
 }
 
 const char *FzeroAspectName(FzeroAspect aspect) {

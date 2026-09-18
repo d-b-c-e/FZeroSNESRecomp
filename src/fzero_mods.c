@@ -56,7 +56,9 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
   if (kind == 1) {
     COPY(out->id, "aspect"); COPY(out->label, "Aspect ratio");
     COPY(out->description, "Fit follows the window from 4:3 through 32:9.");
-    COPY(out->value, FzeroAspectName(video->aspect)); COPY(out->default_value, "16:9");
+    COPY(out->value, FzeroAspectName(video->aspect));
+    /* Must track FzeroVideoDefaults, or the launcher marks the wrong choice. */
+    COPY(out->default_value, FzeroAspectName(FZERO_ASPECT_FIT));
     out->choice_count = 4;
   } else {
     COPY(out->id, "fps"); COPY(out->label, "Presentation FPS");

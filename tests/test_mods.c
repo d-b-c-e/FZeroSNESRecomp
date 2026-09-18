@@ -4,7 +4,7 @@
 #include <string.h>
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(1); } } while (0)
 int main(void) {
-  FzeroVideoSettings s, loaded; FzeroVideoDefaults(&s);
+  FzeroVideoSettings s, loaded; FzeroVideoStock(&s); /* start from nothing enabled to test each toggle */
   const RecompLauncherCModProvider *p = FzeroModsProvider(&s, "test-mods.ini");
   RecompLauncherCModFeature w, f;
   RecompLauncherCModOption option;

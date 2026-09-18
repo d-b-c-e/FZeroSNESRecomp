@@ -619,6 +619,14 @@ int main(int argc, char **argv) {
   }
   if (!FzeroVideoLoad(&g_video, kVideoConfig))
     fprintf(stderr, "[fzero] Invalid video settings; invalid fields use defaults\n");
+#ifndef FZERO_HAS_DELUXE
+  /* BS Deluxe is on by default, but a build configured without the native
+   * module cannot honour it and FzeroDeluxePrepare would refuse to start. */
+  if (g_video.bs_deluxe) {
+    fprintf(stderr, "[bs-deluxe] This build has no BS Deluxe module; starting stock\n");
+    g_video.bs_deluxe = false;
+  }
+#endif
   if (!FzeroReplayConfigure(getenv("SNESRECOMP_INPUT_SCRIPT"), getenv("FZERO_VIEWPORT_SCRIPT"))) {
     fprintf(stderr, "[fzero] Invalid validation replay\n");
     return 2;

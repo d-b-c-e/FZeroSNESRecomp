@@ -31,7 +31,8 @@ typedef struct FzeroViewport {
 
 typedef struct FzeroRect { int x, y, w, h; } FzeroRect;
 
-void FzeroVideoDefaults(FzeroVideoSettings *settings);
+void FzeroVideoDefaults(FzeroVideoSettings *settings); /* shipped: all mods on, Fit */
+void FzeroVideoStock(FzeroVideoSettings *settings);    /* stock 4:3, no mods */
 const char *FzeroAspectName(FzeroAspect aspect);
 bool FzeroParseAspect(const char *text, FzeroAspect *aspect);
 bool FzeroValidFps(unsigned fps);

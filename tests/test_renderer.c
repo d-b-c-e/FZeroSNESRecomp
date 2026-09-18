@@ -62,7 +62,7 @@ static void test_panorama(void) {
       }
     }
     for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
-      FzeroVideoSettings s; FzeroVideoDefaults(&s);
+      FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */
       s.enhanced = true; s.aspect = aspect;
       FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
       for (int origin = 0; origin < period; origin += 31) {
@@ -84,7 +84,7 @@ static void test_panorama(void) {
 static void test_hud_transition(void) {
   static uint32_t active[FZERO_MAX_WIDTH * 224];
   for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
-    FzeroVideoSettings s; FzeroVideoDefaults(&s);
+    FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */
     s.enhanced = true; s.aspect = aspect;
     FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
     setup(); memset(p.vram, 0, sizeof(p.vram));
@@ -138,7 +138,7 @@ static void test_hud_transition(void) {
 }
 static void test_adaptive_scenes(void) {
   for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
-    FzeroVideoSettings s; FzeroVideoDefaults(&s);
+    FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */
     s.enhanced = true; s.aspect = aspect;
     FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
     setup(); ram[0x54] = 0; /* Title has live track, but no race HUD. */
@@ -165,7 +165,7 @@ static void test_adaptive_scenes(void) {
 static void test_intro_counter(void) {
   static uint32_t intro[FZERO_MAX_WIDTH * 224];
   for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
-    FzeroVideoSettings s; FzeroVideoDefaults(&s);
+    FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */
     s.enhanced = true; s.aspect = aspect;
     FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
     setup(); p.screenEnabled[0] = 16; memset(p.vram, 0, sizeof(p.vram));
@@ -213,7 +213,7 @@ static void test_loss_window(void) {
   p.windowsel = 2u << 20; /* Colour window 1: collapsed to x=0. */
   p.window1left = p.window1right = 0;
   p.cgwsel = 0x10; p.cgadsub = 0x20; p.fixedColor = 31;
-  FzeroVideoSettings s; FzeroVideoDefaults(&s);
+  FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */
   s.enhanced = true; s.aspect = FZERO_ASPECT_21_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 3440, 1440);
   publish(1); CHECK(FzeroRendererDraw(guarded + 1, v, 1));
@@ -256,7 +256,7 @@ static void test_course_streaming(void) {
   }
   for (unsigned i = 0; i < 4; ++i) bank[0x6100 + i] = 7;
   publish(1);
-  FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true;
+  FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true;
   s.aspect = FZERO_ASPECT_21_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 3840, 1646);
   CHECK(v.width == 448 && v.extra == 96);
@@ -305,7 +305,7 @@ static void test_course_streaming(void) {
 }
 
 int main(void) {
-  FzeroVideoSettings s; FzeroVideoDefaults(&s); s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
+  FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
   uint32_t *out = guarded + 1;
   setup();

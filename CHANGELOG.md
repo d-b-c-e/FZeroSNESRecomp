@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Every mod now ships on by default and the aspect defaults to Fit, which
+  follows the window between 4:3 and 32:9. A first run with no
+  `fzero-video.ini` therefore starts with Widescreen on at Fit, Presentation
+  FPS on at Auto, and BS Deluxe on. `FzeroVideoStock()` is the stock baseline
+  and is what the headless host, `FZeroRenderCapture` and the runtime's own
+  pre-host viewport use, so captures and tests are unchanged unless
+  `FZERO_ASPECT` opts in. A build configured without the BS Deluxe native
+  module logs that it is starting stock instead of refusing to launch.
+
 - Fixed the widescreen Mode 7 draw distance, reported by PowerPanda: pieces of
   the track were missing in the margins and appeared only once they reached the
   middle of the screen. Retail streams the tilemap for the stock 256-pixel

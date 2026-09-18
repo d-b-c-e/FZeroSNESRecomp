@@ -13,7 +13,11 @@
 
 static void viewport_tests(void) {
   FzeroVideoSettings settings;
-  FzeroVideoDefaults(&settings);
+  FzeroVideoDefaults(&settings); /* shipped defaults: every mod on, Fit, Auto rate */
+  CHECK(settings.enhanced && settings.aspect == FZERO_ASPECT_FIT && settings.fps == 0 &&
+        settings.fps_enabled && settings.bs_deluxe);
+  FzeroVideoStock(&settings);
+  CHECK(!settings.enhanced && settings.aspect == FZERO_ASPECT_STOCK && !settings.fps_enabled && !settings.bs_deluxe);
   FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);
   CHECK(!v.enhanced && v.width == 256 && v.extra == 0);
   settings.enhanced = true;
@@ -102,10 +106,10 @@ static void config_tests(void) {
   fputs("EnhancedRenderer=perhaps\nAspect=99:1\nPresentationFPS=120bad\n", f);
   fclose(f);
   CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
-  CHECK(!b.enhanced && b.aspect == FZERO_ASPECT_16_9 && b.fps == 0);
+  CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 0); /* invalid fields fall back to shipped defaults */
   remove("test-video.ini");
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
-  CHECK(!b.enhanced);
+  CHECK(b.enhanced && b.fps_enabled && b.bs_deluxe && b.aspect == FZERO_ASPECT_FIT); /* first run: all mods on */
   CHECK(!FzeroValidFps(61));
   FzeroAspect aspect;
   CHECK(FzeroParseAspect("32:9", &aspect) && aspect == FZERO_ASPECT_32_9);

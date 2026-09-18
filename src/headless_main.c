@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
     free(rom); return 2;
   }
   FzeroVideoSettings replay_video;
-  FzeroVideoDefaults(&replay_video);
+  FzeroVideoStock(&replay_video); /* headless baseline is stock; FZERO_ASPECT opts in */
   const char *initial_aspect = getenv("FZERO_ASPECT");
   if (initial_aspect && FzeroParseAspect(initial_aspect, &replay_video.aspect)) replay_video.enhanced = true;
 

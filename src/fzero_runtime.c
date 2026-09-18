@@ -502,8 +502,13 @@ static void session_reset(void) {
   FzeroRendererReset();
   s_wide_projection_accepts = 0;
   interp_bridge_set_pre_opcode_hook(0x00dcc6, widened_projection);
+  /* The runtime's own baseline is stock, not the shipped defaults: a host that
+   * offers video settings calls FzeroSetViewport with them, and one that does
+   * not (headless captures, tools) must stay at 4:3 unless FZERO_ASPECT opts
+   * in. Seeding this with the shipped defaults would silently widen every
+   * headless run and every frame drawn before the host's first viewport. */
   FzeroVideoSettings video;
-  FzeroVideoDefaults(&video);
+  FzeroVideoStock(&video);
   const char *aspect = getenv("FZERO_ASPECT");
   if (aspect && FzeroParseAspect(aspect, &video.aspect)) video.enhanced = true;
   s_viewport = FzeroCalculateViewport(&video, 1920, 1080);
