@@ -159,6 +159,20 @@ The stock columns are corrected too, wherever their own samples leave the square
 (0.108% of them), so no seam appears at the stock screen edge. Stock 4:3 output
 stays byte-identical because the lookup is confined to a widened viewport.
 
+The Mode 7 centre is the camera reduced to the map, but retail writes either
+representative: on some frames it is the camera's map position and on others
+that plus 1024. A frame's own origin and centre always agree, so a texel minus
+its own centre is exact, but `FzeroMode7Interpolate` takes the shortest path
+across that seam and an interpolated origin can land in the other
+representative. Subtracting the current frame's centre then moved every Mode 7
+sample a whole map period and repainted the screen from elsewhere on the
+course for one presentation - occasional full-screen flicker, visible only on
+the interpolated desktop path. The centre and the camera are blended the same
+periodic way as the origin. Over 321 consecutive race frames at 21:9 and a
+0.5 blend, seven presentations changed more than 10,000 pixels against 1.4.3,
+the worst 63,091 of 100,352; afterwards none do and the worst is 946. Output
+at full blend is byte-identical either way.
+
 Opponents are a separate question and are not affected. Their only horizontal
 visibility test is `$00:DCC6`, which the viewport policy already widens; over a
 2,600-frame race it admitted four projections, all on the starting grid. What

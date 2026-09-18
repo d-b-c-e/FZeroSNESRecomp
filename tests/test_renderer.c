@@ -271,6 +271,26 @@ static void test_course_streaming(void) {
     /* Stock columns and the right margin stay inside it and keep tile 1. */
     for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
   }
+  /* Retail writes either representative of the camera's map position: some
+   * frames carry the camera's own value and some that plus 1024. An
+   * interpolated origin takes the shortest path across that seam, so a
+   * presentation between two such frames must still resolve the same world
+   * cells - subtracting the wrong representative moved every sample a whole
+   * map period and repainted the screen from elsewhere on the course. */
+  p.m7matrix[5] += 1024;
+  word(0xb90, 0);
+  publish(2);
+  for (double blend = 0; blend < 1.0; blend += 0.25) {
+    CHECK(FzeroRendererDraw(out, v, blend));
+    for (int y = 0; y < 224; ++y) {
+      const uint32_t *row = out + y * v.width;
+      for (int x = 0; x < v.extra; ++x) CHECK(row[x] == 0x00ff00);
+      for (int x = v.extra; x < v.width; ++x) CHECK(row[x] == 0xff0000);
+    }
+  }
+  p.m7matrix[5] -= 1024;
+  publish(3);
+  CHECK(FzeroRendererDraw(out, v, 1));
   /* Stock width never consults the tables. */
   s.enhanced = false;
   v = FzeroCalculateViewport(&s, 1024, 768);

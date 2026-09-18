@@ -14,8 +14,20 @@
   state is written. Non-player cars were measured and are unaffected: their only
   horizontal visibility test is already widened, and what removes them is
   retail's longitudinal window and proximity cull, identical at every aspect.
-- Added `tools/measure_draw_distance.py` and a `--sequence` mode for
-  `FZeroRenderCapture` that replays a whole race through the compositor in order.
+- Fixed occasional full-screen flicker introduced by that change on the
+  interpolated presentation path. Retail writes either representative of the
+  camera's map position - some frames the camera's own value, some that plus
+  1024 - and an interpolated scanline origin takes the shortest path across
+  that seam, so subtracting the current frame's representative moved every
+  Mode 7 sample a whole map period for one presentation. The centre and the
+  camera are now blended the same periodic way as the origin. Measured over
+  321 consecutive race frames at 21:9: seven presentations changed more than
+  10,000 pixels against 1.4.3, the worst 63,091 of 100,352 (63% of the frame);
+  after the fix none do, and the worst is 946. Output at full blend is
+  unchanged.
+- Added `tools/measure_draw_distance.py` and a `--sequence[=alpha]` mode for
+  `FZeroRenderCapture` that replays a whole race through the compositor in
+  order, including the interpolated presentation path.
 
 ## 1.4.3 - 2026-09-18
 

@@ -28,11 +28,13 @@ static Ppu scanout; /* Private renderer scratch; never points at guest state. */
 bool FzeroRendererLoadCapture(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) return false;
-  FzeroRendererReset();
-  current = 0;
-  bool ok = fread(&frames[0], sizeof(frames[0]), 1, f) == 1 && fgetc(f) == EOF;
+  /* Alternate buffers the way FzeroRendererBeginFrame does, so replaying a
+   * sequence offline presents the previous frame to the compositor exactly as
+   * a session does and can exercise the interpolated presentation path. */
+  current ^= 1;
+  bool ok = fread(&frames[current], sizeof(frames[current]), 1, f) == 1 && fgetc(f) == EOF;
   fclose(f);
-  frames[0].valid = ok;
+  frames[current].valid = ok;
   return ok;
 }
 const uint32_t *FzeroRendererStockFrame(void) { return frames[current].stock; }
@@ -211,18 +213,41 @@ typedef struct FzeroCourse {
   const uint8_t *bank;  /* WRAM bank $7F. */
   unsigned grid;        /* $00B0/$00B1: the block grid, placed by $00:9F4C. */
   int anchor_x, anchor_y;
+  double camera_x, camera_y;
   bool valid;
 } FzeroCourse;
 
+/* Shortest-path blend of a coordinate that repeats every `period` units, the
+ * rule FzeroMode7Interpolate already applies to a scanline's origin. */
+static double periodic_blend(double from, double to, double alpha, double period) {
+  return from + alpha * remainder(to - from, period);
+}
+
+/* The Mode 7 centre is the camera reduced to the map, but retail writes either
+ * representative: on some frames it is the camera's map position and on others
+ * that plus 1024. Both describe the same place and a frame's own origin and
+ * centre always agree, so a texel minus its own centre is exact - but an
+ * interpolated origin takes the shortest path across the seam and can land in
+ * the other representative. Subtracting the wrong one moves every Mode 7
+ * sample a whole map period and repaints the screen from another part of the
+ * course for that one presentation. Blend the centre and the camera the same
+ * periodic way so they stay in the origin's representative. */
+
 static FzeroCourse course_open(const FzeroSourceFrame *f, bool world) {
-  FzeroCourse course = {NULL, 0, 0, 0, false};
+  FzeroCourse course = {NULL, 0, 0, 0, 0, 0, false};
   if (!world) return course;
   course.bank = f->ram + 0x10000;
   course.grid = (unsigned)f->ram[0xb0] | ((unsigned)f->ram[0xb1] << 8);
   course.anchor_x = read_i16(f->ram + 0xa8) & 0x1fff;
   course.anchor_y = read_i16(f->ram + 0xaa) & 0x0fff;
+  course.camera_x = read_i16(f->ram + 0xb70);
+  course.camera_y = read_i16(f->ram + 0xb90);
   course.valid = true;
   return course;
+}
+
+static int course_centre(const int16_t matrix[8], int index) {
+  return ((int)(matrix[index] & 0x1fff) ^ 0x1000) - 0x1000;
 }
 
 static unsigned course_word(const FzeroCourse *course, unsigned address) {
@@ -250,14 +275,12 @@ static unsigned course_tile(const FzeroCourse *course, int world_x, int world_y)
 /* Tile number for one Mode 7 texel, or -1 to keep the live tilemap. The
  * transform is centred on the camera, so the texel's offset from the 13-bit
  * centre is exact even where the wrapped coordinate is ambiguous. */
-static int course_sample(const FzeroCourse *course, const FzeroSourceFrame *f,
-                         const int16_t matrix[8], FzeroMode7Texel texel) {
+static int course_sample(const FzeroCourse *course, FzeroMode7Texel texel,
+                         double centre_x, double centre_y) {
   if (!course->valid || !isfinite(texel.x) || !isfinite(texel.y) ||
       fabs(texel.x) > 1e6 || fabs(texel.y) > 1e6) return -1;
-  int centre_x = ((int)(matrix[4] & 0x1fff) ^ 0x1000) - 0x1000;
-  int centre_y = ((int)(matrix[5] & 0x1fff) ^ 0x1000) - 0x1000;
-  int world_x = (read_i16(f->ram + 0xb70) + ((int)texel.x - centre_x)) & 0x1fff;
-  int world_y = (read_i16(f->ram + 0xb90) + ((int)texel.y - centre_y)) & 0x0fff;
+  int world_x = (int)floor(course->camera_x + texel.x - centre_x) & 0x1fff;
+  int world_y = (int)floor(course->camera_y + texel.y - centre_y) & 0x0fff;
   if (((world_x - course->anchor_x) & 0x1fff) < 1024 &&
       ((world_y - course->anchor_y) & 0x0fff) < 1024) return -1;
   return (int)course_tile(course, world_x, world_y);
@@ -439,6 +462,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   /* Only a widened viewport reaches outside retail's streamed square, and
    * only a live race scene has course tables to resolve it from. */
   FzeroCourse course = course_open(f, world && viewport.enhanced);
+  if (course.valid && interpolate && alpha < 1) {
+    course.camera_x = periodic_blend(read_i16(previous->ram + 0xb70),
+                                     course.camera_x, alpha, 8192);
+    course.camera_y = periodic_blend(read_i16(previous->ram + 0xb90),
+                                     course.camera_y, alpha, 4096);
+  }
   uint16_t object_pixels[FZERO_MAX_WIDTH];
   for (int y = 0; y < 224; ++y) {
     const FzeroRasterLine *l = &f->lines[y];
@@ -455,11 +484,16 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       continue;
     }
     FzeroMode7Line transform = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, y + 1);
+    double centre_x = course_centre(scanout.m7matrix, 4);
+    double centre_y = course_centre(scanout.m7matrix, 5);
     if (mode == 7 && interpolate && alpha < 1) {
       Ppu old;
       memcpy(&old, previous->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
-      if ((old.bgmode & 7) == 7)
+      if ((old.bgmode & 7) == 7) {
         transform = FzeroMode7Interpolate(FzeroMode7Transform(old.m7matrix, old.m7sel, y + 1), transform, alpha);
+        centre_x = periodic_blend(course_centre(old.m7matrix, 4), centre_x, alpha, 1024);
+        centre_y = periodic_blend(course_centre(old.m7matrix, 5), centre_y, alpha, 1024);
+      }
     }
     if (world)
       sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
@@ -476,7 +510,7 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
           if (mode == 7) {
             FzeroMode7Texel texel = FzeroMode7Locate(&transform, x);
             unsigned index = FzeroMode7Fetch(&transform, f->vram, texel,
-                course_sample(&course, f, scanout.m7matrix, texel));
+                course_sample(&course, texel, centre_x, centre_y));
             pixel = index ? 0x5000 | index : 0;
           } else {
             int bx = x;

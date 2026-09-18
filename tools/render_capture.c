@@ -4,6 +4,9 @@
 #include <string.h>
 
 static FzeroViewport g_viewport;
+/* Presentation blend for the sequence mode. The desktop host presents between
+ * simulations, so 1 alone never exercises the interpolated path. */
+static double g_alpha = 1;
 
 static int write_ppm(const uint32_t *output, const char *path, bool report) {
   FzeroViewport v = g_viewport;
@@ -36,12 +39,14 @@ static int write_ppm(const uint32_t *output, const char *path, bool report) {
 static int render_one(const char *capture, const char *output, bool report) {
   if (!FzeroRendererLoadCapture(capture)) return 2;
   static uint32_t pixels[FZERO_MAX_WIDTH * 224];
-  if (!FzeroRendererDraw(pixels, g_viewport, 1)) return 3;
+  if (!FzeroRendererDraw(pixels, g_viewport, g_alpha)) return 3;
   return write_ppm(pixels, output, report);
 }
 
 int main(int argc, char **argv) {
-  bool sequence = argc > 1 && strcmp(argv[1], "--sequence") == 0;
+  bool sequence = argc > 1 && strncmp(argv[1], "--sequence", 10) == 0;
+  if (sequence && argv[1][10] == '=') g_alpha = atof(argv[1] + 11);
+  else if (sequence && argv[1][10]) sequence = false;
   if (sequence ? argc < 5 : argc != 4) {
     fputs("usage: FZeroRenderCapture capture.bin aspect output.ppm\n"
           "       FZeroRenderCapture --sequence aspect output-directory capture.bin...\n",
@@ -49,7 +54,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   FzeroVideoSettings settings;
-  FzeroVideoDefaults(&settings);
+  FzeroVideoStock(&settings);
   settings.enhanced = true;
   if (!FzeroParseAspect(argv[2], &settings.aspect)) return 2;
   g_viewport = FzeroCalculateViewport(&settings, 1920, 1080);
