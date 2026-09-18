@@ -19,9 +19,9 @@ OUT="$REPO/release-linux"
 JOBS="$(nproc 2>/dev/null || echo 4)"
 DO_RUN=0
 DO_PACKAGE=1
-INCLUDE_BS=0
+# BS Deluxe is mandatory: it ships in every download, embedded in the binary.
 BS_GEN="$REPO/captures/bs-deluxe/gen"
-BS_MODS="$REPO/build-release/mods"
+BS_MODS="$REPO/captures/bs-deluxe/mods"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -31,7 +31,6 @@ while [ $# -gt 0 ]; do
     --jobs) JOBS="$2"; shift 2;;
     --run) DO_RUN=1; shift;;
     --no-package) DO_PACKAGE=0; shift;;
-    --include-bs-deluxe) INCLUDE_BS=1; shift;;
     --bs-gen) BS_GEN="$2"; shift 2;;
     --bs-mods) BS_MODS="$2"; shift 2;;
     -h|--help)
@@ -52,12 +51,10 @@ SDL_BACKEND="${SNESRECOMP_SDL_BACKEND:-SDL3}"
 SDL_CFG_DIR="$( { find /usr/lib /usr/lib64 /usr/local/lib -type d -path "*cmake/$SDL_BACKEND" 2>/dev/null || true; } | head -1 )"
 [ -n "$SDL_CFG_DIR" ] && FLAGS+=( "-D${SDL_BACKEND}_DIR=$SDL_CFG_DIR" )
 
-if [ "$INCLUDE_BS" = "1" ]; then
-  [ -f "$BS_GEN/deluxe_namespace.h" ] || { echo "missing BS native gen dir: $BS_GEN" >&2; exit 1; }
-  [ -f "$BS_MODS/bs-deluxe.dat" ] || { echo "missing BS Deluxe payload: $BS_MODS/bs-deluxe.dat" >&2; exit 1; }
-  [ -f "$REPO/patches/bs-deluxe-usa.ips" ] || { echo "missing tracked BS patch: patches/bs-deluxe-usa.ips" >&2; exit 1; }
-  FLAGS+=( -DFZERO_DELUXE_GEN_DIR="$BS_GEN" )
-fi
+[ -f "$BS_GEN/deluxe_namespace.h" ] || { echo "missing BS native gen dir: $BS_GEN" >&2; exit 1; }
+[ -f "$BS_MODS/bs-deluxe.dat" ] || { echo "missing BS Deluxe payload to embed: $BS_MODS/bs-deluxe.dat (run tools/regen_bs_deluxe.py)" >&2; exit 1; }
+[ -f "$REPO/patches/bs-deluxe-usa.ips" ] || { echo "missing tracked BS patch: patches/bs-deluxe-usa.ips" >&2; exit 1; }
+FLAGS+=( -DFZERO_DELUXE_GEN_DIR="$BS_GEN" )
 
 [ -f "$REPO/snesrecomp/runner/runner.cmake" ] || {
   echo "snesrecomp submodule missing; run git submodule update --init --recursive" >&2
@@ -151,13 +148,10 @@ $LINUXDEPLOY --appdir "$APPDIR" --executable "$BIN" --desktop-file "$DESKTOP" --
 [ -d "$(dirname "$BIN")/assets" ] || { echo "launcher assets missing beside $BIN" >&2; exit 1; }
 cp -r "$(dirname "$BIN")/assets" "$APPDIR/usr/bin/assets"
 
-if [ "$INCLUDE_BS" = "1" ]; then
-  mkdir -p "$APPDIR/usr/bin/mods" "$APPDIR/usr/bin/patches"
-  cp "$BS_MODS/bs-deluxe.dat" "$APPDIR/usr/bin/mods/bs-deluxe.dat"
-  cp "$BS_MODS/bs-deluxe-import.json" "$APPDIR/usr/bin/mods/bs-deluxe-import.json"
-  cp "$BS_MODS/BS-Deluxe-credits.txt" "$APPDIR/usr/bin/mods/BS-Deluxe-credits.txt"
-  cp "$REPO/patches/bs-deluxe-usa.ips" "$APPDIR/usr/bin/patches/bs-deluxe-usa.ips"
-fi
+mkdir -p "$APPDIR/usr/bin/mods" "$APPDIR/usr/bin/patches"
+cp "$BS_MODS/bs-deluxe-import.json" "$APPDIR/usr/bin/mods/bs-deluxe-import.json"
+cp "$BS_MODS/BS-Deluxe-credits.txt" "$APPDIR/usr/bin/mods/BS-Deluxe-credits.txt"
+cp "$REPO/patches/bs-deluxe-usa.ips" "$APPDIR/usr/bin/patches/bs-deluxe-usa.ips"
 
 rm -f "$APPDIR/AppRun"
 cat > "$APPDIR/AppRun" <<EOF

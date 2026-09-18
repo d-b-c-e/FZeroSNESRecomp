@@ -19,22 +19,34 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument("--build", default="build-release")
 p.add_argument("--mingw", default="C:/msys64/mingw64")
 p.add_argument("--output", default="release-stage", help="Parent for a fresh versioned staging directory")
-p.add_argument("--include-bs-deluxe", action="store_true",
-               help="Include locally imported Deluxe data; requires a private GitHub repository")
+p.add_argument("--deluxe-mods", type=Path, default=ROOT / "captures/bs-deluxe/mods",
+               help="Imported Deluxe directory; its credits and provenance ship with the build")
 a = p.parse_args()
-if a.include_bs_deluxe:
-    gh = shutil.which("gh") or "C:/Program Files/GitHub CLI/gh.exe"
-    visibility = json.loads(subprocess.check_output(
-        [gh, "repo", "view", "mstan/FZeroSNESRecomp", "--json", "isPrivate"], text=True))
-    if visibility.get("isPrivate") is not True:
-        raise SystemExit("Refusing Deluxe payload: F-Zero repository must be private")
+# BS Deluxe ships in every download, so the repository has to stay private.
+gh = shutil.which("gh") or "C:/Program Files/GitHub CLI/gh.exe"
+visibility = json.loads(subprocess.check_output(
+    [gh, "repo", "view", "mstan/FZeroSNESRecomp", "--json", "isPrivate"], text=True))
+if visibility.get("isPrivate") is not True:
+    raise SystemExit("Refusing Deluxe payload: F-Zero repository must be private")
 version = (ROOT / "VERSION").read_text().strip()
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
     raise SystemExit("Invalid VERSION")
 build, mingw = ROOT / a.build, Path(a.mingw)
 exe = build / "FZeroSNESRecomp.exe"
-if version.encode() not in exe.read_bytes():
+image = exe.read_bytes()
+if version.encode() not in image:
     raise SystemExit("Executable does not contain the release version")
+deluxe_mods = a.deluxe_mods if (a.deluxe_mods / "bs-deluxe-import.json").exists() else build / "mods"
+metadata = json.loads((deluxe_mods / "bs-deluxe-import.json").read_text())
+# The payload is what ships, so it has to be inside the binary - together with
+# the target digest the loader verifies the patched cartridge against.
+if b"BSDELX1" not in image:
+    raise SystemExit("Executable has no embedded BS Deluxe payload; "
+                     "configure with FZERO_DELUXE_GEN_DIR and rebuild")
+if bytes.fromhex(metadata["target_sha256"]) not in image:
+    raise SystemExit("Embedded BS Deluxe payload is not the expected version")
+if hashlib.sha256((deluxe_mods / "bs-deluxe.dat").read_bytes()).hexdigest() != metadata["delta_sha256"]:
+    raise SystemExit("Deluxe payload digest does not match import metadata")
 for source in (ROOT / "src/gen").glob("*.c"):
     if "rtl_aot_node_denied(" in source.read_text():
         raise SystemExit("Regenerate without the AOT deny gate before packaging")
@@ -55,29 +67,26 @@ screenshots = ROOT / "docs/screenshots"
 if screenshots.is_dir():
     shutil.copytree(screenshots, stage / "docs/screenshots")
 shutil.copy2(ROOT / "assets/README.md", stage / "assets/README.md")
-if a.include_bs_deluxe:
-    metadata = json.loads((build / "mods/bs-deluxe-import.json").read_text())
-    payload = (build / "mods/bs-deluxe.dat").read_bytes()
-    if hashlib.sha256(payload).hexdigest() != metadata["delta_sha256"]:
-        raise SystemExit("Deluxe payload digest does not match import metadata")
-    (stage / "mods").mkdir()
-    for filename in ("bs-deluxe.dat", "bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
-        shutil.copy2(build / "mods" / filename, stage / "mods" / filename)
+# Credits and provenance still ship as files. The payload itself does not: a
+# copy beside the executable is only a development override, and a stale one
+# would be tried ahead of the embedded bytes.
+(stage / "mods").mkdir()
+for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
+    shutil.copy2(deluxe_mods / filename, stage / "mods" / filename)
 (stage / "README.txt").write_text(
     f"FZeroSNESRecomp {version} - Windows x64\n\n"
     "Extract the entire ZIP and run FZeroSNESRecomp.exe. Select your own\n"
     "F-Zero (USA) ROM in the launcher. No ROM is included.\n\n"
     "Settings > Display contains aspect choices and shader presets including\n"
     "CRT Soft. Selecting a shader uses the OpenGL presentation path.\n\n"
-    "Mods contains independent Widescreen and Presentation FPS plugins.\n"
-    "Enable each plugin and choose its aspect or FPS setting, then Play.\n"
-    + ("BS Deluxe is also available in Mods: enable it before Play for the\n"
-       "original and BS content together. Saves are isolated under saves/bs-deluxe.\n"
-       "The BS Satellaview mod is included with permission from its authors:\n"
-       "GuyPerfect, Porthor, and PowerPanda.\n"
-       "The SNES patch is included at patches/bs-deluxe-usa.ips for your own ROM.\n"
-       "Read mods/BS-Deluxe-credits.txt for machine/league/alternate controls.\n"
-       if a.include_bs_deluxe else "") +
+    "Mods starts with everything on: Widescreen at Fit, which follows the\n"
+    "window between 4:3 and 32:9, Presentation FPS at Auto, and BS Deluxe.\n"
+    "Turn any of them off in Mods, or choose a fixed aspect or rate there.\n\n"
+    "BS Deluxe gives you the original and the BS content together, and keeps\n"
+    "its saves apart under saves/bs-deluxe. It is included with permission\n"
+    "from its authors: GuyPerfect, Porthor, and PowerPanda. The SNES patch is\n"
+    "at patches/bs-deluxe-usa.ips for your own ROM, and\n"
+    "mods/BS-Deluxe-credits.txt lists machines, leagues and alternate controls.\n\n"
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"
     "Ctrl+F6: aspect; Ctrl+F7: enable/cycle FPS; Alt+Enter: fullscreen.\n"
     "P: pause; Ctrl+R: reset; Shift+F1..F12: save; F1..F12: load.\n\n"

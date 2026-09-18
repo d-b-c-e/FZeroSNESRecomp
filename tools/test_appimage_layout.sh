@@ -14,7 +14,10 @@ test -d "$APPDIR/usr/bin/assets" || { echo "missing launcher assets" >&2; exit 1
 test -f "$APPDIR/usr/bin/assets/shaders/crt-soft.glslp" || { echo "missing CRT shader" >&2; exit 1; }
 
 if [ -d "$APPDIR/usr/bin/mods" ]; then
-  test -f "$APPDIR/usr/bin/mods/bs-deluxe.dat" || { echo "missing BS Deluxe payload" >&2; exit 1; }
+  # The payload ships inside the binary, not beside it, so a download can
+  # never be missing it; the files here are credits and provenance only.
+  grep -qa BSDELX1 "$APPDIR/usr/bin/FZeroSNESRecomp" || {
+    echo "binary has no embedded BS Deluxe payload" >&2; exit 1; }
   test -f "$APPDIR/usr/bin/mods/BS-Deluxe-credits.txt" || { echo "missing BS Deluxe credits" >&2; exit 1; }
 fi
 if [ -d "$APPDIR/usr/bin/patches" ]; then
