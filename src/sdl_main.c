@@ -1567,10 +1567,17 @@ int main(int argc, char **argv) {
   presenter.gl = use_gl_renderer ? &gl_renderer : NULL;
   presenter.pixels = pixels;
 
+  /* Outside the loop on purpose. A hotkey press is a request that survives
+   * until it is acted on: the event pump runs every host iteration but a
+   * simulation frame is only due sixty times a second, so a per-iteration
+   * flag consumed inside the simulation batch is dropped on every iteration
+   * that only presents — which at 165 Hz is two out of three, and is what
+   * made F7 look intermittent on the high-refresh presentation path. */
+  int open_savestate_menu = 0;
+  int open_rewind = 0;
+
   while (running) {
     SDL_Event event;
-    int open_savestate_menu = 0;
-    int open_rewind = 0;
     int panel = 0; /* 0 none, 1 save-state browser, 2 rewind filmstrip */
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) running = 0;
@@ -1700,8 +1707,29 @@ int main(int argc, char **argv) {
       FzeroClockReset(&clock, now, hz);
       g_reset_presentation_clock = false;
     }
+    /* Hotkeys act the moment they are pressed, not on the next simulation
+     * boundary: the keyboard is polled every iteration and a request must not
+     * wait for one. */
+    if (open_savestate_menu) {
+      open_savestate_menu = 0;
+      if (!snes_savestate_menu_is_open())
+        (void)snes_savestate_menu_poll_open(FZERO_MENU_GESTURE);
+    }
+    if (open_rewind) {
+      open_rewind = 0;
+      if (!snes_rewind_open())
+        set_title_message(window,
+                          snes_rewind_enabled()
+                              ? "Rewind: nothing recorded yet"
+                              : "Rewind is off (enable it in the launcher)",
+                          &state_feedback_until);
+    }
+    if (snes_savestate_menu_is_open()) panel = 1;
+    else if (snes_rewind_is_open()) panel = 2;
+
     /* Viewport policy and input sampling change only at simulation boundaries. */
-    for (unsigned batch = 0; batch < 4 && FzeroClockSimulationDue(&clock, now); ++batch) {
+    for (unsigned batch = 0; !panel && batch < 4 &&
+                             FzeroClockSimulationDue(&clock, now); ++batch) {
       selftest_main_tick(frames);
       if (frames == scripted_save.frame)
         (void)perform_state_action(window, 1, scripted_save.slot,
@@ -1733,20 +1761,6 @@ int main(int argc, char **argv) {
        * nor re-open the panel. */
       input = overlay_filter_guest_input(
           snes_savestate_menu_filter_guest_input(input));
-      if (open_savestate_menu) {
-        open_savestate_menu = 0;
-        if (!snes_savestate_menu_is_open())
-          (void)snes_savestate_menu_poll_open(FZERO_MENU_GESTURE);
-      }
-      if (open_rewind) {
-        open_rewind = 0;
-        if (!snes_rewind_open())
-          set_title_message(window,
-                            snes_rewind_enabled()
-                                ? "Rewind: nothing recorded yet"
-                                : "Rewind is off (enable it in the launcher)",
-                            &state_feedback_until);
-      }
       if (snes_savestate_menu_poll_open(input) ||
           snes_savestate_menu_is_open()) {
         panel = 1;
