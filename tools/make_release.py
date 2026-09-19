@@ -99,8 +99,7 @@ for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"
     "Ctrl+F6: aspect; Ctrl+F7: enable/cycle FPS; Alt+Enter: fullscreen.\n"
     "P: pause; Ctrl+R: reset.\n"
-    "Shift+F1..F12 save and F1..F12 load a slot directly. These are\n"
-    "deprecated and will be removed; use the save-state menu. F7 and F8\n"
+    "Shift+F1..F12 save and F1..F12 load a slot directly. F7 and F8\n"
     "belong to the menu and to rewind unless you rebind them.\n\n"
     "See README.md and CHANGELOG.md for more details.\n",
     encoding="utf-8")
