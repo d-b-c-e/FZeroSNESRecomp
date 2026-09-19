@@ -98,6 +98,6 @@ Local ROMs, generated files, saves, captures, and builds are ignored by git.
 
 ## License
 
-PolyForm Noncommercial 1.0.0. See `LICENSE`.
+MIT License, Copyright (c) 2026 Matthew Stanley. See `LICENSE`. Bundled dependencies keep their own licenses under `licenses/` in each release; BS F-Zero Deluxe content is included with its authors' permission and is not covered by this license.
 
 *F-Zero* belongs to Nintendo. The game ROM is not included.
