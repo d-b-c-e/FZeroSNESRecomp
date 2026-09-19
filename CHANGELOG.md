@@ -25,8 +25,8 @@
   and Rewind, and are read back from `config.ini` next to the executable.
   Where one of them claims an F-key, it wins over the old quick slot on that
   key; rebinding it hands the key straight back. The quick-slot keys
-  (F1-F12 to load, Shift+F1-F12 to save) still work but are deprecated and
-  will be removed - every slot is reachable from the menu, with a thumbnail.
+  (F1-F12 to load, Shift+F1-F12 to save) still work; every slot is also
+  reachable from the menu, with a thumbnail.
 - Save states now record which cartridge took them, and loading one taken on
   the other is refused cleanly instead of resuming a machine whose ROM does
   not match the RAM being restored. Stock and BS Deluxe already kept their

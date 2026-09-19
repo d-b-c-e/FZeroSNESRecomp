@@ -46,7 +46,7 @@ explicitly exported value alone so a capture run still overrides the UI.
 
 Hotkeys are matched **before** the F-key quick slots, with an exact modifier
 comparison, so `Shift+F7` still saves slot 7 while plain `F7` opens the
-browser. The quick slots are deprecated; where a hotkey claims a key the
+browser. The quick slots remain supported; where a hotkey claims a key the
 hotkey wins, and rebinding it returns the key.
 
 The pad gestures both take two buttons on purpose. One ordinary button pressed
