@@ -21,6 +21,19 @@ if(BUILD_TESTING)
     add_executable(fzero_mode7_tests tests/test_mode7.c)
     target_link_libraries(fzero_mode7_tests PRIVATE fzero_video)
     add_test(NAME fzero_mode7 COMMAND fzero_mode7_tests)
+    # Neither of these needs SDL, a ROM, or the generated sources: they are
+    # the host-side logic behind the save-state menu and rewind bindings, so
+    # they build and run in the ROM-free configuration too.
+    add_executable(fzero_hotkeys_tests tests/test_hotkeys.c src/fzero_hotkeys.c)
+    target_include_directories(fzero_hotkeys_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    add_test(NAME fzero_hotkeys COMMAND fzero_hotkeys_tests)
+    add_executable(fzero_state_mode_tests tests/test_state_mode.c src/fzero_state_mode.c)
+    target_include_directories(fzero_state_mode_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    add_test(NAME fzero_state_mode COMMAND fzero_state_mode_tests)
+    if(NOT MSVC)
+        target_compile_options(fzero_hotkeys_tests PRIVATE -Wall -Wextra -Werror)
+        target_compile_options(fzero_state_mode_tests PRIVATE -Wall -Wextra -Werror)
+    endif()
 endif()
 if(NOT FZERO_BUILD_GAME)
     return()
@@ -146,10 +159,11 @@ add_executable(FZeroSNESRecomp
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
     src/fzero_mods.c
+    src/fzero_hotkeys.c
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
-    target_sources(${target} PRIVATE src/fzero_deluxe.c)
+    target_sources(${target} PRIVATE src/fzero_deluxe.c src/fzero_state_mode.c)
     if(FZERO_DELUXE_GEN_DIR)
         target_sources(${target} PRIVATE $<TARGET_OBJECTS:fzero_deluxe_native>
                                          "${FZERO_DELUXE_PAYLOAD_SOURCE}")
