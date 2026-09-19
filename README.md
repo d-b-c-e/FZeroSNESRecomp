@@ -103,11 +103,10 @@ Both keys are rebindable in the launcher's **Controls** page, as
 executable and take effect the next time you start the game. The rewind
 switch, depth and interval are remembered in the same file.
 
-The older quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
-to save one - still work, but they are deprecated and will be removed. Where a
-binding above uses a key (F7 and F8 by default), that binding wins and the
-quick slot behind it is unavailable; both slots are still reachable from the
-menu, which is the better way in anyway. Rebinding SaveStateMenu or Rewind to
+The quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
+to save one - still work. Where a binding above uses a key (F7 and F8 by
+default), that binding wins and the quick slot behind it is unavailable; both
+slots are still reachable from the menu. Rebinding SaveStateMenu or Rewind to
 another key hands the F-key straight back.
 
 ### Where states are kept
