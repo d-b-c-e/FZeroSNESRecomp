@@ -1,5 +1,14 @@
 ﻿# Changelog
 
+## 1.6.1 - 2026-09-18
+
+- Fixed the ROM button doing nothing on the Linux AppImage. The AppImage set a
+  library path for itself that it also handed to the desktop file dialog it
+  opens, so the dialog could not start — and its failure was read back as "the
+  player cancelled", which is why the click looked ignored. Host programs now
+  get a host environment, and a file dialog that cannot run falls through to
+  the launcher's own built-in file browser instead of doing nothing.
+
 ## 1.6.0 - 2026-09-18
 
 - Added the in-game save-state menu. **F7**, or **Select + R** on a gamepad,
