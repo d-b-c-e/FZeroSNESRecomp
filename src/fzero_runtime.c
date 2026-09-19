@@ -21,6 +21,7 @@
 #include "fzero_renderer.h"
 #include "fzero_deluxe.h"
 #include "fzero_hdma.h"
+#include "fzero_state_mode.h"
 
 #include "common_rtl.h"
 #include "cpu_state.h"
@@ -529,6 +530,27 @@ enum {
   kFzeroStateVersion = 1u,
 };
 
+/* ── Snapshot mode guard ──────────────────────────────────────────────────
+ *
+ * The engine applies a snapshot's guest blob before the game's trailer is
+ * ever read, and offers no pre-load veto, so a refusal has to be able to put
+ * the machine back. FzeroStateGuardArm() takes one whole-machine snapshot in
+ * memory; if a load is then refused, fzero_on_state_loaded restores it. The
+ * host arms the guard where a load it does not make itself can begin — when
+ * the save-state browser opens, which freezes the guest, so one snapshot
+ * covers every load the browser can attempt. Loads the host makes itself
+ * (the F-key slots, the debug server) are checked by FzeroStateFileMode()
+ * before the engine is called at all, and never reach this path. */
+static bool s_state_mode_refused;
+static bool s_state_guard_restoring;
+static uint8_t *s_state_guard_blob;
+static size_t s_state_guard_len;
+static size_t s_state_guard_cap;
+
+FzeroStateMode FzeroStateModeCurrent(void) {
+  return FzeroDeluxeActive() ? kFzeroStateModeDeluxe : kFzeroStateModeStock;
+}
+
 typedef struct FzeroRuntimeState {
   uint32_t magic;
   uint32_t version;
@@ -542,7 +564,11 @@ typedef struct FzeroRuntimeState {
   uint8_t memsel;
   uint8_t last_hdmaen;
   uint8_t irq_event_count;
-  uint8_t reserved[3];
+  /* FzeroStateMode. Claimed out of the reserved padding rather than appended,
+   * so the trailer keeps its size and field order and a 1.5.0 snapshot — which
+   * wrote zero here — still loads, reading back as kFzeroStateModeUnknown. */
+  uint8_t mode;
+  uint8_t reserved[2];
   int32_t snes_frame;
   uint64_t main_cpu_cycles_estimate;
   uint64_t apu_pace_cycles_estimate;
@@ -558,6 +584,7 @@ static void fzero_state_save_extra(SaveLoadInfo *sli) {
   memset(&state, 0, sizeof(state));
   state.magic = kFzeroStateMagic;
   state.version = kFzeroStateVersion;
+  state.mode = (uint8_t)FzeroStateModeCurrent();
   state.cpu = g_cpu;
   /* Never persist an address-space-dependent host pointer. */
   state.cpu.ram = NULL;
@@ -594,6 +621,22 @@ static void fzero_state_load_extra(SaveLoadInfo *sli, uint32_t version) {
                            state.version == kFzeroStateVersion;
   if (!s_loaded_runtime_state) return;
 
+  /* Cartridge check. The two modes keep their slots in different directories
+   * under different prefixes, so a crossing file has been moved there by hand
+   * — but a Deluxe state resumed on the stock ROM restores registers and RAM
+   * for code that is not in the cartridge, which is a crash, not a glitch.
+   * Refuse instead, and let fzero_on_state_loaded put the machine back. */
+  if (!FzeroStateModeCompatible((FzeroStateMode)state.mode,
+                                FzeroStateModeCurrent())) {
+    fprintf(stderr,
+            "[fzero-state] refused: snapshot is %s, this session is %s\n",
+            FzeroStateModeName((FzeroStateMode)state.mode),
+            FzeroStateModeName(FzeroStateModeCurrent()));
+    s_loaded_runtime_state = false;
+    s_state_mode_refused = true;
+    return;
+  }
+
   g_cpu = state.cpu;
   g_cpu.ram = g_ram;
   s_resume_pc = state.resume_pc;
@@ -621,9 +664,84 @@ static void fzero_state_load_extra(SaveLoadInfo *sli, uint32_t version) {
   memcpy(s_irq_events, state.irq_events, sizeof(s_irq_events));
 }
 
+static const FzeroStateTrailer kFzeroStateTrailer = {
+    sizeof(FzeroRuntimeState), offsetof(FzeroRuntimeState, mode),
+    kFzeroStateMagic, kFzeroStateVersion};
+
+int FzeroStateFileMode(const char *path, FzeroStateMode *out) {
+  return FzeroStateProbeFile(path, &kFzeroStateTrailer, out);
+}
+
+int FzeroStateFileAcceptable(const char *path) {
+  FzeroStateMode mode = kFzeroStateModeUnknown;
+  /* A file with no readable trailer is refused rather than guessed at: every
+   * snapshot this game has ever written carries one, so its absence means the
+   * file is truncated or from another game, and the engine would apply the
+   * guest blob before anything noticed. */
+  if (!FzeroStateFileMode(path, &mode)) return 0;
+  return FzeroStateModeCompatible(mode, FzeroStateModeCurrent());
+}
+
+void FzeroStateGuardArm(void) {
+  size_t needed;
+  s_state_mode_refused = false;
+  s_state_guard_len = 0;
+  /* Probe for the size the way snes_rewind does: ask with a generous buffer
+   * once, then keep it. The machine is ~256 KiB; 2 MiB is headroom, not a
+   * measurement. */
+  if (!s_state_guard_blob) {
+    s_state_guard_cap = 2u * 1024u * 1024u;
+    s_state_guard_blob = (uint8_t *)malloc(s_state_guard_cap);
+    if (!s_state_guard_blob) {
+      s_state_guard_cap = 0;
+      fprintf(stderr, "[fzero-state] guard snapshot unavailable (out of memory)\n");
+      return;
+    }
+  }
+  needed = RtlSaveSnapshotToMemory(s_state_guard_blob, s_state_guard_cap);
+  if (needed == 0 || needed > s_state_guard_cap) {
+    fprintf(stderr, "[fzero-state] guard snapshot failed; a refused load "
+                    "cannot be undone this session\n");
+    return;
+  }
+  s_state_guard_len = needed;
+}
+
+void FzeroStateGuardDisarm(void) { s_state_guard_len = 0; }
+
+int FzeroStateGuardTripped(void) {
+  int tripped = s_state_mode_refused ? 1 : 0;
+  s_state_mode_refused = false;
+  return tripped;
+}
+
 static void fzero_on_state_loaded(uint32_t version) {
   FzeroRendererReset();
   (void)version;
+
+  /* A refused load has already overwritten the machine with the snapshot's
+   * guest blob — the engine applies that before the game's trailer is read.
+   * Put the armed snapshot back so the player keeps the session they were
+   * in. The restore is an ordinary load, so it re-enters here; the flag stops
+   * it from looking for a guard of its own. */
+  if (s_state_mode_refused && !s_state_guard_restoring) {
+    if (s_state_guard_len) {
+      s_state_guard_restoring = true;
+      if (!RtlLoadSnapshotFromMemory(s_state_guard_blob, s_state_guard_len)) {
+        fprintf(stderr, "[fzero-state] could not restore the pre-load "
+                        "snapshot; resetting\n");
+        session_reset();
+      }
+      s_state_guard_restoring = false;
+    } else {
+      /* Nothing to go back to: a defined cold boot beats a machine holding
+       * another cartridge's RAM. */
+      fprintf(stderr, "[fzero-state] no guard snapshot; resetting the machine\n");
+      session_reset();
+    }
+    return;
+  }
+
   if (!s_loaded_runtime_state) return;
 
   /* Host pacing cursors, not guest state: point them at the restored counters
