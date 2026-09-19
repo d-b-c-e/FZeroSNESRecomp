@@ -63,6 +63,7 @@ for filename in ("README.md", "CHANGELOG.md", "VERSION", "LICENSE"):
 (stage / "docs").mkdir()
 shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER.md")
 shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXPLORATION.md")
+shutil.copy2(ROOT / "docs/SAVE_STATES.md", stage / "docs/SAVE_STATES.md")
 screenshots = ROOT / "docs/screenshots"
 if screenshots.is_dir():
     shutil.copytree(screenshots, stage / "docs/screenshots")
@@ -87,9 +88,20 @@ for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
     "from its authors: GuyPerfect, Porthor, and PowerPanda. The SNES patch is\n"
     "at patches/bs-deluxe-usa.ips for your own ROM, and\n"
     "mods/BS-Deluxe-credits.txt lists machines, leagues and alternate controls.\n\n"
+    "F7 or Select+R opens the save-state menu: 12 slots with thumbnails,\n"
+    "A loads, X saves, B or Escape backs out. Stock and BS Deluxe keep\n"
+    "separate slots and a state from the other one is refused, not loaded.\n\n"
+    "F8 or Select+L opens rewind. Turn it on first in the launcher under\n"
+    "Settings, where its depth and interval also live; it is off by default\n"
+    "because it keeps whole snapshots of the machine in memory. Left and\n"
+    "Right scrub, A or Enter jumps there, B or Escape leaves.\n"
+    "Both keys are rebindable on the launcher's Controls page.\n\n"
     "Arrows: steer; Z: accelerate; X: A; Enter: Start.\n"
     "Ctrl+F6: aspect; Ctrl+F7: enable/cycle FPS; Alt+Enter: fullscreen.\n"
-    "P: pause; Ctrl+R: reset; Shift+F1..F12: save; F1..F12: load.\n\n"
+    "P: pause; Ctrl+R: reset.\n"
+    "Shift+F1..F12 save and F1..F12 load a slot directly. These are\n"
+    "deprecated and will be removed; use the save-state menu. F7 and F8\n"
+    "belong to the menu and to rewind unless you rebind them.\n\n"
     "See README.md and CHANGELOG.md for more details.\n",
     encoding="utf-8")
 

@@ -20,7 +20,8 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 - Widescreen modes: 16:9, 21:9, 32:9, and Fit.
 - High refresh presentation: 60, 90, 120, 144, 165, 240, or 360 FPS.
 - Display shaders: CRT Soft, LCD Grid, Sharp, Warm Composite, or your own GLSL shader.
-- Save states with F1-F12.
+- Save states with a slot browser and thumbnails, opened with **F7** or **Select + R**.
+- Rewind: step back through the last few seconds and drop back in.
 - Gamepad support through SDL.
 - Optional BS F-Zero Deluxe content.
 
@@ -56,6 +57,71 @@ Open **Mods** for:
 - **BS Deluxe:** adds the Satellaview machines, leagues, and tracks.
 
 When the Widescreen mod is on, its aspect setting wins over the normal Display aspect setting.
+
+## Save States And Rewind
+
+### The save-state menu
+
+Press **F7**, or hold **Select + R** on a gamepad, to open the save-state
+browser. The game freezes while it is open, so a state you take is that exact
+moment.
+
+- **Up / Down** or the **arrow keys** pick one of 12 slots.
+- **A** on a pad, or **X** on the keyboard, loads the selected slot.
+- **X** on a pad, or **S** on the keyboard, saves to it.
+- **B** on a pad, or **Escape**, closes the menu without doing anything.
+- **1**-**9** jump straight to a slot.
+
+Each slot shows a thumbnail of the moment it was saved, so you can tell them
+apart without loading them.
+
+### Rewind
+
+Press **F8**, or hold **Select + L** on a gamepad, to open the rewind
+filmstrip. It shows the recent past as a strip of frames:
+
+- **Left / Right** scrub back and forward. Hold a direction to keep scrubbing.
+- **A** on a pad, or **Enter** / **Space**, jumps to the selected moment.
+- **B** on a pad, or **Escape**, leaves without changing anything.
+
+Rewind is **off by default**, because it keeps whole snapshots of the machine
+in memory. Turn it on in the launcher under **Settings**, where you can also
+set:
+
+- **Rewind depth:** how many snapshots to keep (50, 100, 150, or 200).
+- **Rewind interval:** how many frames apart they are (1, 4, 8, 12, 15, or 30).
+
+More snapshots make the history longer; a shorter interval makes it finer.
+Both cost memory: one snapshot of *F-Zero* is about 330 KB, so 100 of them is
+roughly 33 MB. At the default 50 snapshots every 15 frames you can step back
+about 12 seconds.
+
+### Changing the keys
+
+Both keys are rebindable in the launcher's **Controls** page, as
+**SaveStateMenu** and **Rewind**. They are saved to `config.ini` next to the
+executable and take effect the next time you start the game.
+
+The older quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
+to save one - still work, but they are deprecated and will be removed. Where a
+binding above uses a key (F7 and F8 by default), that binding wins and the
+quick slot behind it is unavailable; both slots are still reachable from the
+menu, which is the better way in anyway. Rebinding SaveStateMenu or Rewind to
+another key hands the F-key straight back.
+
+### Where states are kept
+
+Stock *F-Zero* and BS F-Zero Deluxe keep separate states, because they are
+different cartridges and their snapshots are not interchangeable:
+
+| Mode | Slot files |
+| --- | --- |
+| Stock | `saves/fzero<N>.sav` |
+| BS F-Zero Deluxe | `saves/bs-deluxe/fzero-bs-deluxe<N>.sav` |
+
+A thumbnail sits beside each as `.sav.thumb`. If a state from the other mode
+somehow ends up in a slot, loading it is refused and the game keeps running -
+the title bar says so and nothing is disturbed.
 
 ## BS F-Zero Deluxe
 

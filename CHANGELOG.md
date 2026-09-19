@@ -1,5 +1,43 @@
 ﻿# Changelog
 
+## 1.6.0 - 2026-09-18
+
+- Added the in-game save-state menu. **F7**, or **Select + R** on a gamepad,
+  opens a browser over the frozen game: twelve slots, each with a thumbnail of
+  the moment it was saved, A to load, X to save, B or Escape to back out. The
+  menu itself is the framework's (`snes_savestate_menu.c`), so a fix there
+  reaches every port; this host supplies the events and the pixels. It draws as
+  its own layer in both presentation paths - the SDL renderer and the OpenGL
+  shader path - so it lands at window resolution and stays crisp at 21:9
+  instead of being composited into the 256-pixel game buffer.
+- Added rewind. **F8**, or **Select + L**, opens a filmstrip of the recent
+  past; Left and Right scrub, A or Enter drops back in, B or Escape leaves.
+  It is off by default because it keeps whole snapshots of the machine in
+  memory (about 330 KB each); the launcher's Settings page turns it on and
+  sets the depth (50-200 snapshots) and the interval (1-30 frames). A rewind
+  or a state load now resets the presentation clock and the renderer's
+  interpolation history together, so nothing blends across the jump and the
+  seconds after one are not run as catch-up.
+- Both keys are rebindable on the launcher's Controls page, as SaveStateMenu
+  and Rewind, and are read back from `config.ini` next to the executable.
+  Where one of them claims an F-key, it wins over the old quick slot on that
+  key; rebinding it hands the key straight back. The quick-slot keys
+  (F1-F12 to load, Shift+F1-F12 to save) still work but are deprecated and
+  will be removed - every slot is reachable from the menu, with a thumbnail.
+- Save states now record which cartridge took them, and loading one taken on
+  the other is refused cleanly instead of resuming a machine whose ROM does
+  not match the RAM being restored. Stock and BS Deluxe already kept their
+  slots in separate directories under separate prefixes, so this only fires on
+  a file moved by hand - which used to crash. A load the host makes itself is
+  checked before the engine is called at all; a load from the browser, which
+  goes through the engine directly, is undone from a snapshot taken when the
+  browser opened. The tag reuses a padding byte, so 1.5.0 states still load.
+- Bumped `snesrecomp` (242 commits) and `recomp-ui` (36). The runner's
+  save-state menu and OSD units now pull in SDL, so they are held back from
+  the SDL-free headless host and handed to the desktop host explicitly. Stock
+  4:3 output is byte-identical across the bump on all 160 recorded captures,
+  and the native compositor still matches the PPU's own frame exactly.
+
 ## 1.5.0 - 2026-09-18
 
 - BS Deluxe is now compiled into the executable, so every download carries it
