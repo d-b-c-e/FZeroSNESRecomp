@@ -76,9 +76,17 @@ if(NOT FZERO_GEN_SOURCES)
         "`bash tools/regen.sh` before building.")
 endif()
 
+# The headless host links no SDL at all, so anything in the runner that
+# includes desktop/sdl_compat.h has to be held back from the shared source
+# list and handed to the desktop host explicitly. keybinds.c and
+# host_report.c were always in that set; snes_savestate_menu.c and
+# snes_osd.c joined the runner later and pull SDL in for their keycodes and
+# their tick clock.
 list(REMOVE_ITEM SNESRECOMP_RUNNER_SOURCES
     "${SNESRECOMP_ROOT}/runner/src/keybinds.c"
-    "${SNESRECOMP_ROOT}/runner/src/host_report.c")
+    "${SNESRECOMP_ROOT}/runner/src/host_report.c"
+    "${SNESRECOMP_ROOT}/runner/src/snes_savestate_menu.c"
+    "${SNESRECOMP_ROOT}/runner/src/snes_osd.c")
 
 set(FZERO_DELUXE_GEN_DIR "" CACHE PATH "Private generated BS Deluxe native sources")
 set(FZERO_DELUXE_DATA_FILE "" CACHE FILEPATH "Imported BS Deluxe payload to embed")
@@ -132,6 +140,8 @@ add_executable(FZeroSNESRecomp
     ${SNESRECOMP_RUNNER_SOURCES}
     "${SNESRECOMP_ROOT}/runner/src/host_report.c"
     "${SNESRECOMP_ROOT}/runner/src/keybinds.c"
+    "${SNESRECOMP_ROOT}/runner/src/snes_savestate_menu.c"
+    "${SNESRECOMP_ROOT}/runner/src/snes_osd.c"
     "${RECOMP_UI_ROOT}/src/third_party/gl_core_3_1.c"
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
