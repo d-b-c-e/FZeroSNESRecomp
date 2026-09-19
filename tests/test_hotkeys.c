@@ -76,7 +76,32 @@ int main(void) {
   write_file(path, "[Graphics]\nVSync=1\n");
   CHECK(FzeroHotkeyFromIni(path, "SaveStateMenu", &s) == 0);
 
+  /* ---- the general reader, which the rewind settings persist through ---- */
+  write_file(path,
+             "[KeyMap]\n"
+             "Rewind=F8\n"
+             "[Rewind]\n"
+             "Enabled = 1\n"
+             "Depth=150\n"
+             "Interval = 4 ; frames\n"
+             "Junk = notanumber\n");
+  int v = -1;
+  CHECK(FzeroIniReadInt(path, "Rewind", "Enabled", &v) == 1 && v == 1);
+  CHECK(FzeroIniReadInt(path, "Rewind", "Depth", &v) == 1 && v == 150);
+  CHECK(FzeroIniReadInt(path, "Rewind", "Interval", &v) == 1 && v == 4);
+  /* A key of the same name in another section must not answer for this one. */
+  v = -1;
+  CHECK(FzeroIniReadInt(path, "Rewind", "Missing", &v) == 0 && v == -1);
+  CHECK(FzeroIniReadInt(path, "Nope", "Enabled", &v) == 0 && v == -1);
+  CHECK(FzeroIniReadInt(path, "Rewind", "Junk", &v) == 0 && v == -1);
+  char text[64];
+  CHECK(FzeroIniReadString(path, "KeyMap", "Rewind", text, sizeof(text)) == 1);
+  CHECK(!strcmp(text, "F8"));
+  /* [KeyMap] Rewind and [Rewind] Enabled are different things and the section
+   * is what tells them apart. */
+  CHECK(FzeroIniReadString(path, "Rewind", "Rewind", text, sizeof(text)) == 0);
+
   remove(path);
-  puts("config.ini [KeyMap] parsing passed");
+  puts("config.ini [KeyMap] parsing and settings round-trip passed");
   return 0;
 }

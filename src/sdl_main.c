@@ -19,6 +19,7 @@
 #include "debug_server.h"
 #include "host_report.h"
 #include "keybinds.h"
+#include "launcher_binds.h" /* launcher_ini_kv_write: surgical config.ini edits */
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
 #include "sha256.h"
@@ -375,6 +376,36 @@ static int verify_rom(const uint8_t *rom, size_t size) {
   return memcmp(actual, kFzeroSha256, sizeof(actual)) == 0;
 }
 
+/*
+ * Rewind's three settings persist in config.ini, because recomp-ui leaves
+ * Settings persistence to the host and this host previously persisted none of
+ * it. Without this the launcher's checkbox would come back off on every
+ * launch, which reads as the feature not working.
+ *
+ * [Rewind] Enabled / Depth / Interval, written back through the framework's
+ * own surgical ini writer so the rest of the file — [KeyMap] above all — is
+ * untouched.
+ */
+static void load_rewind_settings(RecompLauncherCSettings *settings) {
+  int value = 0;
+  if (FzeroIniReadInt(g_config_path, "Rewind", "Enabled", &value))
+    settings->rewind_enabled = value != 0;
+  if (FzeroIniReadInt(g_config_path, "Rewind", "Depth", &value))
+    settings->rewind_depth = value;
+  if (FzeroIniReadInt(g_config_path, "Rewind", "Interval", &value))
+    settings->rewind_interval = value;
+}
+
+static void save_rewind_settings(const RecompLauncherCSettings *settings) {
+  char number[32];
+  snprintf(number, sizeof(number), "%d", settings->rewind_enabled ? 1 : 0);
+  launcher_ini_kv_write(g_config_path, "Rewind", "Enabled", number);
+  snprintf(number, sizeof(number), "%d", settings->rewind_depth);
+  launcher_ini_kv_write(g_config_path, "Rewind", "Depth", number);
+  snprintf(number, sizeof(number), "%d", settings->rewind_interval);
+  launcher_ini_kv_write(g_config_path, "Rewind", "Interval", number);
+}
+
 static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
                        RecompLauncherCSettings *settings) {
   memset(settings, 0, sizeof(*settings));
@@ -394,6 +425,9 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   /* The built-in mod owns native presentation settings. */
   settings->adaptive_view = 0;
   settings->widescreen_hud = 0;
+  /* Before either exit below: a run with a ROM on the command line skips the
+   * launcher entirely, and must still honour the saved rewind settings. */
+  load_rewind_settings(settings);
 
   if (argc > 1) {
     snprintf(path, path_size, "%s", argv[1]);
@@ -451,6 +485,9 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
       recomp_launcher_run_window("F-Zero \xE2\x80\x94 Launcher", settings,
                                  &game, assets_dir, initial_rom, path,
                                  path_size);
+  /* Whatever the launcher did, keep what the player chose there. Quitting is
+   * as good a moment to persist as pressing Play. */
+  save_rewind_settings(settings);
   if (action == 1) return 0;
   if (action == 0 && path[0]) return 1;
   if (initial_rom[0]) {

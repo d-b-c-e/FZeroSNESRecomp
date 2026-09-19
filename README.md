@@ -100,7 +100,8 @@ about 12 seconds.
 
 Both keys are rebindable in the launcher's **Controls** page, as
 **SaveStateMenu** and **Rewind**. They are saved to `config.ini` next to the
-executable and take effect the next time you start the game.
+executable and take effect the next time you start the game. The rewind
+switch, depth and interval are remembered in the same file.
 
 The older quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
 to save one - still work, but they are deprecated and will be removed. Where a

@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static int ieq(const char *a, const char *b) {
@@ -65,16 +66,16 @@ void FzeroHotkeyParse(const char *value, FzeroHotkeySpec *out) {
   out->bound = 1;
 }
 
-int FzeroHotkeyFromIni(const char *path, const char *name,
-                       FzeroHotkeySpec *out) {
-  if (out) memset(out, 0, sizeof(*out));
-  if (!path || !path[0] || !name || !name[0]) return 0;
+int FzeroIniReadString(const char *path, const char *section, const char *key,
+                       char *out, size_t cap) {
+  if (!path || !path[0] || !section || !key || !key[0] || !out || !cap)
+    return 0;
 
   FILE *f = fopen(path, "r");
   if (!f) return 0;
 
   char line[512];
-  int in_keymap = 0;
+  int in_section = 0;
   int found = 0;
   while (!found && fgets(line, sizeof(line), f)) {
     const char *p = skip_spaces(line);
@@ -84,34 +85,53 @@ int FzeroHotkeyFromIni(const char *path, const char *name,
       const char *close = strchr(p, ']');
       if (!close) continue;
       size_t n = (size_t)(close - p - 1);
-      char section[64];
-      if (n >= sizeof(section)) n = sizeof(section) - 1;
-      memcpy(section, p + 1, n);
-      section[n] = '\0';
-      in_keymap = ieq(section, "KeyMap");
+      char name[64];
+      if (n >= sizeof(name)) n = sizeof(name) - 1;
+      memcpy(name, p + 1, n);
+      name[n] = '\0';
+      in_section = ieq(name, section);
       continue;
     }
-    if (!in_keymap) continue;
+    if (!in_section) continue;
 
     const char *eq = strchr(p, '=');
     if (!eq) continue;
     size_t klen = (size_t)(eq - p);
     while (klen && (p[klen - 1] == ' ' || p[klen - 1] == '\t')) klen--;
-    char key[64];
-    if (klen >= sizeof(key)) continue;
-    memcpy(key, p, klen);
-    key[klen] = '\0';
-    if (!ieq(key, name)) continue;
+    char found_key[64];
+    if (klen >= sizeof(found_key)) continue;
+    memcpy(found_key, p, klen);
+    found_key[klen] = '\0';
+    if (!ieq(found_key, key)) continue;
 
     /* A trailing comment is not part of the value: the framework writer never
      * emits one, but a hand-edited file may. */
-    char value[128];
-    snprintf(value, sizeof(value), "%s", eq + 1);
-    char *cut = strpbrk(value, ";#\r\n");
+    snprintf(out, cap, "%s", eq + 1);
+    char *cut = strpbrk(out, ";#\r\n");
     if (cut) *cut = '\0';
-    FzeroHotkeyParse(value, out);
     found = 1;
   }
   fclose(f);
   return found;
+}
+
+int FzeroIniReadInt(const char *path, const char *section, const char *key,
+                    int *out) {
+  char value[64];
+  if (!FzeroIniReadString(path, section, key, value, sizeof(value))) return 0;
+  const char *s = skip_spaces(value);
+  char *end = NULL;
+  long parsed = strtol(s, &end, 10);
+  if (end == s) return 0;
+  if (out) *out = (int)parsed;
+  return 1;
+}
+
+int FzeroHotkeyFromIni(const char *path, const char *name,
+                       FzeroHotkeySpec *out) {
+  char value[128];
+  if (out) memset(out, 0, sizeof(*out));
+  if (!FzeroIniReadString(path, "KeyMap", name, value, sizeof(value))) return 0;
+  FzeroHotkeyParse(value, out);
+  return 1;
 }

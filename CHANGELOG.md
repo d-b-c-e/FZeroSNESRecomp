@@ -14,7 +14,10 @@
   past; Left and Right scrub, A or Enter drops back in, B or Escape leaves.
   It is off by default because it keeps whole snapshots of the machine in
   memory (about 330 KB each); the launcher's Settings page turns it on and
-  sets the depth (50-200 snapshots) and the interval (1-30 frames). A rewind
+  sets the depth (50-200 snapshots) and the interval (1-30 frames), which are
+  remembered in `config.ini` next to the executable — recomp-ui leaves
+  Settings persistence to the host, and this host persisted none of it, so
+  the switch would otherwise have come back off on every launch. A rewind
   or a state load now resets the presentation clock and the renderer's
   interpolation history together, so nothing blends across the jump and the
   seconds after one are not run as catch-up.

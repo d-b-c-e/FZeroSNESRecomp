@@ -33,6 +33,17 @@ spellings, and the ini scan. It is deliberately not the framework's
 `mmx_config.c` — F-Zero carries its own `Config` and linking that parser would
 collide with it — and it is tested without SDL in `tests/test_hotkeys.c`.
 
+Rewind's own three settings live in the same file, as `[Rewind] Enabled`,
+`Depth` and `Interval`. recomp-ui leaves `Settings` persistence to the host
+and this host persisted none of it, so without that the launcher's checkbox
+came back off on every launch. They are written through the framework's own
+surgical writer (`launcher_ini_kv_write`), so `[KeyMap]` above is untouched,
+and read back with `FzeroIniReadInt` before the launcher runs — a launch with
+a ROM on the command line skips the launcher entirely and must still honour
+them. `configure_rewind()` then translates them into the
+`SNESRECOMP_REWIND*` environment the ring actually reads, leaving an
+explicitly exported value alone so a capture run still overrides the UI.
+
 Hotkeys are matched **before** the F-key quick slots, with an exact modifier
 comparison, so `Shift+F7` still saves slot 7 while plain `F7` opens the
 browser. The quick slots are deprecated; where a hotkey claims a key the

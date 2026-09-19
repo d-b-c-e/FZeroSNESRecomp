@@ -40,3 +40,16 @@ void FzeroHotkeyParse(const char *value, FzeroHotkeySpec *out);
  */
 int FzeroHotkeyFromIni(const char *path, const char *name,
                        FzeroHotkeySpec *out);
+
+/*
+ * Read one value out of an ini file. The launcher writes back through
+ * recomp-ui's launcher_ini_kv_write(), which edits a single line and leaves
+ * the rest of the file alone; this is the matching read.
+ *
+ * Returns 1 when [section] Key was present. `out` is only written then, so a
+ * caller can pre-load its default and ignore the return.
+ */
+int FzeroIniReadString(const char *path, const char *section, const char *key,
+                       char *out, size_t cap);
+int FzeroIniReadInt(const char *path, const char *section, const char *key,
+                    int *out);
