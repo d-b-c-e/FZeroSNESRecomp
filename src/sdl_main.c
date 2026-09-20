@@ -386,8 +386,46 @@ static int verify_rom(const uint8_t *rom, size_t size) {
  * own surgical ini writer so the rest of the file — [KeyMap] above all — is
  * untouched.
  */
-static void load_rewind_settings(RecompLauncherCSettings *settings) {
+/* Strip the whitespace an ini value carries either side of it. The string
+ * reader hands back everything after the '=', which for `Shader = foo.slangp`
+ * starts with a space -- and a leading space turns a real path into a missing
+ * file. */
+static void trim_ini_value(char *s) {
+  char *start = s;
+  size_t len;
+  while (*start == ' ' || *start == '\t') start++;
+  if (start != s) memmove(s, start, strlen(start) + 1);
+  len = strlen(s);
+  while (len && (s[len - 1] == ' ' || s[len - 1] == '\t')) s[--len] = '\0';
+}
+
+static void load_launcher_settings(RecompLauncherCSettings *settings) {
   int value = 0;
+  char text[sizeof(settings->shader_path)];
+
+  /* Display. Section and key spellings match the shared snesrecomp host's
+   * config.ini so one file reads the same across every port. */
+  if (FzeroIniReadInt(g_config_path, "Graphics", "WindowScale", &value) &&
+      value >= 1 && value <= 8)
+    settings->window_scale = value;
+  if (FzeroIniReadInt(g_config_path, "Graphics", "Fullscreen", &value))
+    settings->fullscreen = value;
+  if (FzeroIniReadInt(g_config_path, "Graphics", "LinearFiltering", &value))
+    settings->linear_filter = value != 0;
+  if (FzeroIniReadString(g_config_path, "Graphics", "Shader", text,
+                         sizeof(text))) {
+    trim_ini_value(text);
+    snprintf(settings->shader_path, sizeof(settings->shader_path), "%s", text);
+  }
+
+  /* Sound. */
+  if (FzeroIniReadInt(g_config_path, "Sound", "AudioFreq", &value) &&
+      value >= 8000 && value <= 96000)
+    settings->audio_freq = value;
+  if (FzeroIniReadInt(g_config_path, "Sound", "Volume", &value) &&
+      value >= 0 && value <= 100)
+    settings->volume = value;
+
   if (FzeroIniReadInt(g_config_path, "Rewind", "Enabled", &value))
     settings->rewind_enabled = value != 0;
   if (FzeroIniReadInt(g_config_path, "Rewind", "Depth", &value))
@@ -396,8 +434,33 @@ static void load_rewind_settings(RecompLauncherCSettings *settings) {
     settings->rewind_interval = value;
 }
 
-static void save_rewind_settings(const RecompLauncherCSettings *settings) {
+/*
+ * Every row the launcher draws, written back.
+ *
+ * This used to cover the three Rewind keys and nothing else: the rest of the
+ * Settings page was memset to a constant on the way in and dropped on the way
+ * out, so Fullscreen, Linear filtering, the shader, the sample rate and the
+ * volume all reverted on every single launch. That is the whole of "the
+ * launcher doesn't remember anything" for this title. Aspect ratio is the one
+ * row that stays elsewhere -- FzeroVideoSave owns it, because the built-in
+ * presentation mod shares it.
+ */
+static void save_launcher_settings(const RecompLauncherCSettings *settings) {
   char number[32];
+  snprintf(number, sizeof(number), "%d", settings->window_scale);
+  launcher_ini_kv_write(g_config_path, "Graphics", "WindowScale", number);
+  snprintf(number, sizeof(number), "%d", settings->fullscreen);
+  launcher_ini_kv_write(g_config_path, "Graphics", "Fullscreen", number);
+  snprintf(number, sizeof(number), "%d", settings->linear_filter ? 1 : 0);
+  launcher_ini_kv_write(g_config_path, "Graphics", "LinearFiltering", number);
+  launcher_ini_kv_write(g_config_path, "Graphics", "Shader",
+                        settings->shader_path);
+
+  snprintf(number, sizeof(number), "%d", settings->audio_freq);
+  launcher_ini_kv_write(g_config_path, "Sound", "AudioFreq", number);
+  snprintf(number, sizeof(number), "%d", settings->volume);
+  launcher_ini_kv_write(g_config_path, "Sound", "Volume", number);
+
   snprintf(number, sizeof(number), "%d", settings->rewind_enabled ? 1 : 0);
   launcher_ini_kv_write(g_config_path, "Rewind", "Enabled", number);
   snprintf(number, sizeof(number), "%d", settings->rewind_depth);
@@ -426,8 +489,8 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   settings->adaptive_view = 0;
   settings->widescreen_hud = 0;
   /* Before either exit below: a run with a ROM on the command line skips the
-   * launcher entirely, and must still honour the saved rewind settings. */
-  load_rewind_settings(settings);
+   * launcher entirely, and must still honour what the player saved. */
+  load_launcher_settings(settings);
 
   if (argc > 1) {
     snprintf(path, path_size, "%s", argv[1]);
@@ -487,7 +550,7 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
                                  path_size);
   /* Whatever the launcher did, keep what the player chose there. Quitting is
    * as good a moment to persist as pressing Play. */
-  save_rewind_settings(settings);
+  save_launcher_settings(settings);
   if (action == 1) return 0;
   if (action == 0 && path[0]) return 1;
   if (initial_rom[0]) {
@@ -571,12 +634,24 @@ static uint32_t controller_input(SDL_GameController *pad) {
   return input;
 }
 
+/* The launcher's Volume slider, 0..100. Applied to the rendered block rather
+ * than to the device, so it works identically on both SDL generations and on
+ * whatever backend the player has. */
+static int g_audio_volume = 100;
+
 static void fill_audio(Uint8 *stream, int len) {
   if (!g_snes || len < 4) {
     SDL_memset(stream, 0, (size_t)len);
     return;
   }
   RtlRenderAudio((int16_t *)stream, len / 4, 2);
+  if (g_audio_volume < 100) {
+    int16_t *samples = (int16_t *)stream;
+    int count = len / (int)sizeof(int16_t);
+    int gain = g_audio_volume < 0 ? 0 : g_audio_volume;
+    for (int i = 0; i < count; i++)
+      samples[i] = (int16_t)((samples[i] * gain) / 100);
+  }
 }
 
 #if SNESRECOMP_SDL3
@@ -1492,8 +1567,13 @@ int main(int argc, char **argv) {
 #endif
   bool use_gl_renderer = launcher_settings.shader_path[0] != 0;
   if (use_gl_renderer) fzero_gl_prepare_window();
+  /* Window scale is a real row on the Settings page, so it has to size the
+   * window: it was drawn, saved and then ignored in favour of a hardcoded
+   * 768x576 -- which is exactly the 3x this still falls back to. */
+  int window_scale = launcher_settings.window_scale;
+  if (window_scale < 1 || window_scale > 8) window_scale = 3;
   SDL_Window *window = snesrecomp_sdl_create_window(
-      kWindowTitle, 768, 576,
+      kWindowTitle, 256 * window_scale, 192 * window_scale,
       SDL_WINDOW_RESIZABLE | kHighDpiFlag |
           (use_gl_renderer ? SDL_WINDOW_OPENGL : 0));
   if (!window) Die("Unable to create the game window");
@@ -1522,7 +1602,7 @@ int main(int argc, char **argv) {
   }
 
   static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
-  int drawable_width = 768, drawable_height = 576;
+  int drawable_width = 256 * window_scale, drawable_height = 192 * window_scale;
   if (use_gl_renderer)
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
   else
@@ -1534,10 +1614,15 @@ int main(int argc, char **argv) {
   FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
 
   SDL_AudioSpec wanted = {0};
-  wanted.freq = 32040;
-  /* Native rate, so the conversion is a no-op - but state it rather than
-   * leaning on the consumer's default. */
-  RtlSetAudioOutputRate(32040);
+  /* 32040 is the SPC's true rate and stays the default, so the conversion is
+   * a no-op; the launcher's Sample rate row may name another. Both rows were
+   * drawn and then ignored, which is why changing either did nothing. */
+  int audio_freq = launcher_settings.audio_freq;
+  if (audio_freq < 8000 || audio_freq > 96000) audio_freq = 32040;
+  wanted.freq = audio_freq;
+  RtlSetAudioOutputRate(audio_freq);
+  g_audio_volume = launcher_settings.volume;
+  if (g_audio_volume < 0 || g_audio_volume > 100) g_audio_volume = 100;
   wanted.format = AUDIO_S16SYS;
   wanted.channels = 2;
   SDL_AudioDeviceID audio = 0;
