@@ -22,12 +22,18 @@ p.add_argument("--output", default="release-stage", help="Parent for a fresh ver
 p.add_argument("--deluxe-mods", type=Path, default=ROOT / "captures/bs-deluxe/mods",
                help="Imported Deluxe directory; its credits and provenance ship with the build")
 a = p.parse_args()
-# BS Deluxe ships in every download, so the repository has to stay private.
-gh = shutil.which("gh") or "C:/Program Files/GitHub CLI/gh.exe"
-visibility = json.loads(subprocess.check_output(
-    [gh, "repo", "view", "mstan/FZeroSNESRecomp", "--json", "isPrivate"], text=True))
-if visibility.get("isPrivate") is not True:
-    raise SystemExit("Refusing Deluxe payload: F-Zero repository must be private")
+# BS Deluxe ships in every download, and that is allowed: it is a ROM hack,
+# included with its authors' permission (GuyPerfect, Porthor, PowerPanda). Only
+# OFFICIAL copyrighted assets are withheld from a release -- the commercial ROM
+# and anything generated from it, which is what the src/gen check below and the
+# ROM-free staging policy are for.
+#
+# This used to refuse to package unless the GitHub repository was private. That
+# guard encoded a distribution assumption rather than a licence term, and it
+# went stale the moment the repository was made public: releases had already
+# shipped the payload publicly, so the check was asserting something untrue
+# while hard-blocking every future release. Do not reinstate it. The payload
+# INTEGRITY checks immediately below are a different thing and must stay.
 version = (ROOT / "VERSION").read_text().strip()
 if not re.fullmatch(r"\d+\.\d+\.\d+", version):
     raise SystemExit("Invalid VERSION")
