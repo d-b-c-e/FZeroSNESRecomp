@@ -88,7 +88,7 @@ static void test_hud_transition(void) {
     s.enhanced = true; s.aspect = aspect;
     FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
     setup(); memset(p.vram, 0, sizeof(p.vram));
-    p.bgmode = 1; p.screenEnabled[0] = 4 | 16;
+    p.bgmode = 1; p.screenEnabled[0] = 1 | 4 | 16;
     p.bgXsc[2] = 0x74; p.bgTileAdr = 0x100;
     p.vram[0x7400 + 32 + 3] = p.vram[0x7400 + 32 + 24] = 1;
     for (int y = 0; y < 8; ++y) {
@@ -130,10 +130,13 @@ static void test_hud_transition(void) {
       CHECK(FzeroRendererDraw(guarded + 1, v, 1));
       CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
     }
-    /* Training loss retains the live race HUD, including OBJ timer tiles. */
-    ram[0x54] = 2; ram[0x55] = 6; ram[0x58] = 1; publish(10);
-    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
-    CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
+    /* GP and Training YOU LOST both retain the live race HUD and timer. */
+    ram[0x54] = 2; ram[0x55] = 6;
+    for (int training = 0; training <= 1; ++training) {
+      ram[0x58] = training; publish(10 + training);
+      CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+      CHECK(!memcmp(active, guarded + 1, v.width * 224 * sizeof(*active)));
+    }
   }
 }
 static void test_adaptive_scenes(void) {
@@ -183,14 +186,14 @@ static void test_intro_counter(void) {
     CHECK(guarded[1 + 190 * v.width + 208 + v.extra] == 0x00ff00);
     CHECK(guarded[1 + 198 * v.width + 232 + v.extra] == 0x00ff00);
     ram[0x58] = 0;
-    ram[0x55] = 6; publish(2); /* Loss reuses the same temporary counter. */
+    ram[0x54] = 3; publish(2); /* Black results reuse the temporary counter. */
     CHECK(FzeroRendererDraw(guarded + 1, v, 1));
     CHECK(!memcmp(intro, guarded + 1, v.width * 224 * sizeof(*intro)));
     /* Retail setup moves the same artwork into the permanent HUD slots. */
     memcpy(p.oam + 22 * 2, p.oam + 126 * 2, 4 * sizeof(*p.oam));
     p.highOam[5] &= ~0xf0;
     p.oam[126 * 2] = p.oam[127 * 2] = 0x8080; p.highOam[31] |= 0x50;
-    ram[0x55] = 2; ram[0x56] = 1; publish(2);
+    ram[0x54] = 2; ram[0x55] = 2; ram[0x56] = 1; publish(2);
     CHECK(FzeroRendererDraw(guarded + 1, v, 1));
     CHECK(!memcmp(intro, guarded + 1, v.width * 224 * sizeof(*intro)));
     /* All three S indicators must be right anchored on their first frame. */
@@ -208,7 +211,7 @@ static void test_intro_counter(void) {
   }
 }
 static void test_loss_window(void) {
-  setup(); ram[0x55] = 6;
+  setup(); ram[0x54] = 3;
   p.screenEnabled[0] = 0;
   p.windowsel = 2u << 20; /* Colour window 1: collapsed to x=0. */
   p.window1left = p.window1right = 0;
@@ -220,6 +223,53 @@ static void test_loss_window(void) {
   for (int y = 0; y < 224; ++y) {
     CHECK(guarded[1 + y * v.width] == 0xff0000);
     for (int x = 1; x < v.width; ++x) CHECK(guarded[1 + y * v.width + x] == 0);
+  }
+}
+static void test_results_fade(void) {
+  static uint32_t results[FZERO_MAX_WIDTH * 224];
+  for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
+    FzeroVideoSettings s; FzeroVideoStock(&s);
+    s.enhanced = true; s.aspect = aspect;
+    FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
+    setup(); memset(p.vram, 0, sizeof(p.vram));
+    ram[0x54] = 3; ram[0x55] = 0; ram[0x56] = 5;
+    p.bgmode = 9; p.screenEnabled[0] = 0x94; /* Results: BG3 + OBJ, no track. */
+    p.bgXsc[2] = 0x74; p.bgTileAdr = 0x100;
+    p.vram[0x7400 + 3 * 32 + 2] = 1; /* score */
+    p.vram[0x7400 + 8 * 32 + 12] = 1; /* centered table, not score */
+    for (int y = 0; y < 8; ++y) {
+      p.vram[0x1008 + y] = 255;
+      p.vram[16 + y] = 255;
+    }
+    p.cgram[193] = 0x03e0;
+    /* END GAME reuses race HUD slots 20..30. These must NOT split. */
+    for (int slot = 17; slot <= 30; ++slot) {
+      p.oam[slot * 2] = (128 << 8) | (80 + 8 * (slot - 17));
+      p.oam[slot * 2 + 1] = 0x3801;
+      p.highOam[slot / 4] &= ~(3 << ((slot % 4) * 2));
+    }
+    p.oam[126 * 2] = (190 << 8) | 208; p.oam[126 * 2 + 1] = 0x3801;
+    p.highOam[31] &= ~0x30;
+    publish(1); CHECK(FzeroRendererDraw(results, v, 1));
+    CHECK(results[24 * v.width + 16] == 0xff0000);
+    CHECK(results[64 * v.width + v.extra + 96] == 0xff0000);
+    CHECK(results[190 * v.width + 2 * v.extra + 208] == 0x00ff00);
+    for (int x = 80; x < 192; ++x)
+      CHECK(results[128 * v.width + v.extra + x] == 0x00ff00);
+    for (int choice = 0; choice <= 1; ++choice) {
+      ram[0x55] = 5; ram[0x56] = choice;
+      for (int brightness = 15; brightness >= 0; --brightness) {
+        p.inidisp = brightness; publish(2 + 15 - brightness);
+        CHECK(FzeroRendererDraw(guarded + 1, v, 0.5));
+        for (int i = 0; i < v.width * 224; ++i) {
+          unsigned c = results[i];
+          unsigned expected = (((c >> 16) * brightness / 15) << 16) |
+              ((((c >> 8) & 255) * brightness / 15) << 8) |
+              ((c & 255) * brightness / 15);
+          CHECK(guarded[1 + i] == expected);
+        }
+      }
+    }
   }
 }
 /* Retail streams the Mode 7 tilemap for the stock 256-pixel viewport only:
@@ -354,6 +404,32 @@ static void test_course_streaming(void) {
   CHECK(out[0] == 0xff0000 && out[v.extra] == 0x123456);
 }
 
+static void test_player_spark(void) {
+  setup();
+  p.screenEnabled[0] = 16;
+  memset(p.vram, 0, sizeof(p.vram));
+  for (int y = 0; y < 8; ++y) p.vram[16 + y] = 255;
+  p.cgram[193] = 0x03e0;
+  ram[0x50] = 1; ram[0x55] = 3;
+  /* $02BC is the effect next to the player, between the boost and rank HUD
+   * reservations. It must stay at its guest position at every aspect. */
+  p.oam[47 * 2] = (170 << 8) | 120; p.oam[47 * 2 + 1] = 0x3801;
+  p.highOam[47 / 4] &= ~(3u << ((47 % 4) * 2));
+  p.oam[46 * 2] = (200 << 8) | 120; p.oam[46 * 2 + 1] = 0x3801;
+  p.highOam[46 / 4] &= ~(3u << ((46 % 4) * 2));
+  publish(1);
+  for (int aspect = FZERO_ASPECT_16_9; aspect <= FZERO_ASPECT_32_9; ++aspect) {
+    FzeroVideoSettings s; FzeroVideoStock(&s);
+    s.enhanced = true; s.aspect = (FzeroAspect)aspect;
+    FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
+    uint32_t *out = guarded + 1;
+    CHECK(FzeroRendererDraw(out, v, 1));
+    CHECK(out[170 * v.width + v.extra + 120] == 0x00ff00);
+    CHECK(out[170 * v.width + 2 * v.extra + 120] == 0);
+    CHECK(out[200 * v.width + 2 * v.extra + 120] == 0x00ff00);
+  }
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -403,7 +479,9 @@ int main(void) {
   test_adaptive_scenes();
   test_intro_counter();
   test_loss_window();
+  test_results_fade();
   test_course_streaming();
+  test_player_spark();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

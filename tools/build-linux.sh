@@ -189,12 +189,19 @@ if [ -d "$APPDIR/usr/lib" ]; then
 fi
 
 [ -d "$(dirname "$BIN")/assets" ] || { echo "launcher assets missing beside $BIN" >&2; exit 1; }
-cp -r "$(dirname "$BIN")/assets" "$APPDIR/usr/bin/assets"
+# Do not redistribute shaders a developer imported into their build tree.
+mkdir -p "$APPDIR/usr/bin/assets"
+for asset in "$(dirname "$BIN")/assets/"*; do
+  [ "$(basename "$asset")" = shaders ] && continue
+  cp -r "$asset" "$APPDIR/usr/bin/assets/"
+done
+cp -r "$REPO/assets/shaders" "$APPDIR/usr/bin/assets/shaders"
 
 mkdir -p "$APPDIR/usr/bin/mods" "$APPDIR/usr/bin/patches"
 cp "$BS_MODS/bs-deluxe-import.json" "$APPDIR/usr/bin/mods/bs-deluxe-import.json"
 cp "$BS_MODS/BS-Deluxe-credits.txt" "$APPDIR/usr/bin/mods/BS-Deluxe-credits.txt"
 cp "$REPO/patches/bs-deluxe-usa.ips" "$APPDIR/usr/bin/patches/bs-deluxe-usa.ips"
+python3 "$REPO/tools/stage_linux_notices.py" "$APPDIR"
 
 rm -f "$APPDIR/AppRun"
 cat > "$APPDIR/AppRun" <<EOF

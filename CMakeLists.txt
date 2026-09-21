@@ -160,10 +160,11 @@ add_executable(FZeroSNESRecomp
     src/sdl_main.c
     src/fzero_mods.c
     src/fzero_hotkeys.c
+    src/fzero_gamepad.c
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
-    target_sources(${target} PRIVATE src/fzero_deluxe.c src/fzero_state_mode.c)
+    target_sources(${target} PRIVATE src/fzero_deluxe.c src/fzero_state_mode.c src/fzero_msu.c)
     if(FZERO_DELUXE_GEN_DIR)
         target_sources(${target} PRIVATE $<TARGET_OBJECTS:fzero_deluxe_native>
                                          "${FZERO_DELUXE_PAYLOAD_SOURCE}")
@@ -196,6 +197,13 @@ configure_fzero_target(FZeroSNESRecomp)
 # Hosts include "desktop/sdl_compat.h" rather than <SDL.h> so both majors build.
 snesrecomp_target_glsl_shader(FZeroSNESRecomp)
 snesrecomp_target_sdl(FZeroSNESRecomp)
+
+if(BUILD_TESTING AND SNESRECOMP_SDL_BACKEND STREQUAL "SDL3")
+    add_executable(fzero_gamepad_tests tests/test_gamepad.c src/fzero_gamepad.c src/fzero_hotkeys.c)
+    target_include_directories(fzero_gamepad_tests PRIVATE "${CMAKE_SOURCE_DIR}/src" ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+    snesrecomp_target_sdl(fzero_gamepad_tests)
+    add_test(NAME fzero_gamepad COMMAND fzero_gamepad_tests)
+endif()
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
@@ -204,8 +212,6 @@ add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
         "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/img/boxart.tga"
     VERBATIM)
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E remove_directory
-        "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/shaders"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders"
         "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/shaders"

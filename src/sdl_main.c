@@ -7,6 +7,8 @@
 #include "fzero_mods.h"
 #include "fzero_deluxe.h"
 #include "fzero_hotkeys.h"
+#include "fzero_gamepad.h"
+#include "fzero_msu.h"
 #include "fzero_replay.h"
 #include "fzero_state_mode.h"
 
@@ -238,8 +240,7 @@ static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
   if (shader_path && shader_path[0]) {
     glr->shader = GlslShader_CreateFromFile(shader_path);
     if (!glr->shader) {
-      fprintf(stderr, "[fzero-gl] Unable to load shader preset: %s\n", shader_path);
-      return false;
+      fprintf(stderr, "[fzero-gl] Unable to load shader preset: %s; using unfiltered output\n", shader_path);
     }
   }
   return true;
@@ -425,6 +426,21 @@ static void load_launcher_settings(RecompLauncherCSettings *settings) {
   if (FzeroIniReadInt(g_config_path, "Sound", "Volume", &value) &&
       value >= 0 && value <= 100)
     settings->volume = value;
+  if (FzeroIniReadInt(g_config_path, "Sound", "Msu1Enabled", &value))
+    settings->msu1_enabled = value != 0;
+  if (FzeroIniReadString(g_config_path, "Sound", "Msu1Dir", text, sizeof(text))) {
+    trim_ini_value(text);
+    snprintf(settings->msu1_dir, sizeof(settings->msu1_dir), "%s", text);
+  }
+
+  if (FzeroIniReadString(g_config_path, "Controller", "GuidP1", text, sizeof(text))) {
+    trim_ini_value(text);
+    snprintf(settings->player_gamepad_guid[0], sizeof(settings->player_gamepad_guid[0]), "%s", text);
+  }
+  if (FzeroIniReadInt(g_config_path, "Controller", "SourceP1", &value) && value >= 0 && value <= 2)
+    settings->player_src[0] = value;
+  if (FzeroIniReadInt(g_config_path, "Controller", "DeadzoneP1", &value) && value >= 0 && value <= 100)
+    settings->deadzone[0] = value;
 
   if (FzeroIniReadInt(g_config_path, "Rewind", "Enabled", &value))
     settings->rewind_enabled = value != 0;
@@ -460,6 +476,15 @@ static void save_launcher_settings(const RecompLauncherCSettings *settings) {
   launcher_ini_kv_write(g_config_path, "Sound", "AudioFreq", number);
   snprintf(number, sizeof(number), "%d", settings->volume);
   launcher_ini_kv_write(g_config_path, "Sound", "Volume", number);
+  snprintf(number, sizeof(number), "%d", settings->msu1_enabled ? 1 : 0);
+  launcher_ini_kv_write(g_config_path, "Sound", "Msu1Enabled", number);
+  launcher_ini_kv_write(g_config_path, "Sound", "Msu1Dir", settings->msu1_dir);
+
+  launcher_ini_kv_write(g_config_path, "Controller", "GuidP1", settings->player_gamepad_guid[0]);
+  snprintf(number, sizeof(number), "%d", settings->player_src[0]);
+  launcher_ini_kv_write(g_config_path, "Controller", "SourceP1", number);
+  snprintf(number, sizeof(number), "%d", settings->deadzone[0]);
+  launcher_ini_kv_write(g_config_path, "Controller", "DeadzoneP1", number);
 
   snprintf(number, sizeof(number), "%d", settings->rewind_enabled ? 1 : 0);
   launcher_ini_kv_write(g_config_path, "Rewind", "Enabled", number);
@@ -479,18 +504,17 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   settings->player_src[0] = 1;
   settings->deadzone[0] = 25;
   settings->aspect_index = (int)g_video.aspect;
-  {
-    const char *shader_override = getenv("FZERO_SHADER");
-    if (shader_override && shader_override[0])
-      snprintf(settings->shader_path, sizeof(settings->shader_path), "%s",
-               shader_override);
-  }
   /* The built-in mod owns native presentation settings. */
   settings->adaptive_view = 0;
   settings->widescreen_hud = 0;
   /* Before either exit below: a run with a ROM on the command line skips the
    * launcher entirely, and must still honour what the player saved. */
   load_launcher_settings(settings);
+  {
+    const char *shader_override = getenv("FZERO_SHADER");
+    if (shader_override && shader_override[0])
+      snprintf(settings->shader_path, sizeof(settings->shader_path), "%s", shader_override);
+  }
 
   if (argc > 1) {
     snprintf(path, path_size, "%s", argv[1]);
@@ -517,6 +541,8 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
       "Used for stock presentation. The built-in Presentation mod's aspect "
       "option overrides this when that mod is enabled.";
   game.has_shader = 1;
+  game.msu1_supported = 1;
+  game.msu1_note = "Select a music folder containing Conn/Cubear v11 f-zero_msu1.ips and your PCM tracks. Works with stock F-Zero and BS Deluxe.";
   game.mods = FzeroModsProvider(&g_video, kVideoConfig);
   game.rom_cache_path = "rom.cfg";
   /* Draws the Controls page's SaveStateMenu and Rewind rows, and the
@@ -598,40 +624,7 @@ static uint32_t keyboard_input(void) {
 }
 
 static uint32_t controller_input(SDL_GameController *pad) {
-  if (!pad) return 0;
-  uint32_t input = 0;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A))
-    input |= 0x0001u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_X))
-    input |= 0x0002u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_BACK))
-    input |= 0x0004u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_START))
-    input |= 0x0008u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_UP))
-    input |= 0x0010u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN))
-    input |= 0x0020u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT))
-    input |= 0x0040u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT))
-    input |= 0x0080u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B))
-    input |= 0x0100u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_Y))
-    input |= 0x0200u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))
-    input |= 0x0400u;
-  if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER))
-    input |= 0x0800u;
-
-  Sint16 x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
-  Sint16 y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
-  if (x < -12000) input |= 0x0040u;
-  if (x > 12000) input |= 0x0080u;
-  if (y < -12000) input |= 0x0010u;
-  if (y > 12000) input |= 0x0020u;
-  return input;
+  return FzeroGamepadRead(pad);
 }
 
 /* The launcher's Volume slider, 0..100. Applied to the rendered block rather
@@ -1136,21 +1129,7 @@ static void overlay_pump_events(int *running, SDL_GameController **pad,
       continue;
     }
     /* A pad plugged in while a panel is up must still be able to drive it. */
-    if (event.type == SDL_CONTROLLERDEVICEADDED && !*pad) {
-#if SNESRECOMP_SDL3
-      int njs = 0;
-      SDL_JoystickID *joysticks = SDL_GetJoysticks(&njs);
-      for (int i = 0; i < njs && !*pad; i++)
-        if (SDL_IsGamepad(joysticks[i])) *pad = SDL_OpenGamepad(joysticks[i]);
-      SDL_free(joysticks);
-#else
-      for (int i = 0; i < SDL_NumJoysticks() && !*pad; i++)
-        if (SDL_IsGameController(i)) *pad = SDL_GameControllerOpen(i);
-#endif
-    } else if (event.type == SDL_CONTROLLERDEVICEREMOVED && *pad) {
-      SDL_GameControllerClose(*pad);
-      *pad = NULL;
-    }
+    FzeroGamepadEvent(pad, &event);
   }
 }
 
@@ -1170,6 +1149,7 @@ static void overlay_pump_events(int *running, SDL_GameController **pad,
  * Ported from the framework desktop host's OVERLAY_SELFTEST_PAD, adapted to
  * this host's gestures. */
 static SDL_Joystick *g_selftest_pad;
+static char g_selftest_guid[40];
 static long g_selftest_frame = -1;
 static int g_selftest_phase; /* 0 idle, 1 browser, 2 rewind */
 static int g_selftest_via_keyboard;
@@ -1232,6 +1212,13 @@ static void selftest_attach(void) {
   fprintf(stderr, "[fzero-overlay-selftest] virtual gamepad %s\n",
           g_selftest_pad ? "attached" : "FAILED to attach");
   if (!g_selftest_pad) g_selftest_failed = 1;
+  else {
+#if SNESRECOMP_SDL3
+    SDL_GUIDToString(SDL_GetJoystickGUID(g_selftest_pad), g_selftest_guid, sizeof(g_selftest_guid));
+#else
+    SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(g_selftest_pad), g_selftest_guid, sizeof(g_selftest_guid));
+#endif
+  }
 }
 
 /* Once per simulated frame. */
@@ -1444,6 +1431,18 @@ static void configure_rewind(const RecompLauncherCSettings *settings) {
 
 int main(int argc, char **argv) {
   SDL_SetMainReady();
+  /* Launcher paths, imported shaders/music and saves are installation-relative,
+   * even when a shortcut or terminal starts us in a different directory.
+   * Resolve an explicit ROM against the caller's cwd before changing it. */
+  char command_line_rom[1024];
+  if (argc > 1) {
+    if (!snesrecomp_abspath(argv[1], command_line_rom, sizeof(command_line_rom))) {
+      fprintf(stderr, "Unable to resolve the command-line ROM path\n");
+      return 2;
+    }
+    argv[1] = command_line_rom;
+  }
+  snesrecomp_anchor_to_exe_dir();
   const char *config_override = getenv("FZERO_VIDEO_CONFIG");
   if (config_override && *config_override) kVideoConfig = config_override;
   else {
@@ -1515,7 +1514,18 @@ int main(int argc, char **argv) {
     fprintf(stderr, "[bs-deluxe] %s starting stock\n", FzeroDeluxeError());
     g_video.bs_deluxe = false;
   }
+  const char *msu_pack = getenv("SNESRECOMP_MSU1");
+  if (!msu_pack || !*msu_pack)
+    msu_pack = launcher_settings.msu1_enabled ?
+        (launcher_settings.msu1_dir[0] ? launcher_settings.msu1_dir : "auto") : "";
+  if (!FzeroMsuPrepare(&rom, &rom_size, msu_pack, rom_path)) {
+    fprintf(stderr, "[fzero-msu1] %s Starting with original audio.\n", FzeroMsuError());
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "MSU-1 pack not loaded", FzeroMsuError(), NULL);
+  }
 
+  /* Match the shared host: keep gamepads live through launcher/game focus
+   * transitions and host overlays (SDL otherwise suppresses their state). */
+  SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
   /* SDL_Init flipped to true-on-success in SDL3 and inverts silently in its
    * old `!= 0` form, so it must route through the shim. */
   if (!snesrecomp_sdl_init(SDL_INIT_VIDEO | SDL_INIT_AUDIO |
@@ -1553,6 +1563,7 @@ int main(int argc, char **argv) {
   const char *save_root = getenv("SNESRECOMP_SAVE_ROOT");
   if (save_root && *save_root) RtlSetSaveRoot(save_root);
   if (!FzeroDeluxeSelectSaveRoot()) Die(FzeroDeluxeError());
+  if (!FzeroMsuSelectSaveRoot()) Die(FzeroMsuError());
   RtlReadSram();
   /* After the machine exists: the ring's slots are whole-machine snapshots
    * and it sizes them from a real one. */
@@ -1645,26 +1656,9 @@ int main(int argc, char **argv) {
   selftest_attach();
 
   SDL_GameController *pad = NULL;
-#if SNESRECOMP_SDL3
-  {
-    /* SDL3 enumerates by instance ID rather than by index. */
-    int njs = 0;
-    SDL_JoystickID *joysticks = SDL_GetJoysticks(&njs);
-    for (int i = 0; i < njs; i++) {
-      if (!SDL_IsGamepad(joysticks[i])) continue;
-      pad = SDL_OpenGamepad(joysticks[i]);
-      if (pad) break;
-    }
-    SDL_free(joysticks);
-  }
-#else
-  for (int i = 0; i < SDL_NumJoysticks(); i++) {
-    if (SDL_IsGameController(i)) {
-      pad = SDL_GameControllerOpen(i);
-      if (pad) break;
-    }
-  }
-#endif
+  FzeroGamepadConfigure(g_config_path, g_selftest_pad ? g_selftest_guid : launcher_settings.player_gamepad_guid[0],
+                         launcher_settings.deadzone[0]);
+  FzeroGamepadRefresh(&pad);
 
   int running = 1;
   int paused = 0;
@@ -1703,21 +1697,7 @@ int main(int argc, char **argv) {
     int panel = 0; /* 0 none, 1 save-state browser, 2 rewind filmstrip */
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) running = 0;
-      if (event.type == SDL_CONTROLLERDEVICEADDED && !pad) {
-#if SNESRECOMP_SDL3
-        int njs = 0;
-        SDL_JoystickID *joysticks = SDL_GetJoysticks(&njs);
-        for (int i = 0; i < njs && !pad; i++)
-          if (SDL_IsGamepad(joysticks[i])) pad = SDL_OpenGamepad(joysticks[i]);
-        SDL_free(joysticks);
-#else
-        for (int i = 0; i < SDL_NumJoysticks() && !pad; i++)
-          if (SDL_IsGameController(i)) pad = SDL_GameControllerOpen(i);
-#endif
-      } else if (event.type == SDL_CONTROLLERDEVICEREMOVED && pad) {
-        SDL_GameControllerClose(pad);
-        pad = NULL;
-      }
+      FzeroGamepadEvent(&pad, &event);
       if (event.type == SDL_KEYDOWN && !event.key.repeat) {
         /* Hotkeys are tested before the quick slots, so a binding on an
          * F-key takes that key from the slot behind it. */

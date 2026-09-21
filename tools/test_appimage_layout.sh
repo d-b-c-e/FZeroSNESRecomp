@@ -12,6 +12,11 @@ test -x "$APPDIR/AppRun" || { echo "missing executable AppRun" >&2; exit 1; }
 test -x "$APPDIR/usr/bin/FZeroSNESRecomp" || { echo "missing FZeroSNESRecomp ELF" >&2; exit 1; }
 test -d "$APPDIR/usr/bin/assets" || { echo "missing launcher assets" >&2; exit 1; }
 test -f "$APPDIR/usr/bin/assets/shaders/crt-soft.glslp" || { echo "missing CRT shader" >&2; exit 1; }
+test -f "$APPDIR/usr/share/doc/fzerosnesrecomp/README.md" || { echo "missing user instructions" >&2; exit 1; }
+for notice in snesrecomp recomp-ui imgui "${SNESRECOMP_SDL_BACKEND:-SDL3}"; do
+  test -f "$APPDIR/usr/share/doc/fzerosnesrecomp/licenses/$notice.txt" || {
+    echo "missing $notice license notice" >&2; exit 1; }
+done
 
 if [ -d "$APPDIR/usr/bin/mods" ]; then
   # The payload ships inside the binary, not beside it, so a download can

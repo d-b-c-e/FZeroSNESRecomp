@@ -24,6 +24,7 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 - Rewind: step back through the last few seconds and drop back in.
 - Gamepad support through SDL.
 - Optional BS F-Zero Deluxe content.
+- Optional MSU-1 music packs for stock F-Zero and BS Deluxe (bring your own patch and audio).
 
 ## Download And Play
 
@@ -48,7 +49,7 @@ The app remembers your ROM path after the first launch.
 Open **Settings > Display** for:
 
 - **Aspect ratio:** 4:3, 16:9, 21:9, 32:9, or Fit.
-- **Shader:** None, CRT Soft, LCD Grid, Sharp, Warm Composite, or a custom shader.
+- **Shader:** None (default), CRT Soft, LCD Grid, Sharp, Warm Composite, or a custom shader.
 
 Open **Mods** for:
 
@@ -57,6 +58,52 @@ Open **Mods** for:
 - **BS Deluxe:** adds the Satellaview machines, leagues, and tracks.
 
 When the Widescreen mod is on, its aspect setting wins over the normal Display aspect setting.
+
+### Importing CRT-Geom or another shader
+
+In **Settings > Display**, use **Browse** beside Shader to select your own
+`.glslp` preset or `.glsl` shader. Keep the preset's accompanying files and
+subdirectories intact: for example, `crt-geom.glslp` needs
+`shaders/crt-geom.glsl` beside it. The app remembers the selected path; it
+does not copy the pack, so leave it in a permanent location. RetroArch Slang
+(`.slangp`) presets are not supported by this OpenGL path.
+
+[CRT-Geom is available upstream](https://github.com/libretro/glsl-shaders/tree/master/crt).
+It carries GPL-2.0-or-later terms. It is **not bundled**: redistribution
+compatibility with this app's differently licensed dependencies has not been
+established. User-selected CRT-Geom has been tested through the existing shader
+loader. An unreadable or invalid preset falls back to unfiltered output.
+
+### MSU-1 music
+
+1. Obtain the **Conn/Cubear v11** patch from the
+   [authors' BS F-Zero Deluxe MSU-1 page](https://www.zeldix.net/t2768-bs-f-zero-deluxe-msu-1).
+2. Extract `f-zero_msu1.ips` into your music pack's folder, alongside its
+   numbered `.pcm` tracks. Keep the pack's original track numbering and common
+   filename prefix. Use a pack made for this patch's track layout.
+3. Enable **MSU-1** in **Settings > Sound** and select that folder.
+
+Keep using your **unmodified USA ROM**. The app verifies the exact v11 patch
+(709 bytes, SHA-256 `9019013f085ff16f5501c4516531a044bc5f36703aadb58844e67c5456413532`)
+and applies it in memory, **after BS Deluxe** if enabled. No ROM file is
+rewritten. The patch and music are not included in downloads. Missing or
+unsupported patches produce a warning and leave the original soundtrack active.
+The patch handles missing PCM tracks through its original-audio fallback.
+
+Stock and Deluxe have been exercised with synthetic tracks and a user-supplied
+JUD6MENT pack, widescreen, and high-refresh presentation. Compatibility is
+limited to these two supported cartridge layouts;
+arbitrary third-party ROM patches are not accepted or claimed compatible.
+
+MSU sessions currently execute the patched cartridge through the interpreter,
+so compiled stock routines cannot bypass its audio hooks. Normal sessions
+retain native dispatch. Save states and rewind restore the selected song from
+its beginning, not its exact playback position. MSU saves are separate from
+non-MSU saves, as shown below.
+
+For command-line use, `SNESRECOMP_MSU1` can select a pack folder or filename
+prefix; `off` overrides a saved enabled setting. `FZERO_MSU1_PATCH` can point
+to the v11 IPS in another folder.
 
 ## Save States And Rewind
 
@@ -118,6 +165,8 @@ different cartridges and their snapshots are not interchangeable:
 | --- | --- |
 | Stock | `saves/fzero<N>.sav` |
 | BS F-Zero Deluxe | `saves/bs-deluxe/fzero-bs-deluxe<N>.sav` |
+| Stock + MSU-1 | `saves/msu1/fzero-msu1<N>.sav` |
+| BS Deluxe + MSU-1 | `saves/bs-deluxe/msu1/fzero-bs-deluxe-msu1<N>.sav` |
 
 A thumbnail sits beside each as `.sav.thumb`. If a state from the other mode
 somehow ends up in a slot, loading it is refused and the game keeps running -
@@ -161,6 +210,14 @@ cmake --build build
 ```
 
 Local ROMs, generated files, saves, captures, and builds are ignored by git.
+
+Run the ROM-free regression suites with `ctest --test-dir build --output-on-failure`.
+With your local ROM and the upstream patch ZIP, `tests/test_msu_integration.py`
+checks stock/Deluxe playback using generated test tones, missing-track fallback
+and invalid-patch rejection. On Windows, `tests/test_desktop_integration.py`
+additionally checks real launcher persistence, imported shaders, controller
+overlays and save/load. Both scripts accept `--help` and keep their test data
+under ignored `captures/` directories; neither bundles music or a shader.
 
 ## License
 

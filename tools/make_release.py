@@ -60,7 +60,9 @@ name = f"FZeroSNESRecomp-{version}-windows-x64"
 stage = ROOT / a.output / name
 stage.mkdir(parents=True, exist_ok=False)
 shutil.copy2(exe, stage / exe.name)
-shutil.copytree(build / "assets", stage / "assets")
+# Build trees can contain privately imported shaders; never redistribute them.
+shutil.copytree(build / "assets", stage / "assets", ignore=shutil.ignore_patterns("shaders"))
+shutil.copytree(ROOT / "assets/shaders", stage / "assets/shaders")
 patches = ROOT / "patches"
 if patches.is_dir():
     shutil.copytree(patches, stage / "patches")
@@ -85,7 +87,13 @@ for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
     "Extract the entire ZIP and run FZeroSNESRecomp.exe. Select your own\n"
     "F-Zero (USA) ROM in the launcher. No ROM is included.\n\n"
     "Settings > Display contains aspect choices and shader presets including\n"
-    "CRT Soft. Selecting a shader uses the OpenGL presentation path.\n\n"
+    "CRT Soft. Shaders start OFF (None). Browse imports a custom .glslp or\n"
+    ".glsl shader; selecting one uses the OpenGL presentation path.\n\n"
+    "For MSU-1, put the supported Conn/Cubear v11 f-zero_msu1.ips beside\n"
+    "your pack's numbered PCM tracks, then enable MSU-1 and choose that\n"
+    "folder in Settings > Sound. Keep using your unmodified USA ROM.\n"
+    "The MSU patch, music and CRT-Geom shader are not bundled. See README.md\n"
+    "for import instructions and save-state/audio limitations.\n\n"
     "Mods starts with everything on: Widescreen at Fit, which follows the\n"
     "window between 4:3 and 32:9, Presentation FPS at Auto, and BS Deluxe.\n"
     "Turn any of them off in Mods, or choose a fixed aspect or rate there.\n\n"
@@ -170,7 +178,9 @@ pins = {name: subprocess.check_output([git, "rev-parse", "HEAD"],
 manifest = {"version": version, "commit": commit, "dependencies": pins, "files": {}}
 for path in sorted(stage.rglob("*")):
     if path.is_file():
-        if path.suffix.lower() in (".sfc", ".smc", ".srm", ".sav", ".bin", ".c"):
+        if (path.suffix.lower() in (".sfc", ".smc", ".srm", ".sav", ".bin", ".c", ".pcm", ".msu")
+                or path.name.lower() in ("config.ini", "rom.cfg", "fzero-video.ini", "f-zero_msu1.ips")
+                or path.name.lower().startswith("crt-geom")):
             raise SystemExit(f"Forbidden payload: {path}")
         manifest["files"][path.relative_to(stage).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
 (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

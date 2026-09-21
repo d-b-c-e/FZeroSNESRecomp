@@ -62,7 +62,10 @@ static void dump_frame(const FzeroSourceFrame *f) {
   const char *number = getenv("FZERO_CAPTURE_FRAME");
   const char *numbers = getenv("FZERO_CAPTURE_FRAMES");
   const char *prefix = getenv("FZERO_CAPTURE_PREFIX");
+  const char *every_text = getenv("FZERO_CAPTURE_EVERY");
+  unsigned every = every_text ? (unsigned)strtoul(every_text, NULL, 10) : 0;
   bool selected = number && strtoul(number, NULL, 10) == f->frame;
+  if (every && f->frame % every == 0) selected = true;
   if (numbers) for (const char *p = numbers; *p;) {
     char *end;
     if (strtoul(p, &end, 10) == f->frame) selected = true;
@@ -72,7 +75,7 @@ static void dump_frame(const FzeroSourceFrame *f) {
   if (!selected || !prefix) return;
   char path[1024];
   char numbered_prefix[960];
-  if (numbers) {
+  if (numbers || every) {
     if (snprintf(numbered_prefix, sizeof(numbered_prefix), "%s-%06u", prefix, f->frame) >= (int)sizeof(numbered_prefix)) return;
     prefix = numbered_prefix;
   }
@@ -345,7 +348,8 @@ static int object_x(const FzeroSourceFrame *f, int raw_x, FzeroViewport viewport
 
 static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
                     const FzeroSourceFrame *previous, double alpha,
-                    int y, FzeroViewport viewport, bool race_hud, uint16_t *pixels) {
+                    int y, FzeroViewport viewport, bool race_hud, bool results,
+                    uint16_t *pixels) {
   const FzeroRasterLine *line = &frame->lines[y];
   const uint16_t *vram = frame->vram;
   static const int sizes[8][2] = {{8,16},{8,32},{8,64},{16,32},{16,64},{32,64},{16,32},{16,32}};
@@ -361,7 +365,7 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
      * 126/127 ($03F8/$03FC); setup later transfers them to HUD slots 22/23.
      * They already belong to the right edge while the course name is centered. */
     bool intro_counter = !race_hud && frame->ram[0x58] == 0 &&
-        (frame->ram[0x55] <= 2 || frame->ram[0x55] == 6) && slot >= 126;
+        (results || frame->ram[0x55] <= 2) && slot >= 126;
     int owner = intro_counter ? -1 : object_owner(frame, slot);
     /* The screen-locked player and unowned effects use offscreen X as a
      * hiding mechanism, sometimes retaining Y and stale tile attributes.
@@ -397,9 +401,11 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     }
     int row = (y - sprite_y) & 255;
     if (row >= size) continue;
-    /* Verified fixed race HUD reservations: map/markers 20..31, timer,
-     * boosts and rank 32..51. Hidden HUD positions remain hidden. */
-    if (race_hud && slot >= 20 && slot < 52) {
+    /* Map/markers 20..31, timer/boosts 32..46, rank 48..51. Slot 47 is
+     * NOT HUD: $00:BED7..BF5E writes the player's skid/collision spark at
+     * $02BC using the vehicle's $0C70/$0C80 position. Moving it to the right
+     * edge detaches it from the car whenever the effect appears (#4). */
+    if (race_hud && slot >= 20 && slot < 52 && slot != 47) {
       if (x < 0 || x >= 256) continue;
       x += (slot < 22 || (slot >= 24 && slot < 32) || slot >= 48) ?
           -viewport.extra : viewport.extra;
@@ -465,18 +471,24 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
   /* $81 selects live track scenery on the title screen as well as in races.
    * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
   bool scenery = f->ram[0x81] != 0;
-  /* Attract exit changes $54 to 3 before its race HUD fades out. */
+  /* Scene 3 serves both the race/attract exit and the black results/menu.
+   * Both can fade in phase 5. Distinguish the actual published PPU layout:
+   * results disable the track backgrounds, retaining BG3 + OBJ ($94), while
+   * the live race keeps BG1/BG2 ($17). Phase alone splits END GAME's reused
+   * OBJ slots 20..30 across the viewport as soon as its fade begins. */
+  memcpy(&scanout, f->lines[100].registers, PPU_SAVESTATE_REGS_SIZE);
+  bool results = scenery && f->ram[0x54] == 3 &&
+      !(scanout.screenEnabled[0] & 3);
   bool race_exit = f->ram[0x54] == 3 &&
-      (f->ram[0x55] == 4 || f->ram[0x55] == 5);
+      !results && (f->ram[0x55] == 4 || f->ram[0x55] == 5);
   bool world = scenery && (f->ram[0x54] == 2 || race_exit);
-  /* GP loss uses a black score screen; Training ($58!=0) keeps the live
-   * race HUD, including its timer, over the crashed car. */
-  bool loss_screen = world && f->ram[0x55] == 6 && f->ram[0x58] == 0;
+  /* Phase 6 is still the live YOU LOST view in both GP and Training; its
+   * timer, power fill and spare machines all retain the race HUD layout. */
   /* $8ACD installs the race HUD before $8B11 advances setup substate $56.
    * Setup phase $55=2 then displays it while waiting to enter active phase 3.
    * Anchor tiles, sprites and the power meter as soon as that HUD is ready;
    * the preceding course-title/setup phase still uses centered reservations. */
-  bool race_hud = world && !loss_screen && (f->ram[0x55] >= 3 ||
+  bool race_hud = world && (f->ram[0x55] >= 3 ||
                             (f->ram[0x55] == 2 && f->ram[0x56] != 0));
   bool interpolate = world && previous->valid && previous->frame + 1 == f->frame &&
       !memcmp(previous->ram + 0x54, f->ram + 0x54, 3) &&
@@ -532,8 +544,9 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       }
     }
     FzeroCourseLine reference = course_line(camera_x, camera_y, centre_x, centre_y);
-    if (world)
-      sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport, race_hud, object_pixels);
+    if (world || results)
+      sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport,
+              race_hud, results, object_pixels);
     else
       memset(object_pixels, 0, (size_t)viewport.width * sizeof(*object_pixels));
     for (int sx = 0; sx < viewport.width; ++sx) {
@@ -551,8 +564,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
             pixel = index ? 0x5000 | index : 0;
           } else {
             int bx = x;
-            if (layer == 2 && !(race_hud || loss_screen) && (x < 0 || x >= 256)) continue;
-            if (layer == 2 && (race_hud || loss_screen)) {
+            if (layer == 2 && results && y < 32 && sx < 128) {
+              bx = sx; /* Top-left score; lap table/menu stays centered. */
+            } else if (layer == 2 && !race_hud) {
+              if (x < 0 || x >= 256 || (results && y < 32 && x < 128)) continue;
+            }
+            if (layer == 2 && race_hud) {
               bx = sx < viewport.width / 2 ? sx : sx - 2 * viewport.extra;
               if ((sx < viewport.width / 2 && bx >= 128) ||
                   (sx >= viewport.width / 2 && bx < 128)) continue;
@@ -570,12 +587,12 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
        * Its HDMA band must travel with the right-anchored BG3 outline. */
       /* Loss keeps its score at the left edge, but its collapsed colour
        * window must not expand into the former race meter/HDMA panel. */
-      int colour_x = loss_screen ? sx : x;
+      int colour_x = results ? sx : x;
       if (race_hud && mode == 1 && y >= 19 && y <= 27 &&
           scanout.window1left >= 176 && scanout.window1right <= 239)
         colour_x -= viewport.extra;
       out[y * viewport.width + sx] = colour(&scanout, l->palette, screens[0], screens[1],
-          in_window(&scanout, 5, colour_x, loss_screen ? 0 : viewport.extra));
+          in_window(&scanout, 5, colour_x, results ? 0 : viewport.extra));
     }
     /* Preserve the meter's composed fill, including its fixed-colour HDMA,
      * without letting a different section of skyline show through it. */
@@ -584,7 +601,7 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
              f->stock + y * 256 + 176, 64 * sizeof(*out));
     /* Title/menu graphics remain an exact centered group. Only their live
      * scenery expands; hidden/reused OBJ reservations cannot leak into it. */
-    if (!world)
+    if (!world && !results)
       memcpy(out + y * viewport.width + viewport.extra,
              f->stock + y * 256, 256 * sizeof(*out));
   }

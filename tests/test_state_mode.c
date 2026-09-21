@@ -47,6 +47,11 @@ int main(void) {
    * already keep their slots in different directories. */
   CHECK(FzeroStateModeCompatible(kFzeroStateModeUnknown, kFzeroStateModeStock));
   CHECK(FzeroStateModeCompatible(kFzeroStateModeUnknown, kFzeroStateModeDeluxe));
+  for (int current = kFzeroStateModeStock; current <= kFzeroStateModeDeluxeMsu; ++current)
+    for (int saved = kFzeroStateModeStock; saved <= kFzeroStateModeDeluxeMsu; ++saved)
+      CHECK(FzeroStateModeCompatible((FzeroStateMode)saved, (FzeroStateMode)current) == (saved == current));
+  CHECK(!FzeroStateModeCompatible(kFzeroStateModeUnknown, kFzeroStateModeStockMsu));
+  CHECK(!FzeroStateModeCompatible(kFzeroStateModeUnknown, kFzeroStateModeDeluxeMsu));
 
   CHECK(!strcmp(FzeroStateModeName(kFzeroStateModeStock), "stock"));
   CHECK(!strcmp(FzeroStateModeName(kFzeroStateModeDeluxe), "BS F-Zero Deluxe"));
@@ -59,6 +64,12 @@ int main(void) {
   build(buf, 128, kMagic, kVersion, kFzeroStateModeDeluxe);
   CHECK(FzeroStateProbeBytes(buf, 128 + kTrailer, &kLayout, &mode));
   CHECK(mode == kFzeroStateModeDeluxe);
+
+  for (int tag = kFzeroStateModeStockMsu; tag <= kFzeroStateModeDeluxeMsu; ++tag) {
+    build(buf, 128, kMagic, kVersion, (uint8_t)tag);
+    CHECK(FzeroStateProbeBytes(buf, 128 + kTrailer, &kLayout, &mode));
+    CHECK(mode == (FzeroStateMode)tag);
+  }
 
   /* The guest blob's length varies with the snapshot version; the trailer is
    * still found from the END of the file. */

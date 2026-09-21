@@ -22,6 +22,7 @@
 #include "fzero_deluxe.h"
 #include "fzero_hdma.h"
 #include "fzero_state_mode.h"
+#include "fzero_msu.h"
 
 #include "common_rtl.h"
 #include "cpu_state.h"
@@ -548,6 +549,7 @@ static size_t s_state_guard_len;
 static size_t s_state_guard_cap;
 
 FzeroStateMode FzeroStateModeCurrent(void) {
+  if (FzeroMsuActive()) return FzeroDeluxeActive() ? kFzeroStateModeDeluxeMsu : kFzeroStateModeStockMsu;
   return FzeroDeluxeActive() ? kFzeroStateModeDeluxe : kFzeroStateModeStock;
 }
 
@@ -752,6 +754,7 @@ static void fzero_on_state_loaded(uint32_t version) {
   g_snes->beamMasterLast = g_cpu.master_cycles;
   interp_bridge_set_master_deadline(0);
   s_loaded_runtime_state = false;
+  FzeroMsuRestoreAudio(g_ram);
 }
 
 static const RtlGameInfo kFzeroGameInfo = {
@@ -768,10 +771,16 @@ static const RtlGameInfo kFzeroGameInfo = {
 
 const RtlGameInfo *FzeroGameInfo(void) {
   static RtlGameInfo deluxe;
-  if (!FzeroDeluxeActive()) return &kFzeroGameInfo;
+  if (!FzeroDeluxeActive() && !FzeroMsuActive()) return &kFzeroGameInfo;
   deluxe = kFzeroGameInfo;
-  deluxe.title = "bs_f_zero_deluxe";
-  deluxe.save_name_prefix = "fzero-bs-deluxe";
+  if (FzeroDeluxeActive()) {
+    deluxe.title = "bs_f_zero_deluxe";
+    deluxe.save_name_prefix = "fzero-bs-deluxe";
+  }
+  if (FzeroMsuActive()) {
+    deluxe.title = FzeroDeluxeActive() ? "bs_f_zero_deluxe_msu1" : "f_zero_msu1";
+    deluxe.save_name_prefix = FzeroDeluxeActive() ? "fzero-bs-deluxe-msu1" : "fzero-msu1";
+  }
   return &deluxe;
 }
 uint32_t FzeroResumePc(void) { return s_resume_pc; }

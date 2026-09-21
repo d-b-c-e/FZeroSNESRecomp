@@ -55,6 +55,12 @@ PPU backdrop with its brightness and colour-window effects. Original title/menu
 artwork and course-intro text remain centered. Hidden player/effect reservations stay hidden even when their
 stale tile data lies within the expanded viewport.
 
+OBJ slot 47 is a player-relative spark, not a HUD reservation. Retail
+`$00:BED7..BF5E` writes its coordinates through `$02BC..02BF`, adding the
+player's `$0C70/$0C80` position. It stays centered with the car rather than
+following the right-edge HUD anchor. The regression covers 16:9, 21:9 and
+32:9 while checking that neighboring HUD slot 46 still anchors right.
+
 HUD anchoring begins when race setup has installed its graphics (`$55=2`,
 `$56!=0`), not only when active racing begins (`$55>=3`). Retail `$8ACD`
 installs the HUD and `$8B11` advances the setup substate. Waiting for active
@@ -79,16 +85,23 @@ reservation tails. Interpolation follows identity across OAM sorting changes,
 rejects changed attributes and large motion, and resets on discontinuities and
 loads. Camera interpolation handles periodic coordinates and rejects scene jumps.
 
-GP loss phase `$55=6,$58=0` reuses the temporary counter slots and centers its message.
-Keep the score left anchored and the counter right anchored, but do not apply
-the race power-meter copy or extend the collapsed colour window. Otherwise the
-one-column red/gray HDMA residue at the stock left edge becomes a wide panel.
-The original one-column edge residue remains; stock-width output is preserved.
-Training (`$58!=0`) instead retains the live race HUD on loss, so its timer
-keeps the right anchor. Training's course-selector map also reuses slots
-126/127; those are map pieces, not the GP spare-machine counter, and stay with
-the other centered map pieces. Attract exit `$54=3,$55=4/5` retains the race HUD
-through its fade instead of briefly centering it when the scene state changes.
+GP and Training loss `$54=2,$55=6` both retain the live race HUD during
+YOU LOST, including the timer, power fill and counter. The black results screen
+comes later, in scene `$54=3`, and reuses temporary counter slots 126/127.
+Its top-left BG3 score stays left anchored and its counter stays right anchored;
+the lap table and menu stay centered. Do not copy the race power meter or extend
+the collapsed colour window there. The original one-column edge residue remains.
+
+Scene 3 phase 5 is shared by the results-menu fade and live race/attract exit.
+Distinguish their published PPU layouts, not the phase alone: results have no
+track backgrounds (main `$94`, BG3 + OBJ), while a live race retains BG1/BG2
+(main `$17`). In particular, END GAME reuses OBJ slots 20..30; interpreting
+those as race HUD slots splits its text as soon as the fade starts. Both menu
+choices retain the results layout until black. Regression tests cover these
+layouts and all 16 brightness values at every supported aspect.
+
+Training's course-selector map also reuses slots 126/127; those are map pieces,
+not the GP spare-machine counter, and stay with the other centered map pieces.
 
 The opponent projection routine `$00:DBC4` runs through the interpreter so a
 pre-opcode policy at `$00:DCC6` can extend its horizontal interval `[-32,288)`

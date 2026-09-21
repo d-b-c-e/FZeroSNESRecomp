@@ -1,5 +1,38 @@
 ﻿# Changelog
 
+## 1.7.0 - 2026-09-20
+
+- Keep the live game-over HUD anchored, including the timer and power fill.
+  Anchor the results score/counter while keeping the lap table and menu
+  centered through both Try Again and End Game fades.
+- Shaders remain off by default; use Settings > Display > Shader to enable one.
+
+- Resolve saved music/shader paths and saves from the installation directory,
+  including launches from shortcuts or other working directories. Relative
+  command-line ROM paths still resolve against the caller's directory.
+- Updated the shared engine to include audio-buffer recovery after state loads
+  and starvation, legacy DMA save compatibility, and the latest host settings.
+
+- Gameplay now reads the launcher's selected gamepad, per-device bindings and
+  deadzone. Disconnecting another device no longer drops the active pad;
+  reconnects and launcher/game focus transitions keep input working (#3).
+- Keep the player's spark sprite with the car instead of moving it to the
+  widescreen HUD's right anchor (#4).
+- Enable user-provided Conn/Cubear v11 MSU-1 patches and music for stock and
+  BS Deluxe, composed in memory without modifying the user's ROM. Added
+  separate MSU save modes and audio restart after state loads. Patched sessions
+  currently use interpreter execution. Validated with synthetic tracks and
+  a user-supplied JUD6MENT pack in stock and Deluxe playtests (#5).
+- Document the existing custom GLSL preset picker, including CRT-Geom. Invalid
+  presets now fall back to unfiltered output. Preserve imported shaders during
+  rebuilds but exclude them from release packages. CRT-Geom is not bundled
+  pending redistribution-license compatibility review (#6).
+
+## 1.6.2 - 2026-09-20
+
+- Remember launcher settings on both Play and Quit, including display, sound
+  and rewind options (#2).
+
 ## 1.6.1 - 2026-09-18
 
 - Fixed the ROM button doing nothing on the Linux AppImage. The AppImage set a

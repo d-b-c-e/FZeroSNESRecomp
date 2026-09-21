@@ -18,21 +18,24 @@
  *
  * The tag lives in one byte of the game's fixed-size snapshot trailer that
  * was previously reserved padding, so a 1.5.0 snapshot reads back as Unknown
- * and still loads. Nothing about the trailer's size or field order changed.
+ * and still loads in non-MSU sessions. MSU-patched cartridges use their own
+ * tags and save directories. The trailer's size and field order are unchanged.
  */
 typedef enum FzeroStateMode {
   kFzeroStateModeUnknown = 0, /* pre-1.6.0 snapshot: carries no tag */
   kFzeroStateModeStock = 1,
-  kFzeroStateModeDeluxe = 2
+  kFzeroStateModeDeluxe = 2,
+  kFzeroStateModeStockMsu = 3,
+  kFzeroStateModeDeluxeMsu = 4
 } FzeroStateMode;
 
 /* May a snapshot tagged `file` be resumed by a process running `current`?
- * An untagged snapshot is accepted in either mode: refusing every state
+ * An untagged snapshot is accepted in either non-MSU mode: refusing every state
  * written before the tag existed would be a silent data loss, and those
  * files are already separated by path. */
 int FzeroStateModeCompatible(FzeroStateMode file, FzeroStateMode current);
 
-/* "stock" / "BS F-Zero Deluxe" / "untagged", for operator-facing messages. */
+/* Cartridge + optional MSU-1 description, for operator-facing messages. */
 const char *FzeroStateModeName(FzeroStateMode mode);
 
 /*

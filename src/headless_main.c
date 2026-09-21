@@ -10,6 +10,8 @@
 
 #include "fzero_runtime.h"
 #include "fzero_deluxe.h"
+#include "fzero_msu.h"
+#include "fzero_state_mode.h"
 #include "fzero_replay.h"
 
 #include "audio_trace.h"
@@ -292,6 +294,11 @@ int main(int argc, char **argv) {
     free(rom);
     return 2;
   }
+  if (!FzeroMsuPrepare(&rom, &rom_size, getenv("SNESRECOMP_MSU1"), argv[1])) {
+    fprintf(stderr, "[fzero-msu1] %s\n", FzeroMsuError());
+    free(rom);
+    return 2;
+  }
   RtlRegisterGame(FzeroGameInfo());
   if (!SnesInit(rom, (int)rom_size)) {
     fputs("failed to initialize the F-Zero cartridge\n", stderr);
@@ -305,7 +312,21 @@ int main(int argc, char **argv) {
     free(rom);
     return 3;
   }
+  if (!FzeroMsuSelectSaveRoot()) {
+    fprintf(stderr, "%s\n", FzeroMsuError());
+    free(rom);
+    return 3;
+  }
   RtlReadSram();
+  /* Reproduce a reported transition from a private, mode-checked snapshot. */
+  const char *initial_state = getenv("FZERO_STATE_LOAD");
+  if (initial_state && *initial_state) {
+    if (!FzeroStateFileAcceptable(initial_state) || !RtlLoadSnapshot(initial_state)) {
+      fprintf(stderr, "unable to load compatible state: %s\n", initial_state);
+      free(rom);
+      return 3;
+    }
+  }
 
   InputSpan input_spans[kMaxInputSpans];
   size_t input_span_count = 0;
@@ -362,7 +383,16 @@ int main(int argc, char **argv) {
     }
     if (lifecycle && frame == 1510) {
       if (memcmp(replay_expected, g_ram, sizeof(replay_expected)) || replay_master != g_cpu.master_cycles) {
-        fputs("lifecycle: resimulation differs after load\n", stderr); return 8;
+        fputs("lifecycle: resimulation differs after load\n", stderr);
+        int reported = 0;
+        for (size_t i = 0; i < sizeof(replay_expected) && reported < 12; ++i)
+          if (replay_expected[i] != g_ram[i]) {
+            fprintf(stderr, "  RAM %05zx: expected %02x got %02x\n", i, replay_expected[i], g_ram[i]);
+            ++reported;
+          }
+        fprintf(stderr, "  master: expected %llu got %llu\n",
+                (unsigned long long)replay_master, (unsigned long long)g_cpu.master_cycles);
+        return 8;
       }
       fputs("lifecycle: save/load ten-frame resimulation identical (RAM and master clock)\n", stderr);
     }
@@ -383,6 +413,11 @@ int main(int argc, char **argv) {
       fprintf(stderr, "[fzero-viewport] frame=%ld width=%d\n", frame, frame_width);
     }
     (void)RtlRunFrame(scripted_input(input_spans, input_span_count, frame));
+    if (getenv("FZERO_SCENE_TRACE"))
+      fprintf(stderr, "scene %ld state=%02x,%02x,%02x training=%02x scenery=%02x sound=%02x,%02x,%02x,%02x,%02x msu=%02x,%02x,%02x,%02x brightness=%02x\n",
+              frame, g_ram[0x54], g_ram[0x55], g_ram[0x56], g_ram[0x58], g_ram[0x81],
+              g_ram[0x45], g_ram[0x46], g_ram[0x47], g_ram[0x48], g_ram[0x49],
+              g_ram[0x180], g_ram[0x181], g_ram[0x182], g_ram[0x183], g_snes->ppu->inidisp);
     if (g_fail || !FzeroLastLleResult()) {
       fprintf(stderr, "fzero_native: runtime failure frame=%ld pc=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
               frame, (unsigned)FzeroResumePc(), g_fail, FzeroLastLleResult(),
