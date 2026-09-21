@@ -56,6 +56,7 @@ Open **Mods** for:
 
 - **Widescreen:** makes races wider.
 - **Presentation FPS:** makes motion smoother on high refresh screens.
+- **HD Mode 7:** sharper tracks at 2x or 4x; off by default.
 - **BS Deluxe:** adds the Satellaview machines, leagues, and tracks.
 
 When the Widescreen mod is on, its aspect setting wins over the normal Display aspect setting.

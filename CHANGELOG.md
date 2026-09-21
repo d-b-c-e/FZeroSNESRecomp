@@ -1,5 +1,17 @@
 ﻿# Changelog
 
+## 1.8.0 - 2026-09-20
+
+- Add optional HD Mode 7 track rendering at 2x or 4x resolution. Enable it
+  under Mods > HD Mode 7; it starts off and works independently of
+  Widescreen and Presentation FPS.
+- Resample track tiles with finer affine coordinates and interpolate
+  compatible camera scanlines. Cars, HUD and menus keep their pixel artwork,
+  and game timing and save-state thumbnails retain native behavior.
+- Include shared snesrecomp HD Mode 7 support and documentation. Both SDL
+  and OpenGL/shader presentation use the larger texture. 4x costs more CPU
+  time, especially with wide aspect ratios or high presentation FPS.
+
 ## 1.7.1 - 2026-09-20
 
 - Remember ROMs selected with Browse For ROM after both Play and closing the

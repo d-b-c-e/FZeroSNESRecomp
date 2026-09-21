@@ -72,6 +72,7 @@ for filename in ("README.md", "CHANGELOG.md", "VERSION", "LICENSE"):
 shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER.md")
 shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXPLORATION.md")
 shutil.copy2(ROOT / "docs/SAVE_STATES.md", stage / "docs/SAVE_STATES.md")
+shutil.copy2(ROOT / "docs/HD_MODE7.md", stage / "docs/HD_MODE7.md")
 screenshots = ROOT / "docs/screenshots"
 if screenshots.is_dir():
     shutil.copytree(screenshots, stage / "docs/screenshots")
@@ -94,9 +95,12 @@ for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
     "folder in Settings > Sound. Keep using your unmodified USA ROM.\n"
     "The MSU patch, music and CRT-Geom shader are not bundled. See README.md\n"
     "for import instructions and save-state/audio limitations.\n\n"
-    "Mods starts with everything on: Widescreen at Fit, which follows the\n"
+    "Mods defaults to Widescreen at Fit, which follows the\n"
     "window between 4:3 and 32:9, Presentation FPS at Auto, and BS Deluxe.\n"
     "Turn any of them off in Mods, or choose a fixed aspect or rate there.\n\n"
+    "HD Mode 7 starts off. Enable it in Mods for sharper tracks at 2x or 4x.\n"
+    "4x uses more CPU time; cars and HUD keep their original pixel artwork.\n"
+    "See docs/HD_MODE7.md for details.\n\n"
     "BS Deluxe gives you the original and the BS content together, and keeps\n"
     "its saves apart under saves/bs-deluxe. It is included with permission\n"
     "from its authors: GuyPerfect, Porthor, and PowerPanda. The SNES patch is\n"
