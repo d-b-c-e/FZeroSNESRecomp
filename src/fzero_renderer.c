@@ -407,8 +407,14 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     /* Map/markers 20..31, timer/boosts 32..46, rank 48..51. Slot 47 is
      * NOT HUD: $00:BED7..BF5E writes the player's skid/collision spark at
      * $02BC using the vehicle's $0C70/$0C80 position. Moving it to the right
-     * edge detaches it from the car whenever the effect appears (#4). */
-    if (race_hud && slot >= 20 && slot < 52 && slot != 47) {
+     * edge detaches it from the car whenever the effect appears (#4).
+     * $EDB3/$EE93 reuse 48..63 for explosion/smoke pieces. Only anchor
+     * 48..51 when they contain the rank digits ($180..$189/$190..$199,
+     * written by $A8B1), not merely because they occupy rank's slots. */
+    unsigned tile_number = attr & 0x1ff;
+    bool rank_digit = slot >= 48 && slot < 52 &&
+        (tile_number & 0x1e0) == 0x180 && (tile_number & 15) <= 9;
+    if (race_hud && ((slot >= 20 && slot < 47) || rank_digit)) {
       if (x < 0 || x >= 256) continue;
       x += (slot < 22 || (slot >= 24 && slot < 32) || slot >= 48) ?
           -viewport.extra : viewport.extra;

@@ -61,6 +61,16 @@ player's `$0C70/$0C80` position. It stays centered with the car rather than
 following the right-edge HUD anchor. The regression covers 16:9, 21:9 and
 32:9 while checking that neighboring HUD slot 46 still anchors right.
 
+OBJ slots 48..51 also change owners: `$00:EDB3/$00:EE93` reuse them as
+the first pieces of the player's explosion and smoke (continuing through
+slot 63). Moving those four pieces to the rank HUD anchor splits the effect.
+The compositor only anchors those slots when their published tile numbers
+are rank digits, `$180..$189` or `$190..$199`, written by `$00:A8B1`.
+This uses the current scanline's artwork, so direct snapshot loads and
+transitions between rank, explosion and smoke need no previous-frame state.
+Regression coverage checks all aspects, native/2x/4x output and interpolated
+presentations, including restoration of rank anchoring after the effect.
+
 HUD anchoring begins when race setup has installed its graphics (`$55=2`,
 `$56!=0`), not only when active racing begins (`$55>=3`). Retail `$8ACD`
 installs the HUD and `$8B11` advances the setup substate. Waiting for active

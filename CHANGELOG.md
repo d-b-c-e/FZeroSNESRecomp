@@ -1,6 +1,10 @@
 ﻿# Changelog
 
-## Unreleased
+## 1.8.1 - 2026-09-21
+
+- Keep vehicle explosions and smoke together in Widescreen. Their first
+  four sprite pieces reuse rank-display slots; only actual rank digits now
+  follow the HUD anchor. Works with native and HD Mode 7 rendering.
 
 - Reduce HD Mode 7 CPU cost with Widescreen by sharing native/HD composition,
   caching scanline color math and repeated texture lookups, and using integer

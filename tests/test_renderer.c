@@ -430,6 +430,52 @@ static void test_player_spark(void) {
   }
 }
 
+static void test_explosion_slots(void) {
+  static uint32_t hd[FZERO_MAX_WIDTH * 224 * 16];
+  /* Rank -> expanding explosion -> smoke -> rank, without resetting the
+   * renderer. Include flipped pieces and the first non-rank reservation. */
+  static const unsigned tiles[] = {0x180, 0x189, 0x190, 0x199,
+                                   0x120, 0x126, 0x128, 0x140, 0x142, 0x181};
+  for (int aspect = FZERO_ASPECT_STOCK; aspect <= FZERO_ASPECT_FIT; ++aspect) {
+    setup();
+    p.screenEnabled[0] = 16;
+    memset(p.vram, 0, sizeof(p.vram));
+    p.cgram[177] = 0x03e0; /* effect palette */
+    p.cgram[129] = 0x001f; /* rank palette */
+    ram[0x50] = 1; ram[0x55] = 3;
+    FzeroVideoSettings s; FzeroVideoStock(&s);
+    s.enhanced = true; s.aspect = (FzeroAspect)aspect;
+    FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
+    for (unsigned phase = 0; phase < sizeof(tiles) / sizeof(*tiles); ++phase) {
+      unsigned tile = tiles[phase];
+      bool rank = phase < 4 || phase == 9;
+      for (int y = 0; y < 8; ++y) p.vram[0x1000 + (tile & 255) * 16 + y] = 255;
+      for (int slot = 48; slot <= 52; ++slot) {
+        p.oam[slot * 2] = (100 << 8) | (80 + (slot - 48) * 8);
+        p.oam[slot * 2 + 1] = tile | (rank ? 0x3000 : 0x3600) | ((slot & 3) << 14);
+        p.highOam[slot / 4] &= ~(3u << ((slot % 4) * 2));
+      }
+      publish(phase + 1);
+      for (unsigned scale = 1; scale <= 4; scale *= 2) {
+        for (int blend = 1; blend <= 2; ++blend) {
+          CHECK(scale == 1 ? FzeroRendererDraw(hd, v, blend * 0.5) :
+              FzeroRendererDrawHd(hd, sizeof(hd) / sizeof(*hd), v, blend * 0.5, scale));
+          /* Check the entire row: no piece can be detached, duplicated or
+           * lost, and genuine rank digits must still follow the left edge. */
+          for (int x = 0; x < v.width; ++x) {
+            int first = 80 + (rank ? 0 : v.extra);
+            int last = 112 + v.extra;
+            bool ink = (x >= first && x < first + 32) || (x >= last && x < last + 8);
+            unsigned expected = ink ? (rank ? 0xff0000 : 0x00ff00) : 0;
+            for (unsigned sub = 0; sub < scale; ++sub)
+              CHECK(hd[100 * scale * v.width * scale + x * scale + sub] == expected);
+          }
+        }
+      }
+    }
+  }
+}
+
 static void test_hd_mode7(void) {
   static uint32_t hd[FZERO_MAX_WIDTH * 224 * 16 + 2];
   setup();
@@ -600,6 +646,7 @@ int main(void) {
   test_results_fade();
   test_course_streaming();
   test_player_spark();
+  test_explosion_slots();
   test_hd_mode7();
   test_hd_composition_cache();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
