@@ -66,15 +66,18 @@ def main():
                     # Mapping the top-level X window precedes GTK's entry
                     # focus/layout; wait for that before typing a long path.
                     time.sleep(.5)
-                    xdo("key", "--window", dialog, "--clearmodifiers", "ctrl+l")
+                    # Use XTEST input to the focused window. Sending key
+                    # events directly to GTK's top-level window bypasses its
+                    # focused entry and can silently drop the location input.
+                    xdo("key", "--clearmodifiers", "ctrl+l")
                     time.sleep(.3)
-                    xdo("key", "--window", dialog, "--clearmodifiers", "ctrl+a")
-                    xdo("type", "--window", dialog, "--clearmodifiers", "--delay", "1", str(rom))
+                    xdo("key", "--clearmodifiers", "ctrl+a")
+                    xdo("type", "--clearmodifiers", "--delay", "1", str(rom))
                     time.sleep(.2)
                     geometry = dict(line.split("=", 1) for line in xdo("getwindowgeometry", "--shell", dialog).splitlines())
                     # Resolve the typed location, then confirm the highlighted
                     # file using the mouse rather than a second Enter.
-                    xdo("key", "--window", dialog, "--clearmodifiers", "Return")
+                    xdo("key", "--clearmodifiers", "Return")
                     time.sleep(1)
                     visible = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "zenity"],
                                              capture_output=True, text=True, timeout=5)
