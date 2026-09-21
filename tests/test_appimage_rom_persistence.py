@@ -22,6 +22,7 @@ def main():
     parser.add_argument("--rom", type=Path, default=ROOT / "fzero.sfc")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--expect-broken", action="store_true")
+    parser.add_argument("--exit-mode", choices=("play", "quit"))
     args = parser.parse_args()
     source, output = args.appimage.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -47,9 +48,16 @@ def main():
             script += f"shot:{name}-before.png;click:220,555;wait:480;"
         script += f"shot:{name}.png;"
         script += "click:970,820;wait:120;quit" if play else "quit"
+        # The extraction runtime can reuse its temporary tree. Give each
+        # fresh install a separate one, including any executable-side caches.
+        tmpdir = stage / "runtime-tmp"
+        tmpdir.mkdir(exist_ok=True)
         with (stage / f"{name}.log").open("w") as log:
             proc = subprocess.Popen([str(app), "--appimage-extract-and-run"],
-                                    cwd="/tmp", env=dict(env, LNG_SCRIPT=script),
+                                    cwd="/tmp", env=dict(env, LNG_SCRIPT=script, TMPDIR=str(tmpdir),
+                                                        GSETTINGS_BACKEND="memory",
+                                                        XDG_CONFIG_HOME=str(stage / "desktop-config"),
+                                                        XDG_DATA_HOME=str(stage / "desktop-data")),
                                     stdout=log, stderr=log)
             try:
                 if pick:
@@ -60,16 +68,20 @@ def main():
                     time.sleep(.5)
                     xdo("key", "--window", dialog, "--clearmodifiers", "ctrl+l")
                     time.sleep(.3)
+                    xdo("key", "--window", dialog, "--clearmodifiers", "ctrl+a")
                     xdo("type", "--window", dialog, "--clearmodifiers", "--delay", "1", str(rom))
                     time.sleep(.2)
+                    geometry = dict(line.split("=", 1) for line in xdo("getwindowgeometry", "--shell", dialog).splitlines())
+                    # Resolve the typed location, then confirm the highlighted
+                    # file using the mouse rather than a second Enter.
                     xdo("key", "--window", dialog, "--clearmodifiers", "Return")
-                    # GTK may use the first Enter to navigate to the containing
-                    # folder and highlight the file, leaving OK to confirm it.
-                    time.sleep(.7)
+                    time.sleep(1)
                     visible = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "zenity"],
                                              capture_output=True, text=True, timeout=5)
                     if dialog in visible.stdout.splitlines():
-                        xdo("key", "--window", dialog, "--clearmodifiers", "Return")
+                        xdo("mousemove", "--window", dialog,
+                            int(geometry["WIDTH"]) - 40, int(geometry["HEIGHT"]) - 30)
+                        xdo("click", "1")
                     deadline = time.monotonic() + 15
                     while time.monotonic() < deadline:
                         visible = subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "zenity"],
@@ -95,7 +107,7 @@ def main():
         print(f"{stage.parent.name}/{name}: played={played}, cache={cached!r}", flush=True)
         return played, cached
 
-    for exit_mode in ("play", "quit"):
+    for exit_mode in ((args.exit_mode,) if args.exit_mode else ("play", "quit")):
         stage = output / exit_mode / "Install With Spaces"
         stage.mkdir(parents=True)
         app = stage / source.name
