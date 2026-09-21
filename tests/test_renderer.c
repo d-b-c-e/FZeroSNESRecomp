@@ -430,6 +430,69 @@ static void test_player_spark(void) {
   }
 }
 
+static void test_hd_mode7(void) {
+  static uint32_t hd[FZERO_MAX_WIDTH * 224 * 16 + 2];
+  setup();
+  FzeroVideoSettings settings; FzeroVideoStock(&settings);
+  FzeroViewport v = FzeroCalculateViewport(&settings, 800, 600);
+  memset(p.vram, 0, sizeof(p.vram));
+  for (unsigned i = 0; i < 0x4000; ++i) p.vram[i] = 1;
+  for (unsigned i = 0; i < 64; ++i) p.vram[64 + i] |= (i + 1) << 8;
+  for (unsigned i = 0; i < 256; ++i) p.cgram[i] = (uint16_t)i;
+  p.m7matrix[0] = p.m7matrix[3] = 512;
+  publish(1);
+  CHECK(FzeroRendererHasFrame());
+  CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+  for (unsigned scale = 2; scale <= 4; scale += 2) {
+    size_t count = (size_t)v.width * 224 * scale * scale;
+    hd[0] = hd[count + 1] = 0xdeadbeef;
+    CHECK(!FzeroRendererDrawHd(hd + 1, count - 1, v, 1, scale));
+    CHECK(FzeroRendererDrawHd(hd + 1, count, v, 1, scale));
+    CHECK(hd[0] == 0xdeadbeef && hd[count + 1] == 0xdeadbeef);
+    CHECK(hd[1] == palette_rgb(p.cgram[17]));
+    CHECK(hd[1 + scale / 2] == palette_rgb(p.cgram[18]));
+    CHECK(hd[1 + v.width * scale * (scale / 2)] == palette_rgb(p.cgram[25]));
+    /* Higher resolution cannot alter the native render or published source. */
+    CHECK(FzeroRendererDraw(hd + 1, v, 1));
+    CHECK(!memcmp(hd + 1, guarded + 1, (size_t)v.width * 224 * sizeof(*hd)));
+  }
+  /* An HDMA jump to another origin must not be smoothed across the split. */
+  FzeroRendererBeginFrame(ram, 2);
+  for (unsigned y = 1; y <= 224; ++y) {
+    p.m7matrix[6] = y < 100 ? 0 : 1;
+    FzeroRendererCaptureLine(&p, y);
+  }
+  FzeroRendererEndFrame(&p, stock);
+  CHECK(FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 2));
+  CHECK(hd[1 + 197 * 512] == palette_rgb(p.cgram[57]));
+  /* Geometry follows neighbouring scanlines instead of reusing one line's
+   * matrix for a whole block: 2 -> 4 horizontal texels across this band. */
+  FzeroRendererBeginFrame(ram, 3);
+  p.m7matrix[6] = 0;
+  for (unsigned y = 1; y <= 224; ++y) {
+    p.m7matrix[0] = y == 1 ? 512 : 1024;
+    FzeroRendererCaptureLine(&p, y);
+  }
+  FzeroRendererEndFrame(&p, stock);
+  CHECK(FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 2));
+  CHECK(hd[1 + 512 + 2] == palette_rgb(p.cgram[28]));
+  /* Temporal interpolation remains independent of spatial resolution. */
+  p.m7matrix[0] = 512; p.m7matrix[6] = 0;
+  FzeroRendererReset(); publish(10);
+  p.m7matrix[6] = 1; publish(11);
+  CHECK(FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 0.5, 2));
+  CHECK(hd[1] == palette_rgb(p.cgram[18]));
+  CHECK(FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 2));
+  CHECK(hd[1] == palette_rgb(p.cgram[19]));
+  /* Flat screens retain every original pixel, including centered menus. */
+  ram[0x81] = 0; publish(4);
+  CHECK(FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 4));
+  for (size_t i = 0; i < 256 * 224 * 16; ++i) CHECK(hd[1 + i] == 0x123456);
+  FzeroRendererReset();
+  CHECK(!FzeroRendererHasFrame());
+  CHECK(!FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 2));
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -482,6 +545,7 @@ int main(void) {
   test_results_fade();
   test_course_streaming();
   test_player_spark();
+  test_hd_mode7();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

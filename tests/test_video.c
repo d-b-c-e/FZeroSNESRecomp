@@ -16,6 +16,7 @@ static void viewport_tests(void) {
   FzeroVideoDefaults(&settings); /* shipped defaults: every mod on, Fit, Auto rate */
   CHECK(settings.enhanced && settings.aspect == FZERO_ASPECT_FIT && settings.fps == 0 &&
         settings.fps_enabled && settings.bs_deluxe);
+  CHECK(!settings.hd_mode7 && settings.hd_scale == 2);
   FzeroVideoStock(&settings);
   CHECK(!settings.enhanced && settings.aspect == FZERO_ASPECT_STOCK && !settings.fps_enabled && !settings.bs_deluxe);
   FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);
@@ -103,10 +104,11 @@ static void config_tests(void) {
   CHECK(b.aspect == FZERO_ASPECT_21_9 && b.fps == 0);
   FILE *f = fopen("test-video.ini", "w");
   CHECK(f);
-  fputs("EnhancedRenderer=perhaps\nAspect=99:1\nPresentationFPS=120bad\n", f);
+  fputs("EnhancedRenderer=perhaps\nAspect=99:1\nPresentationFPS=120bad\nHDMode7=bad\nHDMode7Scale=9999\n", f);
   fclose(f);
   CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 0); /* invalid fields fall back to shipped defaults */
+  CHECK(!b.hd_mode7 && b.hd_scale == 2);
   /* Only absent or invalid fields take a default: a setting the file turned
    * off stays off however corrupt its neighbours are. */
   f = fopen("test-video.ini", "w");

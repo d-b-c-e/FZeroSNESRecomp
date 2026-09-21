@@ -74,6 +74,10 @@ static FzeroViewport s_viewport = {256, 0, 4.0 / 3.0, false};
 static uint8_t s_published_ram[0x20000];
 static unsigned s_wide_projection_accepts;
 static bool s_deferred_presentation;
+static uint32_t *s_hd_pixels;
+static size_t s_hd_capacity;
+static unsigned s_hd_scale;
+static bool s_hd_ready;
 
 static void widened_projection(CpuState *cpu, uint32_t pc) {
   (void)pc;
@@ -337,15 +341,32 @@ void FzeroBeginDrawing(uint8_t *pixels, size_t pitch) {
 int FzeroFrameWidth(void) { return s_viewport.width; }
 
 void FzeroSetViewport(FzeroViewport viewport) {
-  if (viewport.width != s_viewport.width) FzeroRendererReset();
+  if (viewport.width != s_viewport.width) {
+    FzeroRendererReset();
+    s_hd_ready = false;
+  }
   s_viewport = viewport;
 }
 
 void FzeroPresent(double alpha) {
   if (s_viewport.enhanced && s_output_pixels)
     FzeroRendererDraw((uint32_t *)s_output_pixels, s_viewport, alpha);
+  s_hd_ready = s_hd_scale && s_hd_pixels &&
+      FzeroRendererDrawHd(s_hd_pixels, s_hd_capacity, s_viewport, alpha, s_hd_scale);
 }
 void FzeroSetDeferredPresentation(bool deferred) { s_deferred_presentation = deferred; }
+
+void FzeroSetMode7Hd(unsigned scale, uint32_t *pixels, size_t capacity) {
+  if (!pixels || (scale != 2 && scale != 4)) scale = 0;
+  if (scale != s_hd_scale || pixels != s_hd_pixels) s_hd_ready = false;
+  s_hd_scale = scale;
+  s_hd_pixels = scale ? pixels : NULL;
+  s_hd_capacity = scale ? capacity : 0;
+}
+const uint32_t *FzeroHdFrame(void) {
+  return s_hd_ready && FzeroRendererHasFrame() ? s_hd_pixels : NULL;
+}
+unsigned FzeroHdScale(void) { return FzeroHdFrame() ? s_hd_scale : 1; }
 
 static uint8_t hdma_read_bus(void *context, uint32_t address, uint8_t open_bus) {
   (void)context;
@@ -369,7 +390,7 @@ static void hdma_write_bus(void *context, uint8_t reg, uint8_t value) {
 }
 
 void FzeroDrawPpuFrame(void) {
-  const bool capture = s_viewport.enhanced || getenv("FZERO_CAPTURE_FRAME") != NULL ||
+  const bool capture = s_viewport.enhanced || s_hd_scale || getenv("FZERO_CAPTURE_FRAME") != NULL ||
                        getenv("FZERO_CAPTURE_FRAMES") != NULL;
   if (capture) {
     FzeroRendererBeginFrame(s_published_ram, s_host_frames);
@@ -486,10 +507,10 @@ void FzeroDrawPpuFrame(void) {
   ppu_handleVblank(g_ppu);
   if (capture) {
     FzeroRendererEndFrame(g_ppu, s_stock_pixels);
-    if (s_viewport.enhanced) {
+    if (s_viewport.enhanced || s_hd_scale) {
       if (!s_deferred_presentation) FzeroPresent(1);
     }
-    else for (unsigned y = 0; y < 224; ++y)
+    if (!s_viewport.enhanced) for (unsigned y = 0; y < 224; ++y)
         memcpy(s_output_pixels + y * s_output_pitch, s_stock_pixels + y * 256, 256 * 4);
     PpuBeginDrawing(g_ppu, s_output_pixels, s_output_pitch, kPpuRenderFlags_NewRenderer);
   }

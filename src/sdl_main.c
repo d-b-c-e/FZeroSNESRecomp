@@ -247,17 +247,17 @@ static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
 }
 
 static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
-                            int logical_width, FzeroViewport viewport,
+                            int logical_width, int logical_height, FzeroViewport viewport,
                             int drawable_width, int drawable_height) {
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, glr->texture.gl_texture);
-  if (glr->texture.width == logical_width && glr->texture.height == kFrameHeight) {
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, logical_width, kFrameHeight,
+  if (glr->texture.width == logical_width && glr->texture.height == logical_height) {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, logical_width, logical_height,
                     GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels);
   } else {
     glr->texture.width = (uint16)logical_width;
-    glr->texture.height = (uint16)kFrameHeight;
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, logical_width, kFrameHeight, 0,
+    glr->texture.height = (uint16)logical_height;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, logical_width, logical_height, 0,
                  GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels);
   }
 
@@ -978,8 +978,13 @@ static void overlay_dump(const FzeroPresenter *p, int is_menu);
  * behind it is the moment the player stopped at. */
 static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
                           int pw, int ph, int is_menu) {
+  const uint32_t *hd_frame = FzeroHdFrame();
+  unsigned scale = FzeroHdScale();
+  const uint8_t *pixels = hd_frame ? (const uint8_t *)hd_frame : p->pixels;
+  int width = p->logical_width * (int)scale;
+  int height = kFrameHeight * (int)scale;
   if (p->gl) {
-    fzero_gl_render(p->gl, p->pixels, p->logical_width, p->viewport,
+    fzero_gl_render(p->gl, pixels, width, height, p->viewport,
                     p->drawable_width, p->drawable_height);
     if (panel) {
       fzero_gl_draw_overlay(p->gl, panel, pw, ph, overlay_rect(p, is_menu),
@@ -989,9 +994,8 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
     SDL_GL_SwapWindow(p->gl->window);
     return;
   }
-  SDL_Rect source = {0, 0, p->logical_width, kFrameHeight};
-  SDL_UpdateTexture(p->texture, &source, p->pixels,
-                    p->logical_width * kBytesPerPixel);
+  SDL_Rect source = {0, 0, width, height};
+  SDL_UpdateTexture(p->texture, &source, pixels, width * kBytesPerPixel);
   SDL_SetRenderDrawColor(p->renderer, 0, 0, 0, 255);
   SDL_RenderClear(p->renderer);
   FzeroRect rect =
@@ -1593,6 +1597,7 @@ int main(int argc, char **argv) {
   FzeroGlRenderer gl_renderer;
   SDL_Renderer *renderer = NULL;
   SDL_Texture *texture = NULL;
+  unsigned texture_scale = g_video.hd_mode7 ? g_video.hd_scale : 1;
   if (use_gl_renderer) {
     if (!fzero_gl_init(&gl_renderer, window, launcher_settings.shader_path))
       Die("Unable to initialize the OpenGL shader renderer");
@@ -1601,8 +1606,8 @@ int main(int argc, char **argv) {
     if (!renderer) renderer = snesrecomp_sdl_create_renderer(window, true, false);
     if (!renderer) Die("Unable to create the game renderer");
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-                                SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH,
-                                kFrameHeight);
+                                SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH * texture_scale,
+                                kFrameHeight * texture_scale);
     if (!texture) Die("Unable to create the game texture");
     /* Scale quality is per-texture in SDL3 (the SDL2 render hint is gone), and
      * the SNES framebuffer leaves alpha zero, so it must be marked opaque or
@@ -1613,6 +1618,13 @@ int main(int argc, char **argv) {
   }
 
   static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
+  uint32_t *hd_pixels = NULL;
+  size_t hd_capacity = (size_t)FZERO_MAX_WIDTH * kFrameHeight * texture_scale * texture_scale;
+  if (g_video.hd_mode7) {
+    hd_pixels = calloc(hd_capacity, sizeof(*hd_pixels));
+    if (!hd_pixels) Die("Unable to allocate HD Mode 7 frame");
+  }
+  FzeroSetMode7Hd(g_video.hd_mode7 ? g_video.hd_scale : 0, hd_pixels, hd_capacity);
   int drawable_width = 256 * window_scale, drawable_height = 192 * window_scale;
   if (use_gl_renderer)
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
@@ -1942,7 +1954,10 @@ int main(int argc, char **argv) {
           (unsigned long long)(missed_presentations + clock.missed_presentations), hz);
 
   const char *frame_dump = getenv("SNESRECOMP_FRAME_BMP");
-  if (!write_frame_bmp(frame_dump, pixels, logical_width, kFrameHeight))
+  const uint32_t *hd_dump = FzeroHdFrame();
+  unsigned dump_scale = FzeroHdScale();
+  if (!write_frame_bmp(frame_dump, hd_dump ? (const uint8_t *)hd_dump : pixels,
+                       logical_width * (int)dump_scale, kFrameHeight * (int)dump_scale))
     fprintf(stderr, "Unable to write frame dump: %s\n", frame_dump);
   const char *ram_dump = getenv("SNESRECOMP_WRAM_DUMP");
   if (ram_dump && ram_dump[0]) {
@@ -1952,6 +1967,8 @@ int main(int argc, char **argv) {
     if (dump) fclose(dump);
   }
   RtlWriteSram();
+  FzeroSetMode7Hd(0, NULL, 0);
+  free(hd_pixels);
   debug_server_shutdown();
   snesrecomp_sdl_pause_audio_device(audio, true);
 #if SNESRECOMP_SDL3

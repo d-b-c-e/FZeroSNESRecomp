@@ -7,6 +7,7 @@ static FzeroViewport g_viewport;
 /* Presentation blend for the sequence mode. The desktop host presents between
  * simulations, so 1 alone never exercises the interpolated path. */
 static double g_alpha = 1;
+static unsigned g_scale = 1;
 
 /* Writes the frame and reports how many of its stock columns differ from the
  * PPU's own output. That count is a diagnostic, not an I/O failure: only a
@@ -16,15 +17,16 @@ static int write_ppm(const uint32_t *output, const char *path,
   FzeroViewport v = g_viewport;
   FILE *f = fopen(path, "wb");
   if (!f) return 4;
-  fprintf(f, "P6\n%d 224\n255\n", v.width);
+  int width = v.width * (int)g_scale, height = 224 * (int)g_scale;
+  fprintf(f, "P6\n%d %d\n255\n", width, height);
   *differences = 0;
-  for (int y = 0; y < 224; ++y) {
+  for (int y = 0; y < height; ++y) {
     unsigned row_differences = 0;
-    for (int x = 0; x < v.width; ++x) {
-      uint32_t p = output[y * v.width + x];
+    for (int x = 0; x < width; ++x) {
+      uint32_t p = output[y * width + x];
       unsigned char rgb[3] = {(unsigned char)(p >> 16), (unsigned char)(p >> 8), (unsigned char)p};
       if (fwrite(rgb, 3, 1, f) != 1) { fclose(f); return 4; }
-      if (v.width == 256 && p != FzeroRendererStockFrame()[y * 256 + x]) ++row_differences;
+      if (g_scale == 1 && v.width == 256 && p != FzeroRendererStockFrame()[y * 256 + x]) ++row_differences;
     }
     if (row_differences && report) fprintf(stderr, "row %d: %u differing pixels\n", y, row_differences);
     *differences += row_differences;
@@ -38,18 +40,26 @@ static int write_ppm(const uint32_t *output, const char *path,
 static int render_one(const char *capture, const char *output,
                       unsigned *differences, bool report) {
   if (!FzeroRendererLoadCapture(capture)) return 2;
-  static uint32_t pixels[FZERO_MAX_WIDTH * 224];
-  if (!FzeroRendererDraw(pixels, g_viewport, g_alpha)) return 3;
+  static uint32_t pixels[FZERO_MAX_WIDTH * 224 * 16];
+  bool ok = g_scale == 1 ? FzeroRendererDraw(pixels, g_viewport, g_alpha) :
+      FzeroRendererDrawHd(pixels, sizeof(pixels) / sizeof(*pixels), g_viewport, g_alpha, g_scale);
+  if (!ok) return 3;
   return write_ppm(pixels, output, differences, report);
 }
 
 static void usage(void) {
   fputs("usage: FZeroRenderCapture capture.bin aspect output.ppm\n"
-        "       FZeroRenderCapture --sequence[=alpha] aspect output-directory capture.bin...\n",
+        "       FZeroRenderCapture --sequence[=alpha] aspect output-directory capture.bin...\n"
+        "       Set FZERO_HD_SCALE=2 or 4 to render HD Mode 7.\n",
         stderr);
 }
 
 int main(int argc, char **argv) {
+  const char *scale = getenv("FZERO_HD_SCALE");
+  if (scale && *scale) {
+    if (strcmp(scale, "2") && strcmp(scale, "4")) { usage(); return 2; }
+    g_scale = (unsigned)(scale[0] - '0');
+  }
   bool sequence = argc > 1 && strncmp(argv[1], "--sequence", 10) == 0 &&
                   (argv[1][10] == 0 || argv[1][10] == '=');
   if (sequence && argv[1][10] == '=') {
@@ -72,7 +82,9 @@ int main(int argc, char **argv) {
   if (!sequence) {
     int status = render_one(argv[1], argv[3], &differences, true);
     if (status) return status;
-    if (g_viewport.width == 256)
+    if (g_scale > 1)
+      fprintf(stderr, "HD Mode 7 capture: %dx%u\n", g_viewport.width * (int)g_scale, 224 * g_scale);
+    else if (g_viewport.width == 256)
       fprintf(stderr, "native capture: width=256 stock_diff_pixels=%u\n", differences);
     else
       fprintf(stderr, "native capture: width=%d (wide output, no stock comparison)\n",

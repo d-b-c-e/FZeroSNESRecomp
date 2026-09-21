@@ -36,3 +36,6 @@ int FzeroLastLleResult(void);
 void FzeroSetViewport(FzeroViewport viewport);
 void FzeroPresent(double alpha);
 void FzeroSetDeferredPresentation(bool deferred);
+void FzeroSetMode7Hd(unsigned scale, uint32_t *pixels, size_t capacity);
+const uint32_t *FzeroHdFrame(void);
+unsigned FzeroHdScale(void);
