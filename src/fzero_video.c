@@ -11,16 +11,17 @@
 
 static const char *const aspect_names[] = {"4:3", "16:9", "21:9", "32:9", "Fit"};
 
-/* Shipped defaults (owner request 2026-09-18): every mod on, aspect follows
+/* Existing mods stay on; HD Mode 7 is a separate opt-in. Aspect follows
  * the window, presentation rate follows the display. Hosts that need the
  * stock baseline (headless captures, tools) call FzeroVideoStock(). */
 void FzeroVideoDefaults(FzeroVideoSettings *s) {
   *s = (FzeroVideoSettings){.enhanced = true, .aspect = FZERO_ASPECT_FIT,
-                            .fps = 0, .fps_enabled = true, .bs_deluxe = true};
+                            .fps = 0, .fps_enabled = true, .bs_deluxe = true,
+                            .hd_scale = 2};
 }
 
 void FzeroVideoStock(FzeroVideoSettings *s) {
-  *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_STOCK};
+  *s = (FzeroVideoSettings){.aspect = FZERO_ASPECT_STOCK, .hd_scale = 2};
 }
 
 const char *FzeroAspectName(FzeroAspect aspect) {
@@ -97,6 +98,12 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
       has_fps_toggle = true;
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->fps_enabled = value[0] == '1';
       else valid = false;
+    } else if (!strcmp(key, "HDMode7")) {
+      if (!strcmp(value, "0") || !strcmp(value, "1")) s->hd_mode7 = value[0] == '1';
+      else valid = false;
+    } else if (!strcmp(key, "HDMode7Scale")) {
+      if (!strcmp(value, "2") || !strcmp(value, "4")) s->hd_scale = (unsigned)(value[0] - '0');
+      else valid = false;
     } else if (!strcmp(key, "BSDeluxe")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->bs_deluxe = value[0] == '1';
       else valid = false;
@@ -120,8 +127,9 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary)) return false;
   FILE *f = fopen(temporary, "w");
   if (!f) return false;
-  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\n",
-                    s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe) > 0;
+  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\n",
+                    s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe,
+                    s->hd_mode7, s->hd_scale == 4 ? 4u : 2u) > 0;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

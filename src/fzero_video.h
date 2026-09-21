@@ -21,6 +21,8 @@ typedef struct FzeroVideoSettings {
   unsigned fps; /* 0 = display refresh (Auto). */
   bool fps_enabled;
   bool bs_deluxe; /* Launch-time content selection. */
+  bool hd_mode7; /* Independent, opt-in spatial resolution enhancement. */
+  unsigned hd_scale; /* 2 or 4; retained while disabled. */
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {
@@ -31,7 +33,7 @@ typedef struct FzeroViewport {
 
 typedef struct FzeroRect { int x, y, w, h; } FzeroRect;
 
-void FzeroVideoDefaults(FzeroVideoSettings *settings); /* shipped: all mods on, Fit */
+void FzeroVideoDefaults(FzeroVideoSettings *settings); /* shipped: Fit; HD Mode 7 opt-in */
 void FzeroVideoStock(FzeroVideoSettings *settings);    /* stock 4:3, no mods */
 const char *FzeroAspectName(FzeroAspect aspect);
 bool FzeroParseAspect(const char *text, FzeroAspect *aspect);

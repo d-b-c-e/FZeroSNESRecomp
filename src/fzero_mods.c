@@ -9,40 +9,41 @@ static char error_text[128];
 static const char *const aspects[] = {"16:9", "21:9", "32:9", "Fit"};
 static const char *const rates[] = {"Auto", "60", "90", "120", "144", "165", "240", "360"};
 #define COPY(field, value) snprintf(field, sizeof(field), "%s", value)
-static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe"};
-static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe"};
-static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe"};
+static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe", "fzero-hd-mode7"};
+static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe", "hd-mode7"};
+static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe", "HD Mode 7"};
 static const char *const descriptions[] = {
   "Expand the race view and anchor the HUD at its outer edges.",
   "Choose the presentation rate independently of widescreen and game speed.",
-  "Full BS Deluxe v1.1: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves."
+  "Full BS Deluxe v1.1: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves.",
+  "Render the track at higher resolution with smoother scanline geometry. Works independently of widescreen and presentation FPS."
 };
-static int count(void *ctx) { (void)ctx; return 3; }
+static int count(void *ctx) { (void)ctx; return 4; }
 static int identity(const char *package, const char *feature) {
-  if (package && feature) for (int i = 0; i < 3; ++i)
+  if (package && feature) for (int i = 0; i < 4; ++i)
     if (!strcmp(package, packages[i]) && !strcmp(feature, features[i])) return i + 1;
   return 0;
 }
 static int package_get(void *ctx, int index, RecompLauncherCModPackage *out) {
   (void)ctx;
-  if (index < 0 || index > 2 || !out) return 0;
+  if (index < 0 || index > 3 || !out) return 0;
   memset(out, 0, sizeof(*out));
   COPY(out->id, packages[index]); COPY(out->version, "1");
   COPY(out->name, names[index]); COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   return 1;
 }
 static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
   (void)ctx;
-  if (index < 0 || index > 2 || !out) return 0;
+  if (index < 0 || index > 3 || !out) return 0;
   memset(out, 0, sizeof(*out));
   COPY(out->id, features[index]); COPY(out->package_id, packages[index]);
   COPY(out->package_name, names[index]); COPY(out->package_version, "1");
   COPY(out->name, names[index]); COPY(out->group, index == 2 ? "Content" : "Presentation");
   COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   COPY(out->status, out->enabled ? "Enabled" : "Disabled");
   out->option_count = index == 2 ? 0 : 1;
   return 1;
@@ -60,6 +61,11 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
     /* Must track FzeroVideoDefaults, or the launcher marks the wrong choice. */
     COPY(out->default_value, FzeroAspectName(FZERO_ASPECT_FIT));
     out->choice_count = 4;
+  } else if (kind == 4) {
+    COPY(out->id, "scale"); COPY(out->label, "Resolution");
+    COPY(out->description, "2x or 4x per dimension. Higher resolution requires more rendering time.");
+    COPY(out->value, video->hd_scale == 4 ? "4x" : "2x");
+    COPY(out->default_value, "2x"); out->choice_count = 2;
   } else {
     COPY(out->id, "fps"); COPY(out->label, "Presentation FPS");
     COPY(out->description, "Auto follows display refresh, up to 360 FPS.");
@@ -76,6 +82,7 @@ static int choice_get(void *ctx, const char *package, const char *feature,
   const char *value = NULL;
   if (identity(package, feature) == 1 && !strcmp(option, "aspect") && index < 4) value = aspects[index];
   if (identity(package, feature) == 2 && !strcmp(option, "fps") && index < 8) value = rates[index];
+  if (identity(package, feature) == 4 && !strcmp(option, "scale") && index < 2) value = index ? "4x" : "2x";
   if (!value) return 0;
   memset(out, 0, sizeof(*out)); COPY(out->value, value);
   COPY(out->label, !strcmp(value, "Fit") ? "Fit to window" : value);
@@ -84,7 +91,8 @@ static int choice_get(void *ctx, const char *package, const char *feature,
 static int enable(void *ctx, const char *package, const char *feature, int enabled) {
   (void)ctx;
   if (!identity(package, feature)) return 0;
-  if (identity(package, feature) == 3) video->bs_deluxe = enabled != 0;
+  if (identity(package, feature) == 4) video->hd_mode7 = enabled != 0;
+  else if (identity(package, feature) == 3) video->bs_deluxe = enabled != 0;
   else if (identity(package, feature) == 2) video->fps_enabled = enabled != 0;
   else {
     video->enhanced = enabled != 0;
@@ -99,6 +107,10 @@ static int set_option(void *ctx, const char *package, const char *feature,
   if (identity(package, feature) == 1 && !strcmp(option, "aspect")) {
     for (unsigned i = 0; i < 4; ++i) if (!strcmp(value, aspects[i]))
       return FzeroParseAspect(value, &video->aspect);
+  } else if (identity(package, feature) == 4 && !strcmp(option, "scale")) {
+    if (!strcmp(value, "2x") || !strcmp(value, "4x")) {
+      video->hd_scale = (unsigned)(value[0] - '0'); return 1;
+    }
   } else if (identity(package, feature) == 2 && !strcmp(option, "fps")) {
     for (unsigned i = 0; i < 8; ++i) if (!strcmp(value, rates[i])) {
       video->fps = i ? (unsigned)atoi(value) : 0; return 1;

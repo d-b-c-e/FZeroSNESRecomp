@@ -1,7 +1,9 @@
 #include "fzero_renderer.h"
 #include "fzero_mode7.h"
+#include "snes/mode7_hd.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +40,7 @@ bool FzeroRendererLoadCapture(const char *path) {
   return ok;
 }
 const uint32_t *FzeroRendererStockFrame(void) { return frames[current].stock; }
+bool FzeroRendererHasFrame(void) { return frames[current].valid; }
 
 void FzeroRendererReset(void) {
   frames[0].valid = frames[1].valid = false;
@@ -462,12 +465,42 @@ static uint32_t colour(const Ppu *p, const uint16_t *palette, uint16_t main,
   return result;
 }
 
-bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
+static FzeroMode7Line hd_transform(const FzeroSourceFrame *frame, int y) {
+  const uint8_t *registers = frame->lines[y].registers;
+  int16_t matrix[8];
+  memcpy(matrix, registers + offsetof(Ppu, m7matrix), sizeof(matrix));
+  SnesMode7HdTransform t = SnesMode7HdMakeTransform(
+      matrix, registers[offsetof(Ppu, m7sel)], (unsigned)y + 1);
+  return (FzeroMode7Line){t.origin_x * 256, t.origin_y * 256,
+                         t.step_x * 256, t.step_y * 256, t.control};
+}
+
+static FzeroMode7Line hd_frame_transform(const FzeroSourceFrame *frame,
+                                         const FzeroSourceFrame *previous,
+                                         int y, double alpha, bool interpolate) {
+  FzeroMode7Line t = hd_transform(frame, y);
+  if (interpolate && alpha < 1 &&
+      (previous->lines[y].registers[offsetof(Ppu, bgmode)] & 7) == 7)
+    t = FzeroMode7Interpolate(hd_transform(previous, y), t, alpha);
+  return t;
+}
+
+static void expand_line(uint32_t *out, const uint32_t *row,
+                        int y, int width, unsigned scale) {
+  uint32_t *first = out + (size_t)y * scale * width * scale;
+  for (int x = 0; x < width; ++x)
+    for (unsigned sx = 0; sx < scale; ++sx) first[x * scale + sx] = row[x];
+  for (unsigned sy = 1; sy < scale; ++sy)
+    memcpy(first + (size_t)sy * width * scale, first, (size_t)width * scale * sizeof(*out));
+}
+
+static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
+                          unsigned scale) {
   const FzeroSourceFrame *f = &frames[current];
   const FzeroSourceFrame *previous = &frames[current ^ 1];
   if (!f->valid || !out || viewport.width < 256 || viewport.width > FZERO_MAX_WIDTH ||
       viewport.width != 256 + 2 * viewport.extra) return false;
-  memset(out, 0, (size_t)viewport.width * 224 * sizeof(*out));
+  memset(out, 0, (size_t)viewport.width * 224 * scale * scale * sizeof(*out));
   /* $81 selects live track scenery on the title screen as well as in races.
    * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
   bool scenery = f->ram[0x81] != 0;
@@ -505,6 +538,7 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
    * only a live race scene has course tables to resolve it from. */
   FzeroCourse course = course_open(f, world && viewport.enhanced);
   uint16_t object_pixels[FZERO_MAX_WIDTH];
+  uint32_t row[FZERO_MAX_WIDTH];
   for (int y = 0; y < 224; ++y) {
     const FzeroRasterLine *l = &f->lines[y];
     memcpy(&scanout, l->registers, PPU_SAVESTATE_REGS_SIZE);
@@ -514,9 +548,10 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       /* Flat selection/loading screens keep their original centered artwork,
        * but their backdrop, fades and colour windows cover the full viewport. */
       for (int sx = 0; sx < viewport.width; ++sx)
-        out[y * viewport.width + sx] = colour(&scanout, l->palette, 0x500, 0x500,
+        row[sx] = colour(&scanout, l->palette, 0x500, 0x500,
             in_window(&scanout, 5, sx - viewport.extra, viewport.extra));
-      memcpy(out + y * viewport.width + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
+      memcpy(row + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
+      expand_line(out, row, y, viewport.width, scale);
       continue;
     }
     FzeroMode7Line transform = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, y + 1);
@@ -591,19 +626,84 @@ bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
       if (race_hud && mode == 1 && y >= 19 && y <= 27 &&
           scanout.window1left >= 176 && scanout.window1right <= 239)
         colour_x -= viewport.extra;
-      out[y * viewport.width + sx] = colour(&scanout, l->palette, screens[0], screens[1],
+      row[sx] = colour(&scanout, l->palette, screens[0], screens[1],
           in_window(&scanout, 5, colour_x, results ? 0 : viewport.extra));
     }
     /* Preserve the meter's composed fill, including its fixed-colour HDMA,
      * without letting a different section of skyline show through it. */
     if (race_hud && viewport.enhanced && mode == 1 && y >= 19 && y <= 27)
-      memcpy(out + y * viewport.width + 176 + 2 * viewport.extra,
+      memcpy(row + 176 + 2 * viewport.extra,
              f->stock + y * 256 + 176, 64 * sizeof(*out));
     /* Title/menu graphics remain an exact centered group. Only their live
      * scenery expands; hidden/reused OBJ reservations cannot leak into it. */
     if (!world && !results)
-      memcpy(out + y * viewport.width + viewport.extra,
+      memcpy(row + viewport.extra,
              f->stock + y * 256, 256 * sizeof(*out));
+    expand_line(out, row, y, viewport.width, scale);
+    if (scale == 1 || !world || mode != 7 ||
+        ((scanout.mosaic & 1) && (scanout.mosaic >> 4)) ||
+        (scanout.setini & 0x49) || (scanout.cgwsel & 1)) continue;
+
+    FzeroMode7Line hd = hd_frame_transform(f, previous, y, alpha, interpolate);
+    FzeroMode7Line next = hd;
+    bool adjacent = false;
+    if (y + 1 < 224) {
+      const uint8_t *next_registers = f->lines[y + 1].registers;
+      /* Smooth only the same camera's contiguous Mode 7 band. HUD, IRQ
+       * splits, flips, fades and changes of coordinate origin are boundaries. */
+      adjacent = (next_registers[offsetof(Ppu, bgmode)] & 7) == 7 &&
+          next_registers[offsetof(Ppu, m7sel)] == scanout.m7sel &&
+          next_registers[offsetof(Ppu, inidisp)] == scanout.inidisp &&
+          next_registers[offsetof(Ppu, setini)] == scanout.setini &&
+          next_registers[offsetof(Ppu, mosaic)] == scanout.mosaic &&
+          !memcmp(next_registers + offsetof(Ppu, m7matrix) + 8, scanout.m7matrix + 4, 8);
+      if (adjacent) next = hd_frame_transform(f, previous, y + 1, alpha, interpolate);
+    }
+    SnesMode7HdTransform affine = SnesMode7HdMakeTransform(
+        scanout.m7matrix, scanout.m7sel, (unsigned)y + 1);
+    for (unsigned sy = 0; sy < scale; ++sy) {
+      double fraction = (double)sy / scale;
+      FzeroMode7Line subline = hd;
+      if (adjacent) subline = FzeroMode7Interpolate(hd, next, fraction);
+      else {
+        subline.origin_x += affine.row_x * fraction * 256;
+        subline.origin_y += affine.row_y * fraction * 256;
+      }
+      uint32_t *destination = out + ((size_t)y * scale + sy) * viewport.width * scale;
+      for (int sx = 0; sx < viewport.width; ++sx) {
+        int x = sx - viewport.extra;
+        for (unsigned sample = 0; sample < scale; ++sample) {
+          FzeroMode7Texel texel = FzeroMode7Locate(&subline, x + (double)sample / scale);
+          unsigned index = FzeroMode7Fetch(&subline, f->vram, texel,
+              course_sample(&course, &reference, &cache, texel));
+          uint16_t screens[2] = {0x500, 0x500};
+          for (int sub = 0; sub < 2; ++sub) {
+            if ((scanout.screenEnabled[sub] & 1) && index &&
+                (!(scanout.screenWindowed[sub] & 1) ||
+                 !in_window(&scanout, 0, x, viewport.extra)))
+              screens[sub] = (uint16_t)(0x5000 | index);
+            if ((scanout.screenEnabled[sub] & 16) &&
+                (!(scanout.screenWindowed[sub] & 16) ||
+                 !in_window(&scanout, 4, x, viewport.extra)) &&
+                object_pixels[sx] > screens[sub]) screens[sub] = object_pixels[sx];
+          }
+          destination[sx * scale + sample] = colour(&scanout, l->palette,
+              screens[0], screens[1], in_window(&scanout, 5, x, viewport.extra));
+        }
+      }
+    }
   }
   return true;
+}
+
+bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
+  return render_frame(out, viewport, alpha, 1);
+}
+
+bool FzeroRendererDrawHd(uint32_t *out, size_t capacity,
+                         FzeroViewport viewport, double alpha, unsigned scale) {
+  if ((scale != 2 && scale != 4) || viewport.width < 256 ||
+      viewport.width > FZERO_MAX_WIDTH ||
+      capacity < (size_t)viewport.width * 224 * scale * scale) return false;
+  return render_frame(out, viewport, alpha, scale);
 }
