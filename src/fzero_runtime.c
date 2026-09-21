@@ -349,10 +349,11 @@ void FzeroSetViewport(FzeroViewport viewport) {
 }
 
 void FzeroPresent(double alpha) {
-  if (s_viewport.enhanced && s_output_pixels)
-    FzeroRendererDraw((uint32_t *)s_output_pixels, s_viewport, alpha);
   s_hd_ready = s_hd_scale && s_hd_pixels &&
-      FzeroRendererDrawHd(s_hd_pixels, s_hd_capacity, s_viewport, alpha, s_hd_scale);
+      FzeroRendererDrawPresentation(s_viewport.enhanced ? (uint32_t *)s_output_pixels : NULL,
+          s_hd_pixels, s_hd_capacity, s_viewport, alpha, s_hd_scale);
+  if (!s_hd_ready && s_viewport.enhanced && s_output_pixels)
+    FzeroRendererDraw((uint32_t *)s_output_pixels, s_viewport, alpha);
 }
 void FzeroSetDeferredPresentation(bool deferred) { s_deferred_presentation = deferred; }
 

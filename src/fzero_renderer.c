@@ -494,13 +494,20 @@ static void expand_line(uint32_t *out, const uint32_t *row,
     memcpy(first + (size_t)sy * width * scale, first, (size_t)width * scale * sizeof(*out));
 }
 
+typedef struct FzeroHdPixelContext {
+  const uint32_t *colors;
+  uint16_t objects[2];
+  uint8_t flags; /* BG enabled on main/sub, then colour-window membership. */
+} FzeroHdPixelContext;
+
 static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
-                          unsigned scale) {
+                          unsigned scale, uint32_t *native) {
   const FzeroSourceFrame *f = &frames[current];
   const FzeroSourceFrame *previous = &frames[current ^ 1];
   if (!f->valid || !out || viewport.width < 256 || viewport.width > FZERO_MAX_WIDTH ||
       viewport.width != 256 + 2 * viewport.extra) return false;
   memset(out, 0, (size_t)viewport.width * 224 * scale * scale * sizeof(*out));
+  if (native) memset(native, 0, (size_t)viewport.width * 224 * sizeof(*native));
   /* $81 selects live track scenery on the title screen as well as in races.
    * Scene $54=2 additionally owns vehicle identity and adaptive race HUD. */
   bool scenery = f->ram[0x81] != 0;
@@ -552,6 +559,7 @@ static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
             in_window(&scanout, 5, sx - viewport.extra, viewport.extra));
       memcpy(row + viewport.extra, f->stock + y * 256, 256 * sizeof(*out));
       expand_line(out, row, y, viewport.width, scale);
+      if (native) memcpy(native + y * viewport.width, row, viewport.width * sizeof(*native));
       continue;
     }
     FzeroMode7Line transform = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, y + 1);
@@ -584,66 +592,104 @@ static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
               race_hud, results, object_pixels);
     else
       memset(object_pixels, 0, (size_t)viewport.width * sizeof(*object_pixels));
+    bool hd_line = scale > 1 && world && mode == 7 &&
+        !((scanout.mosaic & 1) && (scanout.mosaic >> 4)) &&
+        !(scanout.setini & 0x49) && !(scanout.cgwsel & 1);
+    if (!hd_line || native) {
+      for (int sx = 0; sx < viewport.width; ++sx) {
+        int x = sx - viewport.extra;
+        uint16_t screens[2] = {0x500, 0x500};
+        for (int sub = 0; sub < 2; ++sub) {
+          for (int layer = 0; layer < (mode == 7 ? 1 : 3); ++layer) {
+            if (!(scanout.screenEnabled[sub] & (1u << layer))) continue;
+            if ((scanout.screenWindowed[sub] & (1u << layer)) && in_window(&scanout, layer, x, viewport.extra)) continue;
+            uint16_t pixel;
+            if (mode == 7) {
+              FzeroMode7Texel texel = FzeroMode7Locate(&transform, x);
+              unsigned index = FzeroMode7Fetch(&transform, f->vram, texel,
+                  course_sample(&course, &reference, &cache, texel));
+              pixel = index ? 0x5000 | index : 0;
+            } else {
+              int bx = x;
+              if (layer == 2 && results && y < 32 && sx < 128) {
+                bx = sx; /* Top-left score; lap table/menu stays centered. */
+              } else if (layer == 2 && !race_hud) {
+                if (x < 0 || x >= 256 || (results && y < 32 && x < 128)) continue;
+              }
+              if (layer == 2 && race_hud) {
+                bx = sx < viewport.width / 2 ? sx : sx - 2 * viewport.extra;
+                if ((sx < viewport.width / 2 && bx >= 128) ||
+                    (sx >= viewport.width / 2 && bx < 128)) continue;
+              }
+              pixel = background_pixel(&scanout, f->vram, layer, bx, y + 1,
+                                       viewport.enhanced && (x < 0 || x >= 256));
+            }
+            if (pixel > screens[sub]) screens[sub] = pixel;
+          }
+          if ((scanout.screenEnabled[sub] & 16) &&
+              (!(scanout.screenWindowed[sub] & 16) || !in_window(&scanout, 4, x, viewport.extra)) &&
+              object_pixels[sx] > screens[sub]) screens[sub] = object_pixels[sx];
+        }
+        /* The power meter is filled by the colour window, not a BG tile.
+         * Its HDMA band must travel with the right-anchored BG3 outline. */
+        /* Loss keeps its score at the left edge, but its collapsed colour
+         * window must not expand into the former race meter/HDMA panel. */
+        int colour_x = results ? sx : x;
+        if (race_hud && mode == 1 && y >= 19 && y <= 27 &&
+            scanout.window1left >= 176 && scanout.window1right <= 239)
+          colour_x -= viewport.extra;
+        row[sx] = colour(&scanout, l->palette, screens[0], screens[1],
+            in_window(&scanout, 5, colour_x, results ? 0 : viewport.extra));
+      }
+      /* Preserve the meter's composed fill, including its fixed-colour HDMA,
+       * without letting a different section of skyline show through it. */
+      if (race_hud && viewport.enhanced && mode == 1 && y >= 19 && y <= 27)
+        memcpy(row + 176 + 2 * viewport.extra,
+               f->stock + y * 256 + 176, 64 * sizeof(*out));
+      /* Title/menu graphics remain an exact centered group. Only their live
+       * scenery expands; hidden/reused OBJ reservations cannot leak into it. */
+      if (!world && !results)
+        memcpy(row + viewport.extra,
+               f->stock + y * 256, 256 * sizeof(*out));
+      if (native) memcpy(native + y * viewport.width, row, viewport.width * sizeof(*native));
+      if (!hd_line) expand_line(out, row, y, viewport.width, scale);
+    }
+    if (!hd_line) continue;
+
+    /* Window membership and sprite priority are native-pixel properties.
+     * Resolve them once for all subpixels. In columns without sprites, the
+     * colour math depends only on the sampled palette index: cache that
+     * mapping per scanline/window combination, including transparent zero.
+     * Sprite columns retain the full main/subscreen colour calculation. */
+    FzeroHdPixelContext contexts[FZERO_MAX_WIDTH];
+    uint32_t colors[8][256];
+    unsigned colors_ready = 0;
     for (int sx = 0; sx < viewport.width; ++sx) {
       int x = sx - viewport.extra;
-      uint16_t screens[2] = {0x500, 0x500};
+      FzeroHdPixelContext *c = &contexts[sx];
+      c->flags = in_window(&scanout, 5, x, viewport.extra) ? 4 : 0;
       for (int sub = 0; sub < 2; ++sub) {
-        for (int layer = 0; layer < (mode == 7 ? 1 : 3); ++layer) {
-          if (!(scanout.screenEnabled[sub] & (1u << layer))) continue;
-          if ((scanout.screenWindowed[sub] & (1u << layer)) && in_window(&scanout, layer, x, viewport.extra)) continue;
-          uint16_t pixel;
-          if (mode == 7) {
-            FzeroMode7Texel texel = FzeroMode7Locate(&transform, x);
-            unsigned index = FzeroMode7Fetch(&transform, f->vram, texel,
-                course_sample(&course, &reference, &cache, texel));
-            pixel = index ? 0x5000 | index : 0;
-          } else {
-            int bx = x;
-            if (layer == 2 && results && y < 32 && sx < 128) {
-              bx = sx; /* Top-left score; lap table/menu stays centered. */
-            } else if (layer == 2 && !race_hud) {
-              if (x < 0 || x >= 256 || (results && y < 32 && x < 128)) continue;
-            }
-            if (layer == 2 && race_hud) {
-              bx = sx < viewport.width / 2 ? sx : sx - 2 * viewport.extra;
-              if ((sx < viewport.width / 2 && bx >= 128) ||
-                  (sx >= viewport.width / 2 && bx < 128)) continue;
-            }
-            pixel = background_pixel(&scanout, f->vram, layer, bx, y + 1,
-                                     viewport.enhanced && (x < 0 || x >= 256));
-          }
-          if (pixel > screens[sub]) screens[sub] = pixel;
-        }
-        if ((scanout.screenEnabled[sub] & 16) &&
-            (!(scanout.screenWindowed[sub] & 16) || !in_window(&scanout, 4, x, viewport.extra)) &&
-            object_pixels[sx] > screens[sub]) screens[sub] = object_pixels[sx];
+        if ((scanout.screenEnabled[sub] & 1) &&
+            (!(scanout.screenWindowed[sub] & 1) ||
+             !in_window(&scanout, 0, x, viewport.extra))) c->flags |= 1u << sub;
+        c->objects[sub] = (scanout.screenEnabled[sub] & 16) &&
+            (!(scanout.screenWindowed[sub] & 16) ||
+             !in_window(&scanout, 4, x, viewport.extra)) ? object_pixels[sx] : 0;
       }
-      /* The power meter is filled by the colour window, not a BG tile.
-       * Its HDMA band must travel with the right-anchored BG3 outline. */
-      /* Loss keeps its score at the left edge, but its collapsed colour
-       * window must not expand into the former race meter/HDMA panel. */
-      int colour_x = results ? sx : x;
-      if (race_hud && mode == 1 && y >= 19 && y <= 27 &&
-          scanout.window1left >= 176 && scanout.window1right <= 239)
-        colour_x -= viewport.extra;
-      row[sx] = colour(&scanout, l->palette, screens[0], screens[1],
-          in_window(&scanout, 5, colour_x, results ? 0 : viewport.extra));
+      c->colors = NULL;
+      if (!(c->objects[0] | c->objects[1])) {
+        unsigned key = c->flags;
+        if (!(colors_ready & (1u << key))) {
+          for (unsigned index = 0; index < 256; ++index)
+            colors[key][index] = colour(&scanout, l->palette,
+                (key & 1) && index ? (uint16_t)(0x5000 | index) : 0x500,
+                (key & 2) && index ? (uint16_t)(0x5000 | index) : 0x500,
+                (key & 4) != 0);
+          colors_ready |= 1u << key;
+        }
+        c->colors = colors[key];
+      }
     }
-    /* Preserve the meter's composed fill, including its fixed-colour HDMA,
-     * without letting a different section of skyline show through it. */
-    if (race_hud && viewport.enhanced && mode == 1 && y >= 19 && y <= 27)
-      memcpy(row + 176 + 2 * viewport.extra,
-             f->stock + y * 256 + 176, 64 * sizeof(*out));
-    /* Title/menu graphics remain an exact centered group. Only their live
-     * scenery expands; hidden/reused OBJ reservations cannot leak into it. */
-    if (!world && !results)
-      memcpy(row + viewport.extra,
-             f->stock + y * 256, 256 * sizeof(*out));
-    expand_line(out, row, y, viewport.width, scale);
-    if (scale == 1 || !world || mode != 7 ||
-        ((scanout.mosaic & 1) && (scanout.mosaic >> 4)) ||
-        (scanout.setini & 0x49) || (scanout.cgwsel & 1)) continue;
-
     FzeroMode7Line hd = hd_frame_transform(f, previous, y, alpha, interpolate);
     FzeroMode7Line next = hd;
     bool adjacent = false;
@@ -670,25 +716,32 @@ static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
         subline.origin_y += affine.row_y * fraction * 256;
       }
       uint32_t *destination = out + ((size_t)y * scale + sy) * viewport.width * scale;
+      FzeroMode7Texel last = {NAN, NAN};
+      unsigned index = 0;
       for (int sx = 0; sx < viewport.width; ++sx) {
         int x = sx - viewport.extra;
+        const FzeroHdPixelContext *c = &contexts[sx];
         for (unsigned sample = 0; sample < scale; ++sample) {
           FzeroMode7Texel texel = FzeroMode7Locate(&subline, x + (double)sample / scale);
-          unsigned index = FzeroMode7Fetch(&subline, f->vram, texel,
-              course_sample(&course, &reference, &cache, texel));
-          uint16_t screens[2] = {0x500, 0x500};
-          for (int sub = 0; sub < 2; ++sub) {
-            if ((scanout.screenEnabled[sub] & 1) && index &&
-                (!(scanout.screenWindowed[sub] & 1) ||
-                 !in_window(&scanout, 0, x, viewport.extra)))
-              screens[sub] = (uint16_t)(0x5000 | index);
-            if ((scanout.screenEnabled[sub] & 16) &&
-                (!(scanout.screenWindowed[sub] & 16) ||
-                 !in_window(&scanout, 4, x, viewport.extra)) &&
-                object_pixels[sx] > screens[sub]) screens[sub] = object_pixels[sx];
+          /* Near-camera HD samples often hit the same source texel. The
+           * immutable texture/course lookup is independent of screen masks
+           * and sprites, so reuse its index across those column boundaries. */
+          if (texel.x != last.x || texel.y != last.y) {
+            index = FzeroMode7Fetch(&subline, f->vram, texel,
+                course_sample(&course, &reference, &cache, texel));
+            last = texel;
           }
-          destination[sx * scale + sample] = colour(&scanout, l->palette,
-              screens[0], screens[1], in_window(&scanout, 5, x, viewport.extra));
+          if (c->colors) {
+            destination[sx * scale + sample] = c->colors[index];
+          } else {
+            uint16_t screens[2] = {0x500, 0x500};
+            for (int sub = 0; sub < 2; ++sub) {
+              if ((c->flags & (1u << sub)) && index) screens[sub] = (uint16_t)(0x5000 | index);
+              if (c->objects[sub] > screens[sub]) screens[sub] = c->objects[sub];
+            }
+            destination[sx * scale + sample] = colour(&scanout, l->palette,
+                screens[0], screens[1], (c->flags & 4) != 0);
+          }
         }
       }
     }
@@ -697,13 +750,18 @@ static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
 }
 
 bool FzeroRendererDraw(uint32_t *out, FzeroViewport viewport, double alpha) {
-  return render_frame(out, viewport, alpha, 1);
+  return render_frame(out, viewport, alpha, 1, NULL);
 }
 
 bool FzeroRendererDrawHd(uint32_t *out, size_t capacity,
                          FzeroViewport viewport, double alpha, unsigned scale) {
+  return FzeroRendererDrawPresentation(NULL, out, capacity, viewport, alpha, scale);
+}
+
+bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *out, size_t capacity,
+                                   FzeroViewport viewport, double alpha, unsigned scale) {
   if ((scale != 2 && scale != 4) || viewport.width < 256 ||
       viewport.width > FZERO_MAX_WIDTH ||
       capacity < (size_t)viewport.width * 224 * scale * scale) return false;
-  return render_frame(out, viewport, alpha, scale);
+  return render_frame(out, viewport, alpha, scale, native);
 }

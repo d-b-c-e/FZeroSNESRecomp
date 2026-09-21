@@ -11,6 +11,12 @@ bool FzeroRendererDraw(uint32_t *output, FzeroViewport viewport, double alpha);
 /* capacity is in pixels. Native UI/OBJ stay crisp; only Mode 7 is resampled. */
 bool FzeroRendererDrawHd(uint32_t *output, size_t capacity,
                          FzeroViewport viewport, double alpha, unsigned scale);
+#define FZERO_RENDERER_COMBINED_PRESENTATION 1
+/* Produce the native thumbnail/rewind frame and HD presentation together.
+ * native may be NULL; otherwise it holds width*224 pixels. Buffers must not
+ * overlap. hd_capacity is in pixels. Native composition stays exact. */
+bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *hd, size_t hd_capacity,
+                                   FzeroViewport viewport, double alpha, unsigned scale);
 bool FzeroRendererHasFrame(void);
 bool FzeroRendererLoadCapture(const char *path);
 const uint32_t *FzeroRendererStockFrame(void);

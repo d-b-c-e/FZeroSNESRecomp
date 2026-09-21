@@ -16,6 +16,7 @@ for filename in ("LICENSE", "README.md", "CHANGELOG.md", "VERSION"):
     shutil.copy2(ROOT / filename, docs / filename)
 (docs / "docs").mkdir()
 shutil.copy2(ROOT / "docs/HD_MODE7.md", docs / "docs/HD_MODE7.md")
+shutil.copy2(ROOT / "docs/HD_MODE7_PERFORMANCE.md", docs / "docs/HD_MODE7_PERFORMANCE.md")
 for name, source in {
     "snesrecomp": ROOT / "snesrecomp/LICENSE",
     "recomp-ui": ROOT / "recomp-ui/LICENSE",

@@ -63,7 +63,7 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
     out->choice_count = 4;
   } else if (kind == 4) {
     COPY(out->id, "scale"); COPY(out->label, "Resolution");
-    COPY(out->description, "2x or 4x per dimension. Higher resolution requires more rendering time.");
+    COPY(out->description, "2x or 4x per dimension. Wider views and higher Presentation FPS cost more CPU time.");
     COPY(out->value, video->hd_scale == 4 ? "4x" : "2x");
     COPY(out->default_value, "2x"); out->choice_count = 2;
   } else {

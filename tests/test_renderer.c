@@ -493,6 +493,61 @@ static void test_hd_mode7(void) {
   CHECK(!FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, 2));
 }
 
+static void test_hd_composition_cache(void) {
+  static uint32_t native[FZERO_MAX_WIDTH * 224 + 2];
+  static uint32_t hd[FZERO_MAX_WIDTH * 224 * 16 + 2];
+  static uint32_t hd_only[FZERO_MAX_WIDTH * 224 * 16];
+  FzeroViewport v = {342, 43, 16.0 / 9.0, true};
+  size_t count = (size_t)v.width * 224;
+  for (unsigned scenario = 0; scenario < 64; ++scenario) {
+    setup();
+    ram[0x55] = 3;
+    for (unsigned i = 0; i < 0x8000; ++i) p.vram[i] = (i & 63) << 8;
+    for (unsigned i = 0; i < 256; ++i) p.cgram[i] = (i * 619 + 37) & 0x7fff;
+    p.inidisp = scenario % 16;
+    p.m7sel = (scenario & 3) | ((scenario & 16) ? 0x80 : 0) |
+        ((scenario & 32) ? 0x40 : 0);
+    p.screenEnabled[0] = (scenario & 1 ? 1 : 0) | (scenario & 2 ? 16 : 0);
+    p.screenEnabled[1] = (scenario & 4 ? 1 : 0) | (scenario & 8 ? 16 : 0);
+    p.screenWindowed[0] = scenario * 13;
+    p.screenWindowed[1] = scenario * 23;
+    p.windowsel = scenario * 0x194ad;
+    p.wbgobjlog = scenario * 751;
+    p.window1left = 60; p.window1right = 173;
+    p.window2left = 99; p.window2right = 255;
+    p.cgadsub = scenario * 37;
+    p.cgwsel = (scenario * 14) & 0xfe;
+    p.fixedColor = (scenario * 1739) & 0x7fff;
+    p.oam[0] = (80 << 8) | 100;
+    p.oam[1] = 64 | ((scenario & 3) << 12) | 0xe00;
+    p.highOam[0] &= ~3;
+    publish(scenario + 1);
+    CHECK(FzeroRendererDraw(guarded + 1, v, 1));
+    for (unsigned scale = 2; scale <= 4; scale *= 2) {
+      size_t hd_count = count * scale * scale;
+      native[0] = native[count + 1] = hd[0] = hd[hd_count + 1] = 0xdeadbeef;
+      native[1] = hd[1] = 0xdeadbeef;
+      CHECK(!FzeroRendererDrawPresentation(native + 1, hd + 1, hd_count - 1, v, 1, scale));
+      CHECK(native[1] == 0xdeadbeef && hd[1] == 0xdeadbeef);
+      CHECK(FzeroRendererDrawPresentation(native + 1, hd + 1, hd_count, v, 1, scale));
+      CHECK(native[0] == 0xdeadbeef && native[count + 1] == 0xdeadbeef);
+      CHECK(hd[0] == 0xdeadbeef && hd[hd_count + 1] == 0xdeadbeef);
+      CHECK(!memcmp(native + 1, guarded + 1, count * sizeof(*native)));
+      /* With integral transforms, each HD pixel's first subpixel lands on
+       * the exact native texel. The native compositor is the independent
+       * oracle for windows, OBJ priority, transparency and colour math. */
+      for (int y = 0; y < 224; ++y) for (int x = 0; x < v.width; ++x)
+        CHECK(hd[1 + ((size_t)y * scale * v.width + x) * scale] == native[1 + y * v.width + x]);
+      CHECK(FzeroRendererDrawHd(hd_only, hd_count, v, 1, scale));
+      CHECK(!memcmp(hd + 1, hd_only, hd_count * sizeof(*hd)));
+    }
+  }
+  setup(); p.inidisp = 128; publish(70);
+  CHECK(FzeroRendererDrawPresentation(native + 1, hd + 1, count * 4, v, 1, 2));
+  for (size_t i = 0; i < count; ++i) CHECK(native[1 + i] == 0);
+  for (size_t i = 0; i < count * 4; ++i) CHECK(hd[1 + i] == 0);
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -546,6 +601,7 @@ int main(void) {
   test_course_streaming();
   test_player_spark();
   test_hd_mode7();
+  test_hd_composition_cache();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

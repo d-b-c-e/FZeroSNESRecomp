@@ -73,6 +73,7 @@ shutil.copy2(ROOT / "docs/ADAPTIVE_RENDERER.md", stage / "docs/ADAPTIVE_RENDERER
 shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXPLORATION.md")
 shutil.copy2(ROOT / "docs/SAVE_STATES.md", stage / "docs/SAVE_STATES.md")
 shutil.copy2(ROOT / "docs/HD_MODE7.md", stage / "docs/HD_MODE7.md")
+shutil.copy2(ROOT / "docs/HD_MODE7_PERFORMANCE.md", stage / "docs/HD_MODE7_PERFORMANCE.md")
 screenshots = ROOT / "docs/screenshots"
 if screenshots.is_dir():
     shutil.copytree(screenshots, stage / "docs/screenshots")

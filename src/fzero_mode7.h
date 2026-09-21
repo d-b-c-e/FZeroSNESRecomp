@@ -37,10 +37,17 @@ static inline uint8_t FzeroMode7Fetch(const FzeroMode7Line *line,
   if (!isfinite(qx) || !isfinite(qy)) return 0;
   bool outside = qx < 0 || qx >= 1024 || qy < 0 || qy >= 1024;
   if (outside && (line->control & 0x80) && !(line->control & 0x40)) return 0;
-  /* Reduce before conversion so even an invalid large transform cannot
-   * overflow the integer conversion or escape the immutable VRAM snapshot. */
-  int tx = (int)fmod(qx, 1024), ty = (int)fmod(qy, 1024);
-  tx = (tx + 1024) & 1023; ty = (ty + 1024) & 1023;
+  /* Locate already produces whole texels. Ordinary camera coordinates fit
+   * an int, so power-of-two wrapping needs no floating remainder per sample.
+   * Keep reduction before conversion for oversized diagnostic transforms. */
+  int tx, ty;
+  if (qx > -1073741824.0 && qx < 1073741824.0 &&
+      qy > -1073741824.0 && qy < 1073741824.0) {
+    tx = (int)qx & 1023; ty = (int)qy & 1023;
+  } else {
+    tx = ((int)fmod(qx, 1024) + 1024) & 1023;
+    ty = ((int)fmod(qy, 1024) + 1024) & 1023;
+  }
   unsigned number = outside && (line->control & 0x80) ? 0 :
       tile >= 0 ? (unsigned)tile & 255 : vram[(ty / 8) * 128 + tx / 8] & 255;
   return vram[number * 64 + (ty & 7) * 8 + (tx & 7)] >> 8;

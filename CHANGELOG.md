@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## Unreleased
+
+- Reduce HD Mode 7 CPU cost with Widescreen by sharing native/HD composition,
+  caching scanline color math and repeated texture lookups, and using integer
+  wrapping for ordinary texture coordinates. Rendering remains pixel-identical
+  in baseline comparisons; ultrawide views and high Presentation FPS still
+  increase the workload. See [performance measurements](docs/HD_MODE7_PERFORMANCE.md).
+
 ## 1.8.0 - 2026-09-20
 
 - Add optional HD Mode 7 track rendering at 2x or 4x resolution. Enable it

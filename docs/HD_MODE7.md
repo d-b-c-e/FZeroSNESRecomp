@@ -27,6 +27,12 @@ sprite artwork. It is an original implementation, not imported bsnes code.
 high presentation FPS. Start at 2x. Both SDL and OpenGL/shader presentation
 receive the actual enlarged texture; display aspect ratio stays the same.
 
+Presentation FPS also multiplies the rendering work. Its Auto setting follows
+the display's refresh rate, so a 120/240 Hz display requests more HD frames
+than a 60 Hz display. For a slower machine, keep Widescreen enabled and start
+with HD Mode 7 at 2x and Presentation FPS at 60. Wider views and 4x still need
+more CPU time. See [performance measurements and reproduction](HD_MODE7_PERFORMANCE.md).
+
 For offline checks, `FZeroRenderCapture` accepts `FZERO_HD_SCALE=2` or `4`.
 Unset it for the original output. Its existing sequence mode also exercises
 frame interpolation. The renderer tests cover additional source detail,

@@ -61,6 +61,19 @@ int main(void) {
     CHECK(FzeroMode7Fetch(&line, vram, texel, 256) == 200); /* tile is 8-bit */
   }
   line = (FzeroMode7Line){0};
+  /* Integer wrapping and the oversized-coordinate fallback agree with the
+   * map's periodicity on either side of zero and the safe-cast boundary. */
+  const double coordinates[] = {-1e100, -2147483649.0, -1073741824.0,
+      -1073741823.0, -1024.75, -1023.25, -1, 0, 1, 1023, 1024,
+      1073741823.0, 1073741824.0, 2147483648.0, 1e100};
+  for (unsigned i = 0; i < sizeof(coordinates) / sizeof(*coordinates); ++i) {
+    double x = coordinates[i];
+    int column = ((int)fmod(x, 1024) + 1024) & 7;
+    CHECK(FzeroMode7Fetch(&line, vram, (FzeroMode7Texel){x, 3}, -1) == 25 + column);
+    CHECK(FzeroMode7Fetch(&line, vram, (FzeroMode7Texel){3, x}, -1) == 4 + 8 * column);
+  }
+  CHECK(FzeroMode7Fetch(&line, vram, (FzeroMode7Texel){INFINITY, 0}, -1) == 0);
+  CHECK(FzeroMode7Fetch(&line, vram, (FzeroMode7Texel){0, -INFINITY}, -1) == 0);
   CHECK(!FzeroMode7Project(&line, 1, 1, &sx, &residual));
   line.origin_x = NAN;
   CHECK(FzeroMode7Sample(&line, vram, 0) == 0);
