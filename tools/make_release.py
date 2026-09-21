@@ -174,7 +174,9 @@ for font in (stage / "assets/fonts").glob("*.ttf"):
                 records.append(text)
     (notices / (font.stem + ".txt")).write_text("\n\n".join(records), encoding="utf-8")
 
-git = "C:/Program Files/Git/mingw64/bin/git.exe"
+git = shutil.which("git")
+if git is None:
+    raise SystemExit("Git is required to record release source and dependency pins")
 commit = subprocess.check_output([git, "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
 pins = {name: subprocess.check_output([git, "rev-parse", "HEAD"],
                                      cwd=ROOT / name, text=True).strip()
