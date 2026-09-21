@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## 1.7.1 - 2026-09-20
+
+- Remember ROMs selected with Browse For ROM after both Play and closing the
+  launcher (#8). The shared recomp-ui launcher now saves the verified source
+  ROM path; cancelling or selecting an invalid file preserves the last valid
+  selection. Includes regression coverage for actual file selection and
+  relaunch, rather than relying on a pre-created ROM cache.
+
 ## 1.7.0 - 2026-09-20
 
 - Keep the live game-over HUD anchored, including the timer and power fill.

@@ -224,6 +224,11 @@ through the actual Windows file dialog, then Play/close and repeated restarts.
 It also checks cancellation, an invalid pick, and selecting a moved ROM. It
 requires an interactive desktop and never seeds the ROM cache itself.
 
+On Linux, `xvfb-run -a python3 tests/test_appimage_rom_persistence.py
+--appimage PATH --output captures/rom-persistence-linux` exercises the packaged
+AppImage through the real zenity picker, then Play/quit and repeated relaunches.
+It requires `zenity` and `xdotool`; use a fresh output directory for each run.
+
 ## License
 
 MIT License, Copyright (c) 2026 Matthew Stanley. See `LICENSE`. Bundled dependencies keep their own licenses under `licenses/` in each release; BS F-Zero Deluxe content is included with its authors' permission and is not covered by this license.
