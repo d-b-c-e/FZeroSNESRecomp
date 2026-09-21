@@ -219,6 +219,11 @@ additionally checks real launcher persistence, imported shaders, controller
 overlays and save/load. Both scripts accept `--help` and keep their test data
 under ignored `captures/` directories; neither bundles music or a shader.
 
+`python tests/test_rom_persistence.py --source build` checks ROM selection
+through the actual Windows file dialog, then Play/close and repeated restarts.
+It also checks cancellation, an invalid pick, and selecting a moved ROM. It
+requires an interactive desktop and never seeds the ROM cache itself.
+
 ## License
 
 MIT License, Copyright (c) 2026 Matthew Stanley. See `LICENSE`. Bundled dependencies keep their own licenses under `licenses/` in each release; BS F-Zero Deluxe content is included with its authors' permission and is not covered by this license.

@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,10 @@ def main():
     assert shader.is_file(), shader
     pack = args.msu_pack.resolve()
     assert (pack / "f-zero_msu1.ips").is_file(), pack
+    # Exercise Browse -> native file dialog -> Play/close -> relaunch. A
+    # pre-written rom.cfg only tests loading and missed issue #8's lost pick.
+    subprocess.run([sys.executable, str(ROOT / "tests/test_rom_persistence.py"),
+                    "--source", str(ROOT / args.build)], check=True)
     stage = Path(tempfile.mkdtemp(prefix="desktop-", dir=ROOT / "captures"))
     build = ROOT / args.build
     shutil.copy2(build / "FZeroSNESRecomp.exe", stage)
@@ -69,16 +74,6 @@ def main():
     defaults.read(config, encoding="utf-8-sig")
     assert defaults["Graphics"]["Shader"] == "", defaults["Graphics"]["Shader"]
     config.write_text(imported_config, encoding="utf-8")
-
-    # No ROM is beside this executable. Reopen from a different cwd and Play
-    # using only the remembered external ROM, as reported in issue #8.
-    (stage / "rom.cfg").write_text(str(ROOT / rom) + "\n", encoding="utf-8")
-    for attempt in range(2):
-        text = run(f"cached-external-rom-{attempt}", [], {
-            "LNG_SCRIPT": "size:1100x880;wait:120;click:970,820;wait:30;quit",
-            "SNESRECOMP_AUTOCLOSE_FRAMES": "20", "SNESRECOMP_MSU1": "off",
-        })
-        assert "simulation=20" in text, text[-3000:]
 
     # Quit the real launcher twice: imported paths and sound/rewind settings
     # must survive both its load and its save-on-quit path (issue #2).
