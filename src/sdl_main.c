@@ -8,6 +8,7 @@
 #include "fzero_deluxe.h"
 #include "fzero_hotkeys.h"
 #include "fzero_gamepad.h"
+#include "fzero_telemetry.h"
 #include "fzero_msu.h"
 #include "fzero_replay.h"
 #include "fzero_state_mode.h"
@@ -1531,6 +1532,7 @@ int main(int argc, char **argv) {
   if (!snesrecomp_exe_dir_path("config.ini", g_config_path,
                                sizeof(g_config_path)))
     snprintf(g_config_path, sizeof(g_config_path), "config.ini");
+  FzeroTelemetryInit(g_config_path);
   if (!FzeroReplayConfigure(getenv("SNESRECOMP_INPUT_SCRIPT"), getenv("FZERO_VIEWPORT_SCRIPT"))) {
     fprintf(stderr, "[fzero] Invalid validation replay\n");
     return 2;
@@ -2028,6 +2030,7 @@ int main(int argc, char **argv) {
       }
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       (void)RtlRunFrame(input);
+      FzeroTelemetryFrame(g_ram, sizeof(g_ram), input);
       FzeroDiagnosticsEnd(FZERO_DIAG_SIMULATION, diagnostic_start);
       if (g_fail || !FzeroLastLleResult()) {
         fprintf(stderr, "[fzero-failure] frame=%ld resume=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
@@ -2155,6 +2158,7 @@ int main(int argc, char **argv) {
   SDL_DestroyMutex(g_audio_mutex);
   g_audio_mutex = NULL;
   SDL_Quit();
+  FzeroTelemetryShutdown();
   free(rom);
   /* A self-test that printed FAIL must not exit 0: a harness that only reads
    * the exit status would otherwise record a pass. */

@@ -162,6 +162,28 @@ Both keys are rebindable in the launcher's **Controls** page, as
 executable and take effect the next time you start the game. The rewind
 switch, depth and interval are remembered in the same file.
 
+### SimHub telemetry
+
+The Windows build can emit a Forza Horizon-compatible 324-byte UDP packet for
+SimHub and other dashboards. It is off by default. Add this to `config.ini`
+beside the executable:
+
+```ini
+[Telemetry]
+Enabled=1
+Host=127.0.0.1
+Port=8000
+```
+
+Select the Forza Horizon UDP protocol and the same port in the dashboard.
+Speed, position, race time, energy, steering, throttle, and brake are derived
+from the game's live WRAM. F-Zero has no engine or gearbox, so RPM and gear are
+compatibility values; lap and race position are not yet exported. Network
+errors only disable telemetry and never stop the game.
+
+Packet serialization comes from dbce-wheel-mod-toolkit v0.13.0, pinned under
+`lib/toolkit` so release builds are reproducible.
+
 The quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
 to save one - still work. Where a binding above uses a key (F7 and F8 by
 default), that binding wins and the quick slot behind it is unavailable; both

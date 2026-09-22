@@ -166,6 +166,7 @@ add_executable(FZeroSNESRecomp
     src/fzero_hotkeys.c
     src/fzero_gamepad.c
     src/fzero_analog.c
+    src/fzero_telemetry.cpp
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
@@ -215,6 +216,20 @@ if(BUILD_TESTING AND SNESRECOMP_SDL_BACKEND STREQUAL "SDL3")
     add_test(NAME fzero_analog COMMAND fzero_analog_tests)
 endif()
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
+if(WIN32)
+    target_link_libraries(FZeroSNESRecomp PRIVATE ws2_32)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(fzero_telemetry_tests tests/test_telemetry.cpp
+        src/fzero_telemetry.cpp src/fzero_hotkeys.c)
+    target_include_directories(fzero_telemetry_tests PRIVATE
+        "${CMAKE_SOURCE_DIR}/src" "${CMAKE_SOURCE_DIR}/lib/toolkit/include")
+    if(WIN32)
+        target_link_libraries(fzero_telemetry_tests PRIVATE ws2_32)
+    endif()
+    add_test(NAME fzero_telemetry COMMAND fzero_telemetry_tests)
+endif()
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
 # Identify dependencies as well as the game in player performance reports.
 find_package(Git QUIET)
