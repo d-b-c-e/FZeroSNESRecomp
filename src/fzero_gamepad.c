@@ -1,4 +1,5 @@
 #include "fzero_gamepad.h"
+#include "fzero_analog.h"
 #include "fzero_hotkeys.h"
 
 #include <stdio.h>
@@ -7,6 +8,8 @@
 static char s_config[1024], s_preferred[40];
 static uint32_t s_bind[12];
 static int s_default_deadzone, s_deadzone;
+static bool s_analog_steering;
+static FzeroAnalogSteering s_steering;
 
 /* SDL's standard button indices are shared by SDL2 and SDL3. Triggers are
  * axes, represented here by bits 15/16 after the standard fifteen buttons. */
@@ -69,20 +72,28 @@ static void load_profile(SDL_GameController *pad) {
   FzeroIniReadInt(s_config, section, "Deadzone", &percent);
   if (percent < 0 || percent > 100) percent = s_default_deadzone;
   s_deadzone = (percent * 32767 + 50) / 100;
-  fprintf(stderr, "[fzero-input] %s guid=%s deadzone=%d%%\n",
-          SDL_GameControllerName(pad), guid, percent);
+  int analog = 0;
+  FzeroIniReadInt(s_config, section, "AnalogSteering", &analog);
+  s_analog_steering = analog != 0;
+  FzeroAnalogSteeringReset(&s_steering);
+  fprintf(stderr, "[fzero-input] %s guid=%s deadzone=%d%% steering=%s\n",
+          SDL_GameControllerName(pad), guid, percent,
+          s_analog_steering ? "analog" : "digital");
 }
 
 void FzeroGamepadConfigure(const char *config, const char *guid, int deadzone) {
   snprintf(s_config, sizeof(s_config), "%s", config ? config : "config.ini");
   snprintf(s_preferred, sizeof(s_preferred), "%s", guid ? guid : "");
   s_default_deadzone = deadzone >= 0 && deadzone <= 100 ? deadzone : 25;
+  s_analog_steering = false;
+  FzeroAnalogSteeringReset(&s_steering);
 }
 
 void FzeroGamepadRefresh(SDL_GameController **pad) {
   if (*pad && !SDL_GameControllerGetAttached(*pad)) {
     SDL_GameControllerClose(*pad);
     *pad = NULL;
+    FzeroAnalogSteeringReset(&s_steering);
   }
   if (*pad) return;
 #if SNESRECOMP_SDL3
@@ -119,6 +130,7 @@ void FzeroGamepadEvent(SDL_GameController **pad, const SDL_Event *event) {
           SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(*pad))) {
     SDL_GameControllerClose(*pad);
     *pad = NULL;
+    FzeroAnalogSteeringReset(&s_steering);
   }
   if (event->type == SDL_CONTROLLERDEVICEADDED ||
       event->type == SDL_CONTROLLERDEVICEREMOVED)
@@ -142,8 +154,12 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
     if (s_bind[i] && (buttons & s_bind[i]) == s_bind[i]) input |= 1u << s_input_bits[i];
   int x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
   int y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
-  if (x < -s_deadzone) input |= 0x0040u;
-  if (x > s_deadzone) input |= 0x0080u;
+  if (s_analog_steering)
+    input |= FzeroAnalogSteeringRead(&s_steering, x, s_deadzone);
+  else {
+    if (x < -s_deadzone) input |= 0x0040u;
+    if (x > s_deadzone) input |= 0x0080u;
+  }
   if (y < -s_deadzone) input |= 0x0010u;
   if (y > s_deadzone) input |= 0x0020u;
   return input;

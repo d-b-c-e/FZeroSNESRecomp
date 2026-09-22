@@ -165,6 +165,7 @@ add_executable(FZeroSNESRecomp
     src/fzero_mods.c
     src/fzero_hotkeys.c
     src/fzero_gamepad.c
+    src/fzero_analog.c
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
@@ -204,9 +205,14 @@ snesrecomp_target_sdl(FZeroSNESRecomp)
 
 if(BUILD_TESTING AND SNESRECOMP_SDL_BACKEND STREQUAL "SDL3")
     add_executable(fzero_gamepad_tests tests/test_gamepad.c src/fzero_gamepad.c src/fzero_hotkeys.c)
+    target_sources(fzero_gamepad_tests PRIVATE src/fzero_analog.c)
     target_include_directories(fzero_gamepad_tests PRIVATE "${CMAKE_SOURCE_DIR}/src" ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
     snesrecomp_target_sdl(fzero_gamepad_tests)
     add_test(NAME fzero_gamepad COMMAND fzero_gamepad_tests)
+
+    add_executable(fzero_analog_tests tests/test_analog.c src/fzero_analog.c)
+    target_include_directories(fzero_analog_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    add_test(NAME fzero_analog COMMAND fzero_analog_tests)
 endif()
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)

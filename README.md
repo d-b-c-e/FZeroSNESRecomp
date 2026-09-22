@@ -24,6 +24,7 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 - Save states with a slot browser and thumbnails, opened with **F7** or **Select + R**.
 - Rewind: step back through the last few seconds and drop back in.
 - Gamepad support through SDL.
+- Optional proportional wheel steering on the SNES digital input.
 - Optional BS F-Zero Deluxe content.
 - Optional MSU-1 music packs for stock F-Zero and BS Deluxe (bring your own patch and audio).
 
@@ -166,6 +167,24 @@ to save one - still work. Where a binding above uses a key (F7 and F8 by
 default), that binding wins and the quick slot behind it is unavailable; both
 slots are still reachable from the menu. Rebinding SaveStateMenu or Rewind to
 another key hands the F-key straight back.
+
+### Analog wheel steering
+
+The SNES controller has only digital Left and Right buttons, but an SDL
+gamepad axis can retain proportional steering by distributing those button
+presses over successive simulation frames. Enable it for one controller by
+adding `AnalogSteering = 1` to that controller's GUID section in `config.ini`:
+
+```ini
+[Controller.030000006e3400000600000000000000]
+AnalogSteering = 1
+Deadzone = 3
+```
+
+Full wheel lock is held every frame. Smaller deflections produce evenly
+distributed presses, while returning to centre or changing direction clears
+the pending pulse immediately. The setting is opt-in and the default digital
+gamepad behavior is unchanged.
 
 ### Where states are kept
 
