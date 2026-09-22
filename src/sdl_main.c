@@ -8,6 +8,7 @@
 #include "fzero_deluxe.h"
 #include "fzero_hotkeys.h"
 #include "fzero_gamepad.h"
+#include "fzero_ffb.h"
 #include "fzero_msu.h"
 #include "fzero_replay.h"
 #include "fzero_state_mode.h"
@@ -1650,6 +1651,7 @@ int main(int argc, char **argv) {
       SDL_WINDOW_RESIZABLE | kHighDpiFlag |
           (use_gl_renderer ? SDL_WINDOW_OPENGL : 0));
   if (!window) Die("Unable to create the game window");
+  FzeroFfbInit(g_config_path, NULL);
   if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
   FzeroGlRenderer gl_renderer;
@@ -2028,6 +2030,7 @@ int main(int argc, char **argv) {
       }
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       (void)RtlRunFrame(input);
+      FzeroFfbFrame(g_ram, sizeof(g_ram), input);
       FzeroDiagnosticsEnd(FZERO_DIAG_SIMULATION, diagnostic_start);
       if (g_fail || !FzeroLastLleResult()) {
         fprintf(stderr, "[fzero-failure] frame=%ld resume=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
@@ -2151,6 +2154,7 @@ int main(int argc, char **argv) {
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
   }
+  FzeroFfbShutdown();
   SDL_DestroyWindow(window);
   SDL_DestroyMutex(g_audio_mutex);
   g_audio_mutex = NULL;
