@@ -63,7 +63,37 @@ int main(void) {
   selected = attach("selected controller");
   pump(&pad);
   CHECK(pad && SDL_GetGamepadID(pad) == selected); /* same GUID, new instance */
-  SDL_CloseGamepad(pad);
+  FzeroGamepadShutdown(&pad);
+  CHECK(SDL_DetachVirtualJoystick(selected));
+
+  SDL_VirtualJoystickDesc wheel_desc;
+  SDL_INIT_INTERFACE(&wheel_desc);
+  wheel_desc.type = SDL_JOYSTICK_TYPE_WHEEL;
+  wheel_desc.naxes = 4;
+  wheel_desc.nbuttons = 40;
+  wheel_desc.name = "raw racing wheel";
+  SDL_JoystickID wheel_id = SDL_AttachVirtualJoystick(&wheel_desc);
+  CHECK(wheel_id != 0);
+  SDL_Joystick *wheel = SDL_OpenJoystick(wheel_id);
+  CHECK(wheel);
+  SDL_GUIDToString(SDL_GetJoystickGUID(wheel), guid, sizeof(guid));
+  cfg = fopen("gamepad-test.ini", "w");
+  CHECK(cfg);
+  fprintf(cfg, "[Controller.%s]\nAnalogSteering=1\nDeadzone=3\n"
+               "SteeringAxis=0\nAcceleratorAxis=2\nBrakeAxis=3\n"
+               "ButtonStart=36\n", guid);
+  fclose(cfg);
+  FzeroGamepadConfigure("gamepad-test.ini", guid, 25);
+  FzeroGamepadRefresh(&pad);
+  CHECK(!pad);
+  CHECK(SDL_SetJoystickVirtualAxis(wheel, 0, 32767));
+  CHECK(SDL_SetJoystickVirtualAxis(wheel, 2, 32767));
+  CHECK(SDL_SetJoystickVirtualButton(wheel, 36, true));
+  SDL_UpdateJoysticks();
+  CHECK(FzeroGamepadRead(pad) == (0x0080u | 0x0001u | 0x0008u));
+  FzeroGamepadShutdown(&pad);
+  SDL_CloseJoystick(wheel);
+  CHECK(SDL_DetachVirtualJoystick(wheel_id));
   SDL_Quit();
   remove("gamepad-test.ini");
   puts("F-Zero gamepad: selection, bindings, deadzone, removal and reconnect passed");

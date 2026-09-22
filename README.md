@@ -228,6 +228,27 @@ distributed presses, while returning to centre or changing direction clears
 the pending pulse immediately. The setting is opt-in and the default digital
 gamepad behavior is unchanged.
 
+True racing wheels that SDL does not classify as gamepads use the same GUID
+section. Raw axis and button indices are zero-based; omitted pedals and
+buttons stay unbound:
+
+```ini
+[Controller.030000006e3400000600000000000000]
+AnalogSteering=1
+SteeringAxis=0
+AcceleratorAxis=2
+BrakeAxis=3
+PedalThreshold=0
+ButtonL=12
+ButtonR=13
+ButtonSelect=23
+ButtonStart=36
+```
+
+Set `AcceleratorInvert=1` or `BrakeInvert=1` when an axis runs backwards.
+Available button keys are `ButtonA`, `ButtonB`, `ButtonX`, `ButtonY`,
+`ButtonL`, `ButtonR`, `ButtonSelect`, and `ButtonStart`.
+
 ### Where states are kept
 
 Stock *F-Zero* and BS F-Zero Deluxe keep separate states, because they are
