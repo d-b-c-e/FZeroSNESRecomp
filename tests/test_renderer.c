@@ -477,7 +477,7 @@ static void test_explosion_slots(void) {
 }
 
 static void test_hd_mode7(void) {
-  static uint32_t hd[FZERO_MAX_WIDTH * 224 * 16 + 2];
+  static uint32_t hd[FZERO_MAX_WIDTH * 224 * FZERO_HD_SCALE_MAX * FZERO_HD_SCALE_MAX + 2];
   setup();
   FzeroVideoSettings settings; FzeroVideoStock(&settings);
   FzeroViewport v = FzeroCalculateViewport(&settings, 800, 600);
@@ -489,18 +489,24 @@ static void test_hd_mode7(void) {
   publish(1);
   CHECK(FzeroRendererHasFrame());
   CHECK(FzeroRendererDraw(guarded + 1, v, 1));
-  for (unsigned scale = 2; scale <= 4; scale += 2) {
+  for (unsigned scale = 2; scale <= FZERO_HD_SCALE_MAX; ++scale) {
     size_t count = (size_t)v.width * 224 * scale * scale;
     hd[0] = hd[count + 1] = 0xdeadbeef;
     CHECK(!FzeroRendererDrawHd(hd + 1, count - 1, v, 1, scale));
     CHECK(FzeroRendererDrawHd(hd + 1, count, v, 1, scale));
     CHECK(hd[0] == 0xdeadbeef && hd[count + 1] == 0xdeadbeef);
     CHECK(hd[1] == palette_rgb(p.cgram[17]));
-    CHECK(hd[1 + scale / 2] == palette_rgb(p.cgram[18]));
-    CHECK(hd[1 + v.width * scale * (scale / 2)] == palette_rgb(p.cgram[25]));
+    CHECK(hd[1 + (scale + 1) / 2] == palette_rgb(p.cgram[18]));
+    CHECK(hd[1 + v.width * scale * ((scale + 1) / 2)] == palette_rgb(p.cgram[25]));
     /* Higher resolution cannot alter the native render or published source. */
     CHECK(FzeroRendererDraw(hd + 1, v, 1));
     CHECK(!memcmp(hd + 1, guarded + 1, (size_t)v.width * 224 * sizeof(*hd)));
+  }
+  const unsigned invalid_scales[] = {0, 1, 11, UINT32_MAX};
+  for (unsigned i = 0; i < countof(invalid_scales); ++i) {
+    hd[1] = 0xdeadbeef;
+    CHECK(!FzeroRendererDrawHd(hd + 1, countof(hd) - 2, v, 1, invalid_scales[i]));
+    CHECK(hd[1] == 0xdeadbeef);
   }
   /* An HDMA jump to another origin must not be smoothed across the split. */
   FzeroRendererBeginFrame(ram, 2);

@@ -358,7 +358,7 @@ void FzeroPresent(double alpha) {
 void FzeroSetDeferredPresentation(bool deferred) { s_deferred_presentation = deferred; }
 
 void FzeroSetMode7Hd(unsigned scale, uint32_t *pixels, size_t capacity) {
-  if (!pixels || (scale != 2 && scale != 4)) scale = 0;
+  if (!pixels || !FzeroValidHdScale(scale)) scale = 0;
   if (scale != s_hd_scale || pixels != s_hd_pixels) s_hd_ready = false;
   s_hd_scale = scale;
   s_hd_pixels = scale ? pixels : NULL;

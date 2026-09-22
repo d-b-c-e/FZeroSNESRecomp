@@ -22,6 +22,7 @@
 #include "host_report.h"
 #include "keybinds.h"
 #include "launcher_binds.h" /* launcher_ini_kv_write: surgical config.ini edits */
+#include "launcher_cache.h"
 #include "launcher_profile.h"
 #include "recomp_launcher.h"
 #include "sha256.h"
@@ -352,7 +353,8 @@ static uint8_t *read_rom(const char *path, size_t *size_out) {
     return NULL;
   }
   long length = ftell(stream);
-  if (length <= 0 || fseek(stream, 0, SEEK_SET) != 0) {
+  if ((length != kFzeroRomSize && length != kFzeroRomSize + 512) ||
+      fseek(stream, 0, SEEK_SET) != 0) {
     fclose(stream);
     return NULL;
   }
@@ -403,6 +405,9 @@ static void trim_ini_value(char *s) {
 static void load_launcher_settings(RecompLauncherCSettings *settings) {
   int value = 0;
   char text[sizeof(settings->shader_path)];
+
+  if (FzeroIniReadInt(g_config_path, "General", "SkipLauncher", &value))
+    settings->skip_launcher = value != 0;
 
   /* Display. Section and key spellings match the shared snesrecomp host's
    * config.ini so one file reads the same across every port. */
@@ -463,6 +468,8 @@ static void load_launcher_settings(RecompLauncherCSettings *settings) {
  */
 static void save_launcher_settings(const RecompLauncherCSettings *settings) {
   char number[32];
+  snprintf(number, sizeof(number), "%d", settings->skip_launcher ? 1 : 0);
+  launcher_ini_kv_write(g_config_path, "General", "SkipLauncher", number);
   snprintf(number, sizeof(number), "%d", settings->window_scale);
   launcher_ini_kv_write(g_config_path, "Graphics", "WindowScale", number);
   snprintf(number, sizeof(number), "%d", settings->fullscreen);
@@ -494,7 +501,8 @@ static void save_launcher_settings(const RecompLauncherCSettings *settings) {
   launcher_ini_kv_write(g_config_path, "Rewind", "Interval", number);
 }
 
-static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
+static int resolve_rom(const char *executable, const char *explicit_rom,
+                       bool force_launcher, char *path, size_t path_size,
                        RecompLauncherCSettings *settings) {
   memset(settings, 0, sizeof(*settings));
   settings->window_scale = 3;
@@ -516,8 +524,8 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
       snprintf(settings->shader_path, sizeof(settings->shader_path), "%s", shader_override);
   }
 
-  if (argc > 1) {
-    snprintf(path, path_size, "%s", argv[1]);
+  if (explicit_rom && !force_launcher) {
+    snprintf(path, path_size, "%s", explicit_rom);
     return 1;
   }
 
@@ -554,8 +562,8 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
 
   char initial_rom[1024] = {0};
   char assets_dir[1024] = ".";
-  if (argv[0] && argv[0][0]) {
-    snprintf(assets_dir, sizeof(assets_dir), "%s", argv[0]);
+  if (executable && executable[0]) {
+    snprintf(assets_dir, sizeof(assets_dir), "%s", executable);
     char *slash = strrchr(assets_dir, '/');
     char *backslash = strrchr(assets_dir, '\\');
     char *separator = slash > backslash ? slash : backslash;
@@ -564,12 +572,32 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
     else
       snprintf(assets_dir, sizeof(assets_dir), "%s", ".");
   }
-  FILE *probe = fopen("fzero.sfc", "rb");
-  if (probe) {
-    fclose(probe);
-    snprintf(initial_rom, sizeof(initial_rom), "%s", "fzero.sfc");
+  if (explicit_rom) {
+    snprintf(initial_rom, sizeof(initial_rom), "%s", explicit_rom);
+  } else {
+    FILE *probe = fopen("fzero.sfc", "rb");
+    if (probe) {
+      fclose(probe);
+      snprintf(initial_rom, sizeof(initial_rom), "%s", "fzero.sfc");
+    } else {
+      snesrecomp_rom_cache_read(initial_rom, sizeof(initial_rom));
+    }
   }
 
+  if (settings->skip_launcher && !force_launcher && initial_rom[0]) {
+    size_t size = 0;
+    uint8_t *rom = read_rom(initial_rom, &size);
+    bool valid = rom && verify_rom(rom, size);
+    free(rom);
+    if (valid) {
+      snprintf(path, path_size, "%s", initial_rom);
+      fprintf(stderr, "[fzero-launcher] skipped: verified remembered ROM\n");
+      return 1;
+    }
+    fprintf(stderr, "[fzero-launcher] remembered ROM unavailable or invalid; opening launcher\n");
+  }
+
+  fprintf(stderr, "[fzero-launcher] opening%s\n", force_launcher ? " (--launcher)" : "");
   int action =
       recomp_launcher_run_window("F-Zero \xE2\x80\x94 Launcher", settings,
                                  &game, assets_dir, initial_rom, path,
@@ -577,6 +605,10 @@ static int resolve_rom(int argc, char **argv, char *path, size_t path_size,
   /* Whatever the launcher did, keep what the player chose there. Quitting is
    * as good a moment to persist as pressing Play. */
   save_launcher_settings(settings);
+  /* Mod choices are settings too. recomp-ui commits its provider on Play;
+   * persist a typed resolution (and other mod choices) when quitting as well. */
+  if (!FzeroVideoSave(&g_video, kVideoConfig))
+    fprintf(stderr, "[fzero-launcher] unable to save video/mod settings\n");
   if (action == 1) return 0;
   if (action == 0 && path[0]) return 1;
   if (initial_rom[0]) {
@@ -1439,12 +1471,23 @@ int main(int argc, char **argv) {
    * even when a shortcut or terminal starts us in a different directory.
    * Resolve an explicit ROM against the caller's cwd before changing it. */
   char command_line_rom[1024];
-  if (argc > 1) {
-    if (!snesrecomp_abspath(argv[1], command_line_rom, sizeof(command_line_rom))) {
+  const char *explicit_rom = NULL;
+  bool force_launcher = false, positional_only = false;
+  for (int i = 1; i < argc; ++i) {
+    if (!positional_only && !strcmp(argv[i], "--")) { positional_only = true; continue; }
+    if (!positional_only && !strcmp(argv[i], "--launcher")) { force_launcher = true; continue; }
+    if (explicit_rom || (!positional_only && argv[i][0] == '-')) {
+      fprintf(stderr, "usage: FZeroSNESRecomp [--launcher] [path-to-rom.sfc]\n");
+      return 2;
+    }
+    explicit_rom = argv[i];
+  }
+  if (explicit_rom) {
+    if (!snesrecomp_abspath(explicit_rom, command_line_rom, sizeof(command_line_rom))) {
       fprintf(stderr, "Unable to resolve the command-line ROM path\n");
       return 2;
     }
-    argv[1] = command_line_rom;
+    explicit_rom = command_line_rom;
   }
   snesrecomp_anchor_to_exe_dir();
   const char *config_override = getenv("FZERO_VIDEO_CONFIG");
@@ -1481,7 +1524,7 @@ int main(int argc, char **argv) {
   char rom_path[1024] = {0};
   RecompLauncherCSettings launcher_settings;
   int resolve_result =
-      resolve_rom(argc, argv, rom_path, sizeof(rom_path), &launcher_settings);
+      resolve_rom(argv[0], explicit_rom, force_launcher, rom_path, sizeof(rom_path), &launcher_settings);
   if (resolve_result <= 0) return resolve_result == 0 ? 0 : 2;
   if (!g_video.enhanced) {
     g_video.aspect = launcher_aspect(launcher_settings.aspect_index);
@@ -1598,16 +1641,26 @@ int main(int argc, char **argv) {
   SDL_Renderer *renderer = NULL;
   SDL_Texture *texture = NULL;
   unsigned texture_scale = g_video.hd_mode7 ? g_video.hd_scale : 1;
+  const unsigned requested_texture_scale = texture_scale;
   if (use_gl_renderer) {
     if (!fzero_gl_init(&gl_renderer, window, launcher_settings.shader_path))
       Die("Unable to initialize the OpenGL shader renderer");
+    GLint max_texture_size = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
+    while (texture_scale > 1 && max_texture_size > 0 &&
+           FZERO_MAX_WIDTH * texture_scale > (unsigned)max_texture_size)
+      texture_scale = texture_scale > 4 ? 4 : texture_scale > 2 ? 2 : 1;
   } else {
     renderer = snesrecomp_sdl_create_renderer(window, false, false);
     if (!renderer) renderer = snesrecomp_sdl_create_renderer(window, true, false);
     if (!renderer) Die("Unable to create the game renderer");
-    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-                                SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH * texture_scale,
-                                kFrameHeight * texture_scale);
+    for (;;) {
+      texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                                  SDL_TEXTUREACCESS_STREAMING, FZERO_MAX_WIDTH * texture_scale,
+                                  kFrameHeight * texture_scale);
+      if (texture || texture_scale == 1) break;
+      texture_scale = texture_scale > 4 ? 4 : texture_scale > 2 ? 2 : 1;
+    }
     if (!texture) Die("Unable to create the game texture");
     /* Scale quality is per-texture in SDL3 (the SDL2 render hint is gone), and
      * the SNES framebuffer leaves alpha zero, so it must be marked opaque or
@@ -1616,15 +1669,24 @@ int main(int argc, char **argv) {
                                       launcher_settings.linear_filter != 0);
     snesrecomp_sdl_set_texture_opaque(texture);
   }
+  if (texture_scale != requested_texture_scale) {
+    char message[256];
+    snprintf(message, sizeof(message),
+        "This renderer could not create the %ux HD Mode 7 texture. Using %ux for this session. "
+        "Choose a lower resolution in Mods > HD Mode 7 if this persists.",
+        requested_texture_scale, texture_scale);
+    fprintf(stderr, "[fzero-hd] %s\n", message);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "HD Mode 7 resolution", message, window);
+  }
 
   static uint8_t pixels[FZERO_MAX_WIDTH * kFrameHeight * kBytesPerPixel];
   uint32_t *hd_pixels = NULL;
   size_t hd_capacity = (size_t)FZERO_MAX_WIDTH * kFrameHeight * texture_scale * texture_scale;
-  if (g_video.hd_mode7) {
+  if (texture_scale > 1) {
     hd_pixels = calloc(hd_capacity, sizeof(*hd_pixels));
     if (!hd_pixels) Die("Unable to allocate HD Mode 7 frame");
   }
-  FzeroSetMode7Hd(g_video.hd_mode7 ? g_video.hd_scale : 0, hd_pixels, hd_capacity);
+  FzeroSetMode7Hd(texture_scale > 1 ? texture_scale : 0, hd_pixels, hd_capacity);
   int drawable_width = 256 * window_scale, drawable_height = 192 * window_scale;
   if (use_gl_renderer)
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);

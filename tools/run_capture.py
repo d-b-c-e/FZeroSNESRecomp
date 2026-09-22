@@ -46,8 +46,11 @@ if a.desktop_fps is not None:
     (folder / "fzero-video.ini").write_text(
         f"EnhancedRenderer={int(a.aspect != '4:3')}\nAspect={a.aspect}\nPresentationEnabled=1\nPresentationFPS={a.desktop_fps}\nBSDeluxe={int(a.deluxe)}\n")
 with (folder / "run.log").open("w") as log:
-    result = subprocess.run([str(ROOT / a.build / (host + (".exe" if os.name == "nt" else ""))),
-                             str(ROOT / "fzero.sfc"), str(a.frames)],
+    command = [str(ROOT / a.build / (host + (".exe" if os.name == "nt" else ""))),
+               str(ROOT / "fzero.sfc")]
+    if a.desktop_fps is None:
+        command.append(str(a.frames))
+    result = subprocess.run(command,
                             cwd=folder, env=env, stdout=log, stderr=log)
 print((folder / "run.log").read_text()[-1500:])
 raise SystemExit(result.returncode)

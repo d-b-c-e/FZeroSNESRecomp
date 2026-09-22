@@ -766,7 +766,7 @@ bool FzeroRendererDrawHd(uint32_t *out, size_t capacity,
 
 bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *out, size_t capacity,
                                    FzeroViewport viewport, double alpha, unsigned scale) {
-  if ((scale != 2 && scale != 4) || viewport.width < 256 ||
+  if (!FzeroValidHdScale(scale) || viewport.width < 256 ||
       viewport.width > FZERO_MAX_WIDTH ||
       capacity < (size_t)viewport.width * 224 * scale * scale) return false;
   return render_frame(out, viewport, alpha, scale, native);

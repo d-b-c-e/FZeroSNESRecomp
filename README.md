@@ -18,7 +18,7 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 
 - Play *F-Zero* as a native app.
 - Widescreen modes: 16:9, 21:9, 32:9, and Fit.
-- Optional [HD Mode 7](docs/HD_MODE7.md): 2x/4x track rendering, independent of widescreen and presentation FPS.
+- Optional [HD Mode 7](docs/HD_MODE7.md): 2x through 10x track rendering, independent of widescreen and presentation FPS.
 - High refresh presentation: 60, 90, 120, 144, 165, 240, or 360 FPS.
 - Display shaders: CRT Soft, LCD Grid, Sharp, Warm Composite, or your own GLSL shader.
 - Save states with a slot browser and thumbnails, opened with **F7** or **Select + R**.
@@ -45,6 +45,13 @@ On Linux:
 
 The app remembers your ROM path after the first launch.
 
+Enable **Skip launcher on boot** to start directly with that ROM next time.
+The choice is saved as `[General] SkipLauncher=1` in `config.ini` beside the
+executable. Run `FZeroSNESRecomp.exe --launcher` (on Linux, run your AppImage
+with `--launcher`) or set the value to `0` to return to the launcher. The override also works
+with a ROM path before or after it. A missing or invalid remembered ROM opens
+the launcher so you can select a valid copy.
+
 ## Settings
 
 Open **Settings > Display** for:
@@ -56,7 +63,8 @@ Open **Mods** for:
 
 - **Widescreen:** makes races wider.
 - **Presentation FPS:** makes motion smoother on high refresh screens.
-- **HD Mode 7:** sharper tracks at 2x or 4x; off by default.
+- **HD Mode 7:** sharper tracks at integer scales from 2x to 10x; off by default.
+  Start at 2x. Above 4x can cause severe slowdown; use at your own risk.
 - **BS Deluxe:** adds the Satellaview machines, leagues, and tracks.
 
 When the Widescreen mod is on, its aspect setting wins over the normal Display aspect setting.
@@ -225,6 +233,12 @@ under ignored `captures/` directories; neither bundles music or a shader.
 through the actual Windows file dialog, then Play/close and repeated restarts.
 It also checks cancellation, an invalid pick, and selecting a moved ROM. It
 requires an interactive desktop and never seeds the ROM cache itself.
+
+`python tests/test_launcher_options.py --source build --rom PATH
+--output captures/launcher-options` exercises the real Skip Launcher control,
+relaunch/recovery, and typed HD resolution persistence. On Linux, prefix it
+with `xvfb-run -a`. `--appimage-layout` also checks settings beside an AppImage
+instead of inside its executable directory, using the AppImage environment.
 
 On Linux, `xvfb-run -a python3 tests/test_appimage_rom_persistence.py
 --appimage PATH --output captures/rom-persistence-linux` exercises the packaged

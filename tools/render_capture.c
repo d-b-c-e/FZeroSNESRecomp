@@ -8,6 +8,8 @@ static FzeroViewport g_viewport;
  * simulations, so 1 alone never exercises the interpolated path. */
 static double g_alpha = 1;
 static unsigned g_scale = 1;
+static uint32_t *pixels;
+static size_t pixel_capacity;
 
 /* Writes the frame and reports how many of its stock columns differ from the
  * PPU's own output. That count is a diagnostic, not an I/O failure: only a
@@ -40,9 +42,8 @@ static int write_ppm(const uint32_t *output, const char *path,
 static int render_one(const char *capture, const char *output,
                       unsigned *differences, bool report) {
   if (!FzeroRendererLoadCapture(capture)) return 2;
-  static uint32_t pixels[FZERO_MAX_WIDTH * 224 * 16];
   bool ok = g_scale == 1 ? FzeroRendererDraw(pixels, g_viewport, g_alpha) :
-      FzeroRendererDrawHd(pixels, sizeof(pixels) / sizeof(*pixels), g_viewport, g_alpha, g_scale);
+      FzeroRendererDrawHd(pixels, pixel_capacity, g_viewport, g_alpha, g_scale);
   if (!ok) return 3;
   return write_ppm(pixels, output, differences, report);
 }
@@ -50,16 +51,18 @@ static int render_one(const char *capture, const char *output,
 static void usage(void) {
   fputs("usage: FZeroRenderCapture capture.bin aspect output.ppm\n"
         "       FZeroRenderCapture --sequence[=alpha] aspect output-directory capture.bin...\n"
-        "       Set FZERO_HD_SCALE=2 or 4 to render HD Mode 7.\n",
+        "       Set FZERO_HD_SCALE to an integer from 2 to 10 to render HD Mode 7.\n",
         stderr);
 }
 
 int main(int argc, char **argv) {
   const char *scale = getenv("FZERO_HD_SCALE");
   if (scale && *scale) {
-    if (strcmp(scale, "2") && strcmp(scale, "4")) { usage(); return 2; }
-    g_scale = (unsigned)(scale[0] - '0');
+    if (!FzeroParseHdScale(scale, &g_scale)) { usage(); return 2; }
   }
+  pixel_capacity = (size_t)FZERO_MAX_WIDTH * 224 * g_scale * g_scale;
+  pixels = calloc(pixel_capacity, sizeof(*pixels));
+  if (!pixels) { fputs("Unable to allocate capture frame\n", stderr); return 3; }
   bool sequence = argc > 1 && strncmp(argv[1], "--sequence", 10) == 0 &&
                   (argv[1][10] == 0 || argv[1][10] == '=');
   if (sequence && argv[1][10] == '=') {

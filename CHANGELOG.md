@@ -1,5 +1,13 @@
 ﻿# Changelog
 
+## Unreleased
+
+- Save and honor Skip Launcher. `--launcher` reopens it even with the setting
+  enabled; a missing or invalid remembered ROM also falls back to the launcher.
+- Allow whole-number HD Mode 7 resolution multipliers from 2x through 10x.
+  Keep 2x as the default and show a severe-slowdown warning above 4x. Graphics
+  backends that cannot create the requested texture fall back for that session.
+
 ## 1.8.1 - 2026-09-21
 
 - Keep vehicle explosions and smoke together in Widescreen. Their first

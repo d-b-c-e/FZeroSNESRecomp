@@ -43,6 +43,23 @@ bool FzeroValidFps(unsigned fps) {
          fps == 165 || fps == 240 || fps == 360;
 }
 
+bool FzeroValidHdScale(unsigned scale) {
+  return scale >= FZERO_HD_SCALE_MIN && scale <= FZERO_HD_SCALE_MAX;
+}
+
+bool FzeroParseHdScale(const char *text, unsigned *scale) {
+  if (!text || !scale || *text < '0' || *text > '9') return false;
+  unsigned value = 0;
+  for (; *text; ++text) {
+    if (*text < '0' || *text > '9') return false;
+    value = value * 10 + (unsigned)(*text - '0');
+    if (value > FZERO_HD_SCALE_MAX) return false;
+  }
+  if (!FzeroValidHdScale(value)) return false;
+  *scale = value;
+  return true;
+}
+
 double FzeroPresentationHz(unsigned fps, double refresh) {
   if (!FzeroValidFps(fps)) fps = 0;
   if (fps) return fps;
@@ -90,7 +107,11 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
   bool valid = true;
   bool has_fps_toggle = false;
   while (fgets(line, sizeof(line), f)) {
-    if (sscanf(line, " %63[^= \t] = %63s", key, value) != 2) continue;
+    int fields = sscanf(line, " %63[^= \t] = %63s", key, value);
+    if (fields != 2) {
+      if (fields == 1 && !strcmp(key, "HDMode7Scale")) valid = false;
+      continue;
+    }
     if (!strcmp(key, "EnhancedRenderer")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->enhanced = value[0] == '1';
       else valid = false;
@@ -102,8 +123,7 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->hd_mode7 = value[0] == '1';
       else valid = false;
     } else if (!strcmp(key, "HDMode7Scale")) {
-      if (!strcmp(value, "2") || !strcmp(value, "4")) s->hd_scale = (unsigned)(value[0] - '0');
-      else valid = false;
+      if (!FzeroParseHdScale(value, &s->hd_scale)) valid = false;
     } else if (!strcmp(key, "BSDeluxe")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->bs_deluxe = value[0] == '1';
       else valid = false;
@@ -129,7 +149,7 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (!f) return false;
   bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\n",
                     s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe,
-                    s->hd_mode7, s->hd_scale == 4 ? 4u : 2u) > 0;
+                    s->hd_mode7, FzeroValidHdScale(s->hd_scale) ? s->hd_scale : 2u) > 0;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

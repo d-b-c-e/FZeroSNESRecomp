@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 enum { FZERO_HEIGHT = 224, FZERO_STOCK_WIDTH = 256, FZERO_MAX_WIDTH = 684 };
+enum { FZERO_HD_SCALE_MIN = 2, FZERO_HD_SCALE_MAX = 10 };
 #define FZERO_SIMULATION_HZ 60.098811862
 
 typedef enum FzeroAspect {
@@ -22,7 +23,7 @@ typedef struct FzeroVideoSettings {
   bool fps_enabled;
   bool bs_deluxe; /* Launch-time content selection. */
   bool hd_mode7; /* Independent, opt-in spatial resolution enhancement. */
-  unsigned hd_scale; /* 2 or 4; retained while disabled. */
+  unsigned hd_scale; /* Integer 2..10; retained while disabled. */
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {
@@ -38,6 +39,8 @@ void FzeroVideoStock(FzeroVideoSettings *settings);    /* stock 4:3, no mods */
 const char *FzeroAspectName(FzeroAspect aspect);
 bool FzeroParseAspect(const char *text, FzeroAspect *aspect);
 bool FzeroValidFps(unsigned fps);
+bool FzeroValidHdScale(unsigned scale);
+bool FzeroParseHdScale(const char *text, unsigned *scale);
 double FzeroPresentationHz(unsigned fps, double refresh);
 FzeroViewport FzeroCalculateViewport(const FzeroVideoSettings *settings,
                                      int drawable_width, int drawable_height);
