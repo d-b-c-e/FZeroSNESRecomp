@@ -186,6 +186,9 @@ void FzeroGamepadRefresh(SDL_GameController **pad) {
     char guid[40];
     joystick_guid(candidate, guid);
     if (!s_preferred[0] || SDL_strcasecmp(guid, s_preferred)) {
+      if (s_preferred[0])
+        fprintf(stderr, "[fzero-input] ignoring raw %s guid=%s (wanted %s)\n",
+                SDL_JoystickName(candidate), guid, s_preferred);
       SDL_JoystickClose(candidate);
       continue;
     }
