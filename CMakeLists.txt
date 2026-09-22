@@ -167,6 +167,7 @@ add_executable(FZeroSNESRecomp
     src/fzero_gamepad.c
     src/fzero_analog.c
     src/fzero_telemetry.cpp
+    src/fzero_ffb.cpp
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
@@ -218,6 +219,12 @@ endif()
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 if(WIN32)
     target_link_libraries(FZeroSNESRecomp PRIVATE ws2_32)
+    add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/lib/toolkit/native/WheelFfb.dll"
+            "$<TARGET_FILE_DIR:FZeroSNESRecomp>/WheelFfb.dll"
+        COMMENT "Staging WheelFfb runtime"
+        VERBATIM)
 endif()
 
 if(BUILD_TESTING)
@@ -229,6 +236,11 @@ if(BUILD_TESTING)
         target_link_libraries(fzero_telemetry_tests PRIVATE ws2_32)
     endif()
     add_test(NAME fzero_telemetry COMMAND fzero_telemetry_tests)
+
+    add_executable(fzero_ffb_tests tests/test_ffb.cpp src/fzero_ffb.cpp
+        src/fzero_hotkeys.c)
+    target_include_directories(fzero_ffb_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    add_test(NAME fzero_ffb COMMAND fzero_ffb_tests)
 endif()
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
 # Identify dependencies as well as the game in player performance reports.

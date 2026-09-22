@@ -184,6 +184,26 @@ errors only disable telemetry and never stop the game.
 Packet serialization comes from dbce-wheel-mod-toolkit v0.13.0, pinned under
 `lib/toolkit` so release builds are reproducible.
 
+### Steering-wheel force feedback
+
+Windows builds stage the pinned dbce-wheel-mod-toolkit v0.13.0 runtime beside
+the game. Force feedback is off by default and requires one unique DirectInput
+device name; the game refuses to fall back to a different wheel. Add this to
+`config.ini` beside the executable:
+
+```ini
+[ForceFeedback]
+Enabled=1
+Device=MOZA R12 Base
+Strength=40
+```
+
+Use the exact name shown by Windows or the toolkit log. `Strength` is clamped
+to 0-100. The model provides speed-sensitive steering resistance, a hardware
+damper, track texture, and finite collision pulses. If the configured wheel or
+`WheelFfb.dll` is missing, the game continues with force feedback disabled.
+The toolkit's watchdog, exit guards, and panic-stop path prevent stale forces.
+
 The quick-slot keys - **F1**-**F12** to load a slot, **Shift + F1**-**F12**
 to save one - still work. Where a binding above uses a key (F7 and F8 by
 default), that binding wins and the quick slot behind it is unavailable; both
