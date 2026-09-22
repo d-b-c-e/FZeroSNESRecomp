@@ -2139,7 +2139,7 @@ int main(int argc, char **argv) {
 #else
   SDL_CloseAudioDevice(audio);
 #endif
-  if (pad) SDL_GameControllerClose(pad);
+  FzeroGamepadShutdown(&pad);
   snes_rewind_shutdown();
   if (g_overlay_texture) {
     SDL_DestroyTexture(g_overlay_texture);

@@ -7,3 +7,4 @@ void FzeroGamepadConfigure(const char *config, const char *guid, int deadzone);
 void FzeroGamepadRefresh(SDL_GameController **pad);
 void FzeroGamepadEvent(SDL_GameController **pad, const SDL_Event *event);
 uint32_t FzeroGamepadRead(SDL_GameController *pad);
+void FzeroGamepadShutdown(SDL_GameController **pad);
