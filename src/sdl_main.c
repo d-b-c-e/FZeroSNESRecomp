@@ -11,6 +11,8 @@
 #include "fzero_msu.h"
 #include "fzero_replay.h"
 #include "fzero_state_mode.h"
+#include "fzero_diagnostics.h"
+#include "fzero_build.h"
 
 #include "common_rtl.h"
 #include "host_paths.h"
@@ -250,6 +252,7 @@ static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
 static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
                             int logical_width, int logical_height, FzeroViewport viewport,
                             int drawable_width, int drawable_height) {
+  uint64_t diagnostic_start = FzeroDiagnosticsBegin();
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, glr->texture.gl_texture);
   if (glr->texture.width == logical_width && glr->texture.height == logical_height) {
@@ -262,6 +265,8 @@ static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
                  GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, pixels);
   }
 
+  FzeroDiagnosticsEnd(FZERO_DIAG_UPLOAD, diagnostic_start);
+  diagnostic_start = FzeroDiagnosticsBegin();
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
@@ -285,6 +290,7 @@ static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
     glBindVertexArray(0);
     glUseProgram(0);
   }
+  FzeroDiagnosticsEnd(FZERO_DIAG_DRAW, diagnostic_start);
 }
 
 /* An overlay panel over the GL frame, through the passthrough program rather
@@ -830,6 +836,7 @@ static int perform_state_action(SDL_Window *window, int save, int slot,
   } else {
     ok = RtlLoadSnapshot(path);
   }
+  FzeroDiagnosticsEvent(save ? (ok ? "save" : "save_failed") : (ok ? "load" : "load_failed"), slot);
   if (!save && ok) g_reset_presentation_clock = true;
   set_state_feedback(window, save ? "save" : "load", slot, ok, feedback_until);
   fprintf(stderr, "[fzero-state] %s slot %d: %s\n", save ? "save" : "load",
@@ -1023,11 +1030,16 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
                             p->drawable_height);
       overlay_dump(p, is_menu);
     }
+    uint64_t diagnostic_start = FzeroDiagnosticsBegin();
     SDL_GL_SwapWindow(p->gl->window);
+    FzeroDiagnosticsEnd(FZERO_DIAG_PRESENT, diagnostic_start);
     return;
   }
   SDL_Rect source = {0, 0, width, height};
+  uint64_t diagnostic_start = FzeroDiagnosticsBegin();
   SDL_UpdateTexture(p->texture, &source, pixels, width * kBytesPerPixel);
+  FzeroDiagnosticsEnd(FZERO_DIAG_UPLOAD, diagnostic_start);
+  diagnostic_start = FzeroDiagnosticsBegin();
   SDL_SetRenderDrawColor(p->renderer, 0, 0, 0, 255);
   SDL_RenderClear(p->renderer);
   FzeroRect rect =
@@ -1036,7 +1048,10 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
   snesrecomp_sdl_render_texture(p->renderer, p->texture, &source, &destination);
   overlay_draw_sdl(p, panel, pw, ph, is_menu);
   if (panel) overlay_dump(p, is_menu);
+  FzeroDiagnosticsEnd(FZERO_DIAG_DRAW, diagnostic_start);
+  diagnostic_start = FzeroDiagnosticsBegin();
   SDL_RenderPresent(p->renderer);
+  FzeroDiagnosticsEnd(FZERO_DIAG_PRESENT, diagnostic_start);
 }
 
 /*
@@ -1742,7 +1757,47 @@ int main(int argc, char **argv) {
   const char *auto_close = getenv("SNESRECOMP_AUTOCLOSE_FRAMES");
   if (auto_close) auto_close_frames = strtol(auto_close, NULL, 10);
   FzeroClock clock;
-  double hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, display_refresh(window)) : FZERO_SIMULATION_HZ;
+  double actual_refresh = display_refresh(window);
+  double hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, actual_refresh) : FZERO_SIMULATION_HZ;
+  if (g_video.diagnostics) {
+    FzeroDiagnosticSession session = {
+      .version = kBuildVersion, .revision = FZERO_SOURCE_REVISION,
+      .framework_revision = FZERO_FRAMEWORK_REVISION, .ui_revision = FZERO_UI_REVISION,
+      .build_type = FZERO_BUILD_TYPE, .compiler = FZERO_COMPILER,
+      .backend = "SDL", .shader = launcher_settings.shader_path,
+      .shader_loaded = use_gl_renderer && gl_renderer.shader != NULL,
+      .allocated_scale = texture_scale, .vsync = -99,
+      .linear_filter = launcher_settings.linear_filter != 0,
+      .audio_enabled = launcher_settings.enable_audio != 0,
+      .rewind_enabled = snes_rewind_enabled()
+    };
+    if (use_gl_renderer) {
+      session.backend = "OpenGL";
+      session.gpu = (const char *)glGetString(GL_RENDERER);
+      session.gpu_vendor = (const char *)glGetString(GL_VENDOR);
+      session.driver = (const char *)glGetString(GL_VERSION);
+#if SNESRECOMP_SDL3
+      SDL_GL_GetSwapInterval(&session.vsync);
+#else
+      session.vsync = SDL_GL_GetSwapInterval();
+#endif
+    } else {
+#if SNESRECOMP_SDL3
+      session.backend = SDL_GetRendererName(renderer);
+      SDL_GetRenderVSync(renderer, &session.vsync);
+#else
+      SDL_RendererInfo info;
+      if (!SDL_GetRendererInfo(renderer, &info)) {
+        session.backend = info.name;
+        session.vsync = (info.flags & SDL_RENDERER_PRESENTVSYNC) != 0;
+      }
+#endif
+    }
+    char directory[1200];
+    if (!snesrecomp_exe_dir_path("diagnostics", directory, sizeof(directory)))
+      snprintf(directory, sizeof(directory), "diagnostics");
+    FzeroDiagnosticsStart(true, directory, &session);
+  }
   FzeroClockReset(&clock, monotonic_seconds(), hz);
   bool suspended = false;
   const FzeroScriptedState scripted_save = parse_scripted_state("FZERO_STATE_SAVE_AT");
@@ -1765,8 +1820,21 @@ int main(int argc, char **argv) {
    * made F7 look intermittent on the high-refresh presentation path. */
   int open_savestate_menu = 0;
   int open_rewind = 0;
+  FzeroDiagnosticFrame diagnostic_frame = {0};
 
   while (running) {
+    if (g_video.diagnostics) {
+      diagnostic_frame = (FzeroDiagnosticFrame){
+        .simulation = (uint64_t)frames, .presentations = presentations,
+        .missed = missed_presentations + clock.missed_presentations,
+        .settings = g_video, .viewport = viewport,
+        .output_width = drawable_width, .output_height = drawable_height,
+        .effective_scale = FzeroHdScale(), .target_hz = hz, .refresh_hz = actual_refresh,
+        .fullscreen = (SDL_GetWindowFlags(window) & SNESRECOMP_SDL_WINDOW_FULLSCREEN_DESKTOP) != 0,
+        .suspended = suspended, .scene = g_ram[0x54], .subscene = g_ram[0x55]
+      };
+      FzeroDiagnosticsSample(&diagnostic_frame, false);
+    }
     SDL_Event event;
     int panel = 0; /* 0 none, 1 save-state browser, 2 rewind filmstrip */
     while (SDL_PollEvent(&event)) {
@@ -1864,13 +1932,20 @@ int main(int argc, char **argv) {
     bool should_suspend = paused || (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED);
     if (should_suspend != suspended) {
       suspended = should_suspend;
+      FzeroDiagnosticsEvent(suspended ? "pause" : "resume", 0);
       snesrecomp_sdl_pause_audio_device(audio, suspended || !launcher_settings.enable_audio);
       g_reset_presentation_clock = true;
     }
-    if (suspended) { SDL_Delay(10); continue; }
+    if (suspended) {
+      uint64_t diagnostic_start = FzeroDiagnosticsBegin();
+      SDL_Delay(10);
+      FzeroDiagnosticsEnd(FZERO_DIAG_PAUSED, diagnostic_start);
+      continue;
+    }
     double now = monotonic_seconds();
     if (now >= next_display_check) {
-      double next_hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, display_refresh(window)) : FZERO_SIMULATION_HZ;
+      actual_refresh = display_refresh(window);
+      double next_hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, actual_refresh) : FZERO_SIMULATION_HZ;
       if (next_hz != hz) {
         hz = next_hz;
         clock.presentation_hz = hz;
@@ -1879,6 +1954,7 @@ int main(int argc, char **argv) {
       next_display_check = now + 0.25;
     }
     if (g_reset_presentation_clock) {
+      FzeroDiagnosticsEvent("clock_reset", 0);
       missed_presentations += clock.missed_presentations;
       FzeroClockReset(&clock, now, hz);
       g_reset_presentation_clock = false;
@@ -1950,14 +2026,18 @@ int main(int argc, char **argv) {
         panel = 2;
         break;
       }
+      uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       (void)RtlRunFrame(input);
+      FzeroDiagnosticsEnd(FZERO_DIAG_SIMULATION, diagnostic_start);
       if (g_fail || !FzeroLastLleResult()) {
         fprintf(stderr, "[fzero-failure] frame=%ld resume=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
                 frames, (unsigned)FzeroResumePc(), g_fail, FzeroLastLleResult(),
                 g_ram[0x54], g_ram[0x55], g_ram[0x56], g_ram[0x52]);
         Die("F-Zero runtime execution failed");
       }
+      diagnostic_start = FzeroDiagnosticsBegin();
       FzeroDrawPpuFrame();
+      FzeroDiagnosticsEnd(FZERO_DIAG_PPU, diagnostic_start);
       /* One emulated frame elapsed: the ring captures on its own cadence. */
       snes_rewind_note_frame();
       frames++;
@@ -1979,10 +2059,12 @@ int main(int argc, char **argv) {
        * Audio goes quiet for the duration, as it would for any paused
        * game. */
       snesrecomp_sdl_pause_audio_device(audio, true);
+      FzeroDiagnosticsEvent("menu_open", panel);
       if (panel == 1)
         savestate_menu_loop(&presenter, &running, &pad);
       else
         rewind_loop(&presenter, &running, &pad);
+      FzeroDiagnosticsEvent("menu_close", panel);
       if (FzeroStateGuardTripped())
         set_title_message(window, "State refused: taken on the other cartridge",
                           &state_feedback_until);
@@ -1997,8 +2079,11 @@ int main(int argc, char **argv) {
     }
 
     if (FzeroClockPresentationDue(&clock, now)) {
+      uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       FzeroPresent(FzeroClockAlpha(&clock, now));
+      FzeroDiagnosticsEnd(FZERO_DIAG_COMPOSITION, diagnostic_start);
       present_frame(&presenter, NULL, 0, 0, 0);
+      FzeroDiagnosticsPresented();
       /* Offer what was just presented as the next save's thumbnail and as
        * the filmstrip's frame for the next capture. Both downsample into
        * small fixed buffers and keep nothing else. */
@@ -2009,7 +2094,18 @@ int main(int argc, char **argv) {
       FzeroClockPresentationDone(&clock, monotonic_seconds());
       ++presentations;
     }
-    if (running) wait_until(FzeroClockNextDeadline(&clock));
+    if (running) {
+      uint64_t diagnostic_start = FzeroDiagnosticsBegin();
+      wait_until(FzeroClockNextDeadline(&clock));
+      FzeroDiagnosticsEnd(FZERO_DIAG_WAIT, diagnostic_start);
+    }
+  }
+  if (g_video.diagnostics) {
+    diagnostic_frame.simulation = (uint64_t)frames;
+    diagnostic_frame.presentations = presentations;
+    diagnostic_frame.missed = missed_presentations + clock.missed_presentations;
+    FzeroDiagnosticsSample(&diagnostic_frame, true);
+    FzeroDiagnosticsStop();
   }
   fprintf(stderr, "[fzero-presentation] simulation=%ld presentations=%llu missed=%llu target_hz=%.3f\n",
           frames, (unsigned long long)presentations,

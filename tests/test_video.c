@@ -16,7 +16,7 @@ static void viewport_tests(void) {
   FzeroVideoDefaults(&settings); /* shipped defaults: every mod on, Fit, Auto rate */
   CHECK(settings.enhanced && settings.aspect == FZERO_ASPECT_FIT && settings.fps == 0 &&
         settings.fps_enabled && settings.bs_deluxe);
-  CHECK(!settings.hd_mode7 && settings.hd_scale == 2);
+  CHECK(!settings.hd_mode7 && settings.hd_scale == 2 && !settings.diagnostics);
   FzeroVideoStock(&settings);
   CHECK(!settings.enhanced && settings.aspect == FZERO_ASPECT_STOCK && !settings.fps_enabled && !settings.bs_deluxe);
   FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);

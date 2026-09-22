@@ -124,6 +124,9 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
       else valid = false;
     } else if (!strcmp(key, "HDMode7Scale")) {
       if (!FzeroParseHdScale(value, &s->hd_scale)) valid = false;
+    } else if (!strcmp(key, "Diagnostics")) {
+      if (!strcmp(value, "0") || !strcmp(value, "1")) s->diagnostics = value[0] == '1';
+      else valid = false;
     } else if (!strcmp(key, "BSDeluxe")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->bs_deluxe = value[0] == '1';
       else valid = false;
@@ -147,9 +150,9 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary)) return false;
   FILE *f = fopen(temporary, "w");
   if (!f) return false;
-  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\n",
+  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\nDiagnostics=%d\n",
                     s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe,
-                    s->hd_mode7, FzeroValidHdScale(s->hd_scale) ? s->hd_scale : 2u) > 0;
+                    s->hd_mode7, FzeroValidHdScale(s->hd_scale) ? s->hd_scale : 2u, s->diagnostics) > 0;
   if (fclose(f)) ok = false;
   if (ok) {
 #ifdef _WIN32

@@ -74,6 +74,7 @@ shutil.copy2(ROOT / "docs/BS_DELUXE_EXPLORATION.md", stage / "docs/BS_DELUXE_EXP
 shutil.copy2(ROOT / "docs/SAVE_STATES.md", stage / "docs/SAVE_STATES.md")
 shutil.copy2(ROOT / "docs/HD_MODE7.md", stage / "docs/HD_MODE7.md")
 shutil.copy2(ROOT / "docs/HD_MODE7_PERFORMANCE.md", stage / "docs/HD_MODE7_PERFORMANCE.md")
+shutil.copy2(ROOT / "docs/PERFORMANCE_DIAGNOSTICS.md", stage / "docs/PERFORMANCE_DIAGNOSTICS.md")
 screenshots = ROOT / "docs/screenshots"
 if screenshots.is_dir():
     shutil.copytree(screenshots, stage / "docs/screenshots")
@@ -103,6 +104,10 @@ for filename in ("bs-deluxe-import.json", "BS-Deluxe-credits.txt"):
     "Start at 2x. Above 4x can cause severe slowdown; use at your own risk.\n"
     "Cars and HUD keep their original pixel artwork.\n"
     "See docs/HD_MODE7.md for details.\n\n"
+    "Diagnostics starts off. Enable Mods > Diagnostics, reproduce a slowdown,\n"
+    "then attach the newest diagnostics/performance-*.jsonl file to your report.\n"
+    "Logs stay local and include no ROM or save data.\n"
+    "See docs/PERFORMANCE_DIAGNOSTICS.md for details.\n\n"
     "BS Deluxe gives you the original and the BS content together, and keeps\n"
     "its saves apart under saves/bs-deluxe. It is included with permission\n"
     "from its authors: GuyPerfect, Porthor, and PowerPanda. The SNES patch is\n"

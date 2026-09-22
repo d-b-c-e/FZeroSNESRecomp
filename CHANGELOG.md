@@ -1,5 +1,16 @@
 ﻿# Changelog
 
+## 1.8.3 - 2026-09-21
+
+- Add a default-off Diagnostics mod for troubleshooting performance. Enable
+  it under Mods, reproduce a slowdown, and attach the newest timestamped
+  report from the diagnostics folder beside the game or AppImage.
+- Reports include hardware and build information, effective HD Mode 7 and
+  display settings, and timings for rendering, uploads, presentation and
+  frame pacing. Logs stay local and contain no ROM or save data.
+- This patch adds diagnostic reporting; it does not claim to fix the
+  reported HD Mode 7 performance regression.
+
 ## 1.8.2 - 2026-09-21
 
 - Save and honor Skip Launcher. `--launcher` reopens it even with the setting

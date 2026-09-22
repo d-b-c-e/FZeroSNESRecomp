@@ -161,6 +161,7 @@ add_executable(FZeroSNESRecomp
     "${RECOMP_UI_ROOT}/src/third_party/gl_core_3_1.c"
     ${FZERO_GEN_SOURCES}
     src/sdl_main.c
+    src/fzero_diagnostics.c
     src/fzero_mods.c
     src/fzero_hotkeys.c
     src/fzero_gamepad.c
@@ -209,6 +210,25 @@ if(BUILD_TESTING AND SNESRECOMP_SDL_BACKEND STREQUAL "SDL3")
 endif()
 target_link_libraries(FZeroSNESRecomp PRIVATE OpenGL::GL)
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
+# Identify dependencies as well as the game in player performance reports.
+find_package(Git QUIET)
+function(fzero_revision directory output)
+    set(revision "unknown")
+    if(GIT_FOUND)
+        execute_process(COMMAND "${GIT_EXECUTABLE}" describe --always --dirty --abbrev=12
+            WORKING_DIRECTORY "${directory}" OUTPUT_VARIABLE revision
+            RESULT_VARIABLE revision_result OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        if(NOT revision_result EQUAL 0)
+            set(revision "unknown")
+        endif()
+    endif()
+    set(${output} "${revision}" PARENT_SCOPE)
+endfunction()
+fzero_revision("${CMAKE_CURRENT_SOURCE_DIR}" FZERO_SOURCE_REVISION)
+fzero_revision("${SNESRECOMP_ROOT}" FZERO_FRAMEWORK_REVISION)
+fzero_revision("${RECOMP_UI_ROOT}" FZERO_UI_REVISION)
+configure_file(src/fzero_build.h.in generated/fzero_build.h @ONLY)
+target_include_directories(FZeroSNESRecomp PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga"

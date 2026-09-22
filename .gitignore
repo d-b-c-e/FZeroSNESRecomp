@@ -33,6 +33,7 @@ assets/img/*
 /config.ini
 /fzero-video.ini
 /fzero-video.ini.tmp
+/diagnostics/
 /last_run_report.json
 /crash_report_*.json
 /crash_minidump_*.dmp

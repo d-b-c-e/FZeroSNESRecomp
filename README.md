@@ -64,6 +64,7 @@ Open **Mods** for:
 - **Widescreen:** makes races wider.
 - **Presentation FPS:** makes motion smoother on high refresh screens.
 - **HD Mode 7:** sharper tracks at integer scales from 2x to 10x; off by default.
+- **Diagnostics:** optional local performance reports for troubleshooting; off by default. See [how to capture a report](docs/PERFORMANCE_DIAGNOSTICS.md).
   Start at 2x. Above 4x can cause severe slowdown; use at your own risk.
 - **BS Deluxe:** adds the Satellaview machines, leagues, and tracks.
 

@@ -8,7 +8,12 @@ int main(void) {
   const RecompLauncherCModProvider *p = FzeroModsProvider(&s, "test-mods.ini");
   RecompLauncherCModFeature w, f;
   RecompLauncherCModOption option;
-  CHECK(p->package_count(NULL) == 4 && p->feature_count(NULL) == 4);
+  CHECK(p->package_count(NULL) == 5 && p->feature_count(NULL) == 5);
+  RecompLauncherCModFeature diag;
+  CHECK(p->feature_get(NULL, 4, &diag) && !diag.enabled && diag.option_count == 0);
+  CHECK(!p->feature_option_get(NULL, diag.package_id, diag.id, 0, &option));
+  CHECK(p->feature_enable(NULL, diag.package_id, diag.id, 1) && s.diagnostics);
+  CHECK(!s.enhanced && !s.hd_mode7 && !s.fps_enabled);
   RecompLauncherCModFeature hd;
   CHECK(p->feature_get(NULL, 3, &hd) && !hd.enabled && hd.option_count == 1);
   CHECK(p->feature_enable(NULL, hd.package_id, hd.id, 1));
@@ -48,7 +53,9 @@ int main(void) {
   CHECK(p->feature_option_get(NULL, f.package_id, f.id, 0, &option) && !strcmp(option.id, "fps"));
   CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini"));
   CHECK(loaded.enhanced && !loaded.fps_enabled && loaded.fps == 144 && loaded.bs_deluxe);
-  CHECK(loaded.hd_mode7 && loaded.hd_scale == 10);
+  CHECK(loaded.hd_mode7 && loaded.hd_scale == 10 && loaded.diagnostics);
+  CHECK(p->feature_enable(NULL, diag.package_id, diag.id, 0) && !s.diagnostics);
+  CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini") && !loaded.diagnostics);
   CHECK(p->feature_enable(NULL, hd.package_id, hd.id, 0));
   CHECK(!s.hd_mode7 && s.hd_scale == 10 && s.enhanced);
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 0));
