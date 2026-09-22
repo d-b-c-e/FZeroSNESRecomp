@@ -1,6 +1,6 @@
 ﻿# Changelog
 
-## Unreleased
+## 1.8.2 - 2026-09-21
 
 - Save and honor Skip Launcher. `--launcher` reopens it even with the setting
   enabled; a missing or invalid remembered ROM also falls back to the launcher.
