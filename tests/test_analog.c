@@ -34,6 +34,17 @@ int main(void) {
   /* A direction change cannot carry phase from the previous direction. */
   FzeroAnalogSteeringReset(&state);
   CHECK(FzeroAnalogSteeringRead(&state, 12000, 0) == 0);
+
+  /* A half-range, concave curve responds sooner near center and reaches
+   * full input before the physical stop. */
+  FzeroAnalogSteeringReset(&state);
+  int tuned = 0;
+  for (int i = 0; i < 120; ++i)
+    tuned += FzeroAnalogSteeringReadTuned(&state, 3276, 0, 50, 50) != 0;
+  CHECK(tuned > 45 && tuned < 65);
+  FzeroAnalogSteeringReset(&state);
+  for (int i = 0; i < 10; ++i)
+    CHECK(FzeroAnalogSteeringReadTuned(&state, 16384, 0, 50, 50) == 0x80);
   CHECK(FzeroAnalogSteeringRead(&state, -12000, 0) == 0);
   CHECK(state.direction == -1);
 

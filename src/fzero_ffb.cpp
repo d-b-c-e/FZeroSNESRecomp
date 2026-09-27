@@ -21,6 +21,7 @@ int s_strength = 40;
 #ifdef _WIN32
 WheelFfbApi s_ffb{};
 int s_damper = -1;
+int s_spring = -1;
 int s_road = -1;
 int s_collision = -1;
 bool s_active = false;
@@ -72,6 +73,8 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
   const int direction = (input & 0x0040u) ? 1 : (input & 0x0080u) ? -1 : 0;
   const float speed_scale = std::min(state->speed / 24.0f, 1.0f);
   out->constant_force = (int)(direction * strength * 55.0f * speed_scale);
+  out->spring_coefficient = (int)(strength * 100.0f * speed_scale);
+  out->damper_coefficient = (int)(strength * 40.0f * speed_scale);
 
   /* Surface bits are non-zero on rough/slip zones. Keep normal track texture
    * subtle and raise it on those zones; frequency follows vehicle speed. */
@@ -128,15 +131,19 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
   }
   s_ffb.InstallExitGuards();
   s_ffb.SetAutoCenter(0);
-  s_ffb.StartEffect();
+  if (!s_ffb.StartEffect()) {
+    std::fprintf(stderr, "[fzero-ffb] constant effect failed (HRESULT %08x); disabled\n",
+                 (unsigned)s_ffb.GetLastHResult());
+    FzeroFfbShutdown();
+    return;
+  }
+  s_spring = s_ffb.CreateConditionEffect(0);
   s_damper = s_ffb.CreateConditionEffect(1);
-  if (s_damper >= 0)
-    s_ffb.UpdateConditionEffect(s_damper, 1200, 10000, 0, 0);
   s_road = s_ffb.CreatePeriodicEffect(25);
   s_collision = s_ffb.CreatePeriodicBurst(32, 140);
   s_active = true;
-  std::fprintf(stderr, "[fzero-ffb] active on %s at %d%%\n", requested,
-               s_strength);
+  std::fprintf(stderr, "[fzero-ffb] active on %s at %d%% (spring=%d damper=%d road=%d)\n",
+               requested, s_strength, s_spring, s_damper, s_road);
 #else
   (void)native_window;
   std::fprintf(stderr, "[fzero-ffb] unavailable on this platform\n");
@@ -148,7 +155,19 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
   if (!s_active) return;
   FzeroFfbOutput output{};
   FzeroFfbCompute(&s_state, ram, ram_size, input, s_strength, &output);
-  s_ffb.SetDeviceForcesXY(output.constant_force, 0);
+  /* The SNES input is pulse-density modulated, so applying those digital
+   * pulses directly to constant force feels like a brief tick followed by
+   * silence. Let the wheel's own position-sensitive spring hold a continuous
+   * centering load; retain the digital force only when spring is unsupported. */
+  if (!s_ffb.SetDeviceForcesXY(s_spring >= 0 ? 0 : output.constant_force, 0))
+    std::fprintf(stderr, "[fzero-ffb] force update rejected (HRESULT %08x)\n",
+                 (unsigned)s_ffb.GetLastHResult());
+  if (s_spring >= 0)
+    s_ffb.UpdateConditionEffect(s_spring, output.spring_coefficient,
+                                10000, 0, 0);
+  if (s_damper >= 0)
+    s_ffb.UpdateConditionEffect(s_damper, output.damper_coefficient,
+                                10000, 0, 0);
   if (s_road >= 0)
     s_ffb.UpdatePeriodicEffect(s_road, output.road_magnitude,
                                output.road_frequency_millihz);
@@ -156,6 +175,12 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
     s_ffb.PlayPeriodicBurst(s_collision, s_strength * 85, 32000);
 #else
   (void)ram; (void)ram_size; (void)input;
+#endif
+}
+
+void FzeroFfbSilence(void) {
+#ifdef _WIN32
+  if (s_active) s_ffb.ZeroForces();
 #endif
 }
 
@@ -168,7 +193,7 @@ void FzeroFfbShutdown(void) {
     s_ffb.FreeDirectInput();
     WheelFfb_Unload(&s_ffb);
   }
-  s_damper = s_road = s_collision = -1;
+  s_spring = s_damper = s_road = s_collision = -1;
   s_active = false;
 #endif
   std::memset(&s_state, 0, sizeof(s_state));

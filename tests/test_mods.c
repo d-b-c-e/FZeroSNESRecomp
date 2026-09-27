@@ -3,6 +3,17 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(1); } } while (0)
+static int wrote_wheel_range, wrote_rewind, wrote_ffb;
+static void note_ini(const char *path, const char *section,
+                     const char *key, const char *value) {
+  CHECK(!strcmp(path, "wheel-options.ini"));
+  if (!strcmp(section, "Controller.test-guid") &&
+      !strcmp(key, "SteeringRangePercent")) wrote_wheel_range = atoi(value);
+  if (!strcmp(section, "Controller.test-guid") &&
+      !strcmp(key, "ButtonRewind")) wrote_rewind = atoi(value);
+  if (!strcmp(section, "ForceFeedback") &&
+      !strcmp(key, "Strength")) wrote_ffb = atoi(value);
+}
 int main(void) {
   FzeroVideoSettings s, loaded; FzeroVideoStock(&s); /* start from nothing enabled to test each toggle */
   const RecompLauncherCModProvider *p = FzeroModsProvider(&s, "test-mods.ini");
@@ -60,6 +71,25 @@ int main(void) {
   CHECK(!s.hd_mode7 && s.hd_scale == 10 && s.enhanced);
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 0));
   CHECK(!s.bs_deluxe && s.enhanced && !s.fps_enabled);
+  p = FzeroModsProviderWheel(&s, "test-mods.ini", "wheel-options.ini",
+                             "test-guid", note_ini);
+  CHECK(p->feature_count(NULL) == 7);
+  RecompLauncherCModFeature wheel, ffb;
+  CHECK(p->feature_get(NULL, 5, &wheel) && wheel.option_count == 23);
+  CHECK(p->feature_get(NULL, 6, &ffb) && ffb.option_count == 2);
+  CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 22, &option));
+  CHECK(option.type == RECOMP_MOD_OPTION_RAW_BUTTON);
+  CHECK(!strcmp(option.device_guid, "test-guid"));
+  CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                              "SteeringRangePercent", "45"));
+  CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                              "ButtonRewind", "37"));
+  CHECK(!p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                               "ButtonRewind", "128"));
+  CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                              "Strength", "40"));
+  CHECK(p->commit(NULL, NULL));
+  CHECK(wrote_wheel_range == 45 && wrote_rewind == 37 && wrote_ffb == 40);
   remove("test-mods.ini");
   puts("Independent widescreen and presentation FPS plugins passed");
   return 0;

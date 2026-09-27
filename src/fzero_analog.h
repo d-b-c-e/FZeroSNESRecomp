@@ -23,3 +23,9 @@ void FzeroAnalogSteeringReset(FzeroAnalogSteering *state);
  * Returns SNES joypad bit 6 (Left), bit 7 (Right), or zero. */
 uint32_t FzeroAnalogSteeringRead(FzeroAnalogSteering *state, int axis,
                                  int deadzone);
+/* range_percent is the fraction of physical axis travel that reaches full
+ * lock; response_percent is the curve exponent in percent (50 = sqrt).
+ * Both are deliberately independent of the neutral deadzone. */
+uint32_t FzeroAnalogSteeringReadTuned(FzeroAnalogSteering *state, int axis,
+                                     int deadzone, int range_percent,
+                                     int response_percent);

@@ -559,7 +559,9 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   game.has_shader = 1;
   game.msu1_supported = 1;
   game.msu1_note = "Select a music folder containing Conn/Cubear v11 f-zero_msu1.ips and your PCM tracks. Works with stock F-Zero and BS Deluxe.";
-  game.mods = FzeroModsProvider(&g_video, kVideoConfig);
+  game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
+                                    settings->player_gamepad_guid[0],
+                                    launcher_ini_kv_write);
   game.rom_cache_path = "rom.cfg";
   /* Draws the Controls page's SaveStateMenu and Rewind rows, and the
    * Settings page's rewind enable / depth / interval controls. The hotkey
@@ -1824,6 +1826,7 @@ int main(int argc, char **argv) {
    * made F7 look intermittent on the high-refresh presentation path. */
   int open_savestate_menu = 0;
   int open_rewind = 0;
+  uint32_t held_wheel_host_buttons = 0;
   FzeroDiagnosticFrame diagnostic_frame = {0};
 
   while (running) {
@@ -1936,6 +1939,7 @@ int main(int argc, char **argv) {
     bool should_suspend = paused || (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED);
     if (should_suspend != suspended) {
       suspended = should_suspend;
+      if (suspended) FzeroFfbSilence();
       FzeroDiagnosticsEvent(suspended ? "pause" : "resume", 0);
       snesrecomp_sdl_pause_audio_device(audio, suspended || !launcher_settings.enable_audio);
       g_reset_presentation_clock = true;
@@ -2011,6 +2015,16 @@ int main(int argc, char **argv) {
       uint32_t input = keyboard_input() | controller_input(pad) |
                        debug_server_get_controller_inputs() | (1u << 30) |
                        debug_server_get_controller_active_mask();
+      uint32_t wheel_host_buttons = input & (FZERO_WHEEL_SAVE_MENU | FZERO_WHEEL_REWIND);
+      uint32_t wheel_host_pressed = wheel_host_buttons & ~held_wheel_host_buttons;
+      held_wheel_host_buttons = wheel_host_buttons;
+      input &= ~(FZERO_WHEEL_SAVE_MENU | FZERO_WHEEL_REWIND);
+      if (wheel_host_pressed & FZERO_WHEEL_SAVE_MENU) {
+        (void)snes_savestate_menu_poll_open(FZERO_MENU_GESTURE);
+      }
+      if (wheel_host_pressed & FZERO_WHEEL_REWIND) {
+        (void)snes_rewind_open();
+      }
       if (FzeroReplayHasInput()) input = FzeroReplayInput((unsigned)frames);
       /* Seat 0's word, before the guest sees it: the overlays are a player-1
        * facility, and the press that closed one must neither reach the game
@@ -2065,6 +2079,7 @@ int main(int argc, char **argv) {
        * Audio goes quiet for the duration, as it would for any paused
        * game. */
       snesrecomp_sdl_pause_audio_device(audio, true);
+      FzeroFfbSilence();
       FzeroDiagnosticsEvent("menu_open", panel);
       if (panel == 1)
         savestate_menu_loop(&presenter, &running, &pad);

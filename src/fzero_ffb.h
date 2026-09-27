@@ -18,6 +18,8 @@ typedef struct FzeroFfbOutput {
   int constant_force;
   int road_magnitude;
   int road_frequency_millihz;
+  int spring_coefficient;
+  int damper_coefficient;
   int collision_pulse;
   int racing;
 } FzeroFfbOutput;
@@ -28,6 +30,7 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
 void FzeroFfbInit(const char *config_path, void *native_window);
 void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input);
 void FzeroFfbShutdown(void);
+void FzeroFfbSilence(void);
 
 #ifdef __cplusplus
 }

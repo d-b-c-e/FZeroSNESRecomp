@@ -8,13 +8,20 @@
 static char s_config[1024], s_preferred[40];
 static uint32_t s_bind[12];
 static int s_default_deadzone, s_deadzone;
+static int s_range_percent = 100, s_response_percent = 100;
 static bool s_analog_steering;
 static FzeroAnalogSteering s_steering;
 static SDL_Joystick *s_raw;
 static int s_raw_axis = 0, s_gas_axis = -1, s_brake_axis = -1;
 static int s_gas_invert, s_brake_invert, s_pedal_threshold;
-static int s_raw_buttons[8];
-static const unsigned s_raw_input_bits[8] = {8, 0, 9, 1, 10, 11, 2, 3};
+static int s_raw_buttons[18];
+static const unsigned s_raw_input_bits[18] = {
+    8, 0, 9, 1, 10, 11, 2, 3, 4, 5, 6, 7, 24, 25, 0, 0, 0, 0};
+static const char *const s_raw_keys[18] = {
+    "ButtonA", "ButtonB", "ButtonX", "ButtonY", "ButtonL", "ButtonR",
+    "ButtonSelect", "ButtonStart", "ButtonUp", "ButtonDown", "ButtonLeft",
+    "ButtonRight", "ButtonSaveStateMenu", "ButtonRewind",
+    NULL, NULL, NULL, NULL};
 
 /* SDL's standard button indices are shared by SDL2 and SDL3. Triggers are
  * axes, represented here by bits 15/16 after the standard fifteen buttons. */
@@ -88,6 +95,9 @@ static void load_profile(SDL_GameController *pad) {
   int analog = 0;
   FzeroIniReadInt(s_config, section, "AnalogSteering", &analog);
   s_analog_steering = analog != 0;
+  s_range_percent = 100; s_response_percent = 100;
+  FzeroIniReadInt(s_config, section, "SteeringRangePercent", &s_range_percent);
+  FzeroIniReadInt(s_config, section, "SteeringResponsePercent", &s_response_percent);
   FzeroAnalogSteeringReset(&s_steering);
   fprintf(stderr, "[fzero-input] %s guid=%s deadzone=%d%% steering=%s\n",
           SDL_GameControllerName(pad), guid, percent,
@@ -104,6 +114,9 @@ static void load_raw_profile(SDL_Joystick *stick) {
   s_deadzone = (percent * 32767 + 50) / 100;
   FzeroIniReadInt(s_config, section, "AnalogSteering", &analog);
   s_analog_steering = analog != 0;
+  s_range_percent = 100; s_response_percent = 100;
+  FzeroIniReadInt(s_config, section, "SteeringRangePercent", &s_range_percent);
+  FzeroIniReadInt(s_config, section, "SteeringResponsePercent", &s_response_percent);
   s_raw_axis = 0; s_gas_axis = s_brake_axis = -1;
   s_gas_invert = s_brake_invert = 0; s_pedal_threshold = 0;
   FzeroIniReadInt(s_config, section, "SteeringAxis", &s_raw_axis);
@@ -112,11 +125,9 @@ static void load_raw_profile(SDL_Joystick *stick) {
   FzeroIniReadInt(s_config, section, "AcceleratorInvert", &s_gas_invert);
   FzeroIniReadInt(s_config, section, "BrakeInvert", &s_brake_invert);
   FzeroIniReadInt(s_config, section, "PedalThreshold", &s_pedal_threshold);
-  const char *keys[8] = {"ButtonA", "ButtonB", "ButtonX", "ButtonY",
-                         "ButtonL", "ButtonR", "ButtonSelect", "ButtonStart"};
-  for (int i = 0; i < 8; ++i) {
+  for (int i = 0; i < 14; ++i) {
     s_raw_buttons[i] = -1;
-    FzeroIniReadInt(s_config, section, keys[i], &s_raw_buttons[i]);
+    FzeroIniReadInt(s_config, section, s_raw_keys[i], &s_raw_buttons[i]);
   }
   FzeroAnalogSteeringReset(&s_steering);
   fprintf(stderr, "[fzero-input] raw %s guid=%s steering-axis=%d gas-axis=%d brake-axis=%d\n",
@@ -230,7 +241,8 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
     uint32_t input = 0;
     int x = SDL_JoystickGetAxis(s_raw, s_raw_axis);
     if (s_analog_steering)
-      input |= FzeroAnalogSteeringRead(&s_steering, x, s_deadzone);
+      input |= FzeroAnalogSteeringReadTuned(&s_steering, x, s_deadzone,
+                                           s_range_percent, s_response_percent);
     else {
       if (x < -s_deadzone) input |= 0x0040u;
       if (x > s_deadzone) input |= 0x0080u;
@@ -245,7 +257,7 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
       if (s_brake_invert) value = -value;
       if (value > s_pedal_threshold) input |= 0x0002u;
     }
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 14; ++i)
       if (s_raw_buttons[i] >= 0 && SDL_JoystickGetButton(s_raw, s_raw_buttons[i]))
         input |= 1u << s_raw_input_bits[i];
     return input;
@@ -262,7 +274,8 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
   int x = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTX);
   int y = SDL_GameControllerGetAxis(pad, SDL_CONTROLLER_AXIS_LEFTY);
   if (s_analog_steering)
-    input |= FzeroAnalogSteeringRead(&s_steering, x, s_deadzone);
+    input |= FzeroAnalogSteeringReadTuned(&s_steering, x, s_deadzone,
+                                         s_range_percent, s_response_percent);
   else {
     if (x < -s_deadzone) input |= 0x0040u;
     if (x > s_deadzone) input |= 0x0080u;

@@ -62,7 +62,7 @@ target_include_directories(FZeroRendererBenchmark PRIVATE ${SNESRECOMP_RUNNER_IN
 target_link_libraries(FZeroRendererBenchmark PRIVATE fzero_video)
 if(BUILD_TESTING)
     add_executable(fzero_renderer_tests tests/test_renderer.c src/fzero_renderer.c)
-    add_executable(fzero_mods_tests tests/test_mods.c src/fzero_mods.c)
+    add_executable(fzero_mods_tests tests/test_mods.c src/fzero_mods.c src/fzero_hotkeys.c)
     target_include_directories(fzero_mods_tests PRIVATE "${RECOMP_UI_ROOT}/src")
     target_link_libraries(fzero_mods_tests PRIVATE fzero_video)
     if(NOT MSVC)

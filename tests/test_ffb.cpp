@@ -22,6 +22,8 @@ int main() {
   FzeroFfbCompute(&state, ram, sizeof(ram), 0x0040, 40, &out);
   CHECK(out.constant_force > 0 && out.constant_force <= 10000);
   CHECK(out.road_magnitude > 0 && out.road_magnitude <= 10000);
+  CHECK(out.spring_coefficient > 0 && out.spring_coefficient <= 10000);
+  CHECK(out.damper_coefficient > 0 && out.damper_coefficient <= 10000);
   ram[0xe0] = 1;
   FzeroFfbCompute(&state, ram, sizeof(ram), 0, 100, &out);
   CHECK(out.collision_pulse == 1);
@@ -30,6 +32,7 @@ int main() {
   ram[0x55] = 0;
   FzeroFfbCompute(&state, ram, sizeof(ram), 0x0040, 100, &out);
   CHECK(!out.racing && out.constant_force == 0 && out.road_magnitude == 0);
+  CHECK(out.spring_coefficient == 0 && out.damper_coefficient == 0);
   FzeroFfbCompute(&state, ram, 12, 0, 40, &out);
   CHECK(!out.racing);
 

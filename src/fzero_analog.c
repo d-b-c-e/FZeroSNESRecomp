@@ -1,6 +1,7 @@
 #include "fzero_analog.h"
 
 #include <stdlib.h>
+#include <math.h>
 
 enum {
   FZERO_INPUT_LEFT = 0x0040u,
@@ -16,6 +17,12 @@ void FzeroAnalogSteeringReset(FzeroAnalogSteering *state) {
 
 uint32_t FzeroAnalogSteeringRead(FzeroAnalogSteering *state, int axis,
                                  int deadzone) {
+  return FzeroAnalogSteeringReadTuned(state, axis, deadzone, 100, 100);
+}
+
+uint32_t FzeroAnalogSteeringReadTuned(FzeroAnalogSteering *state, int axis,
+                                     int deadzone, int range_percent,
+                                     int response_percent) {
   if (!state) return 0;
   if (deadzone < 0) deadzone = 0;
   if (deadzone > 32766) deadzone = 32766;
@@ -35,9 +42,16 @@ uint32_t FzeroAnalogSteeringRead(FzeroAnalogSteering *state, int axis,
    * direction reaches a true 100% duty cycle. */
   int magnitude = axis < 0 ? -axis : axis;
   int maximum = axis < 0 ? 32768 : 32767;
-  uint32_t level = (uint32_t)(((uint64_t)(magnitude - deadzone) *
-                               FZERO_ANALOG_ONE) /
-                              (uint32_t)(maximum - deadzone));
+  if (range_percent < 10) range_percent = 10;
+  if (range_percent > 100) range_percent = 100;
+  if (response_percent < 25) response_percent = 25;
+  if (response_percent > 200) response_percent = 200;
+  int span = (int)(((int64_t)(maximum - deadzone) * range_percent) / 100);
+  if (span < 1) span = 1;
+  double travel = (double)(magnitude - deadzone) / span;
+  if (travel > 1.0) travel = 1.0;
+  double curved = pow(travel, response_percent / 100.0);
+  uint32_t level = (uint32_t)(curved * FZERO_ANALOG_ONE + 0.5);
   if (level >= FZERO_ANALOG_ONE) {
     state->phase = 0;
     return direction < 0 ? FZERO_INPUT_LEFT : FZERO_INPUT_RIGHT;
