@@ -22,6 +22,15 @@ center-panel ground rays reproduce synthetic source scanlines. These are
 renderer building blocks only: **the shipping game still uses one wide affine
 view**. No three-panel compositor or sprite reprojection is active yet.
 
+`FZeroTripleGroundCapture` is an offline renderer built from immutable capture
+files. It uses the existing course-table/VRAM lookup and colour pipeline to
+write three distinct ground panels into one PPM span. A per-scanline similarity
+correction matches the center panel's exact captured Mode 7 step and origin
+while retaining distinct physical rays on the side panels. It does not run in
+the game, and deliberately renders sky black and omits all vehicles, effects,
+HUD, menus, and other screen-space layers. A visually plausible track-only
+image must not be mistaken for playable triple-screen support.
+
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
 distance, 8 mm bezel gap, and 70° left/right yaw. The projection math mirrors
@@ -38,9 +47,43 @@ also exposed a required longitudinal scale factor (0.4322 in that frame); assumi
 isotropic world units produced errors up to 375 texture units. The corrected
 factor has a captured-line regression fixture in the C test. This validates a
 small sample of race frames, not every scene or camera transition. The next
-gate is pixel comparison and scene-transition rejection; reject calibration
-when the fit is poor rather than distorting the player's view. Until then, keep the new module
-disconnected from the runtime renderer.
+gate is colour/pixel comparison across more tracks, effects and camera
+transitions, with an explicit fallback wherever the calibration fails. Until
+then, keep the new module disconnected from the runtime renderer.
+
+### Offline ground-render evidence
+
+The offline prototype rendered frames 1600, 1650, 1700, 1800, and 1900 from
+recorded race/steering input at 640×360 per panel. Every frame produced three
+different ground sightlines and a 100% center-panel **texture-coordinate**
+match against its original Mode 7 scanlines over rows 80–210 after per-row
+alignment. Frame 1800 also rendered at the rig's full 7680×1440 Surround
+resolution (three 2560×1440 panels) with the same center-coordinate match.
+These numbers establish texture sampling, not complete scene composition or
+visual equivalence where sprites, HUD, and sky are present. Frame 1300 was
+rejected as a transition/non-race view rather than drawn through a misleading
+camera calibration.
+
+The pure panel/calibration test needs no ROM or initialized submodules:
+
+```text
+cmake -S . -B build-triple-math -DFZERO_BUILD_GAME=OFF
+cmake --build build-triple-math --target fzero_triple_geometry_tests
+ctest --test-dir build-triple-math -R fzero_triple_geometry
+```
+
+With a private verified ROM capture and the usual game build prerequisites,
+the offline tool can be built and run separately from the game executable:
+
+```text
+cmake --build build-dev --target FZeroTripleGroundCapture
+build-dev/FZeroTripleGroundCapture captures/race/frame-001800.bin triple.ppm 708.4166 398.4843 660 70 70 8 640 360
+```
+
+The output is ignored under `captures/` during local testing. The tool
+validates active-race Mode 7 lines, rejects unsupported camera pitch, requires
+three distinct ground projections, and fails if fewer than 99% of the center
+texels align with the captured affine renderer.
 
 Consequently:
 
@@ -137,11 +180,10 @@ the toolkit revision and conformance tests when that boundary is introduced.
 Keep this work independent of analog input, force feedback, and telemetry.
 
 1. **Math/capture prototype**
-   - Add a renderer-only panel-ray calculator with deterministic tests.
-   - Render three panel-correct Mode 7 ground images into one borderless span.
-   - Add a debug divider and per-panel yaw hot reload.
-   - Compare a zero-yaw, center-panel render pixel-for-pixel with the current HD
-     Mode 7 path.
+   - Done offline: panel-ray calculator, captured-line calibration, three
+     panel-correct track-only images, and ROM-free regression tests.
+   - Pending runtime: one borderless Surround span, debug dividers, yaw hot
+     reload, invalid-camera fallback, and frame-by-frame stock comparison.
 2. **Center compositor**
    - Composite BG3, HUD OAM, windows, and menus only in the center panel.
    - Keep menus and non-race scenes centered and unmodified.
@@ -173,9 +215,9 @@ Keep this work independent of analog input, force feedback, and telemetry.
 
 ## Reusable-toolkit feedback
 
-The shared toolkit would benefit from a renderer-neutral API that returns
-world-space eye rays (or panel plane basis vectors) in addition to conventional
-off-axis 4x4 matrices. That API would let raycasters, 2.5D floor renderers, and
-Mode 7-style engines consume the same measured rig geometry without fabricating
-a 3D camera matrix. A conformance fixture for symmetric rigs and bezel gaps
-would make vendored generated artifacts straightforward to verify.
+The private toolkit now exposes a renderer-neutral `EyeRayCalculator`, which
+this prototype mirrors rather than inventing a 4x4 camera matrix for Mode 7.
+The remaining interoperability work is a stable native C ABI (or generated
+artifact), explicit bezel-gap handling, and conformance fixtures shared with
+the toolkit. Until that boundary is public and tested, the game fork should
+retain only this small, pinned source adapter rather than a private submodule.

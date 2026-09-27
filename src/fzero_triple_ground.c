@@ -29,7 +29,11 @@ bool FzeroTripleGroundCalibrate(const FzeroTripleRig *rig, int logical_width,
   double intercept = 1.0 / far_scale + slope * (112.0 - far_y);
   double tangent = rig->height_mm * intercept /
                    (224.0 * rig->eye_distance_mm * slope);
-  if (!(slope > 0 && tangent > 0 && isfinite(tangent))) return false;
+  /* The game briefly reports near-flat inverse scale during camera
+   * transitions. That can fit two lines mathematically while implying an
+   * 80-degree camera pitch, so reject outside the measured race envelope. */
+  if (!(slope > 0 && tangent > 0.0524078 && tangent < 0.7002076 &&
+        isfinite(tangent))) return false; /* 3 to 35 degrees */
   double pitch_cos = 1.0 / sqrt(1.0 + tangent * tangent);
   double pitch_sin = tangent * pitch_cos;
   double camera_height = logical_width * rig->height_mm * pitch_cos /
@@ -88,4 +92,34 @@ bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
        ground->forward_scale);
   return isfinite(texel->x) && isfinite(texel->y) &&
          fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
+}
+
+bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
+                                FzeroMode7Texel center_left,
+                                FzeroMode7Texel center_right,
+                                FzeroMode7Texel raw,
+                                int logical_width, int panel_width,
+                                FzeroMode7Texel *aligned) {
+  if (!aligned || logical_width < 256 || panel_width < 2) return false;
+  double px = center_right.x - center_left.x;
+  double py = center_right.y - center_left.y;
+  double norm = px * px + py * py;
+  if (!(norm > 1e-12) || !isfinite(norm)) return false;
+  double factor = (double)logical_width / panel_width / 256.0;
+  double ox = line.step_x * factor, oy = line.step_y * factor;
+  double a = (px * ox + py * oy) / norm;
+  double b = (px * oy - py * ox) / norm;
+  double dx = raw.x - (center_left.x + center_right.x) * 0.5;
+  double dy = raw.y - (center_left.y + center_right.y) * 0.5;
+  aligned->x = center_x(line) + a * dx - b * dy;
+  aligned->y = center_y(line) + b * dx + a * dy;
+  /* A nominally exact integer can land one ULP below it after the inverse
+   * rotation. Mode 7 floors texels, so that would shift an entire straight
+   * scanline by one pixel despite the analytic center match. */
+  double rounded_x = nearbyint(aligned->x);
+  double rounded_y = nearbyint(aligned->y);
+  if (fabs(aligned->x - rounded_x) < 1e-7) aligned->x = rounded_x;
+  if (fabs(aligned->y - rounded_y) < 1e-7) aligned->y = rounded_y;
+  return isfinite(aligned->x) && isfinite(aligned->y) &&
+         fabs(aligned->x) < 1e6 && fabs(aligned->y) < 1e6;
 }

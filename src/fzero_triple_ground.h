@@ -17,3 +17,13 @@ bool FzeroTripleGroundCalibrate(const FzeroTripleRig *rig, int logical_width,
                                FzeroTripleGround *out);
 bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
                              FzeroTripleVec3 ray, FzeroMode7Texel *texel);
+/* Per-row similarity correction: map two center-panel physical samples to
+ * the exact captured Mode 7 step and center, then apply that same transform
+ * to all three panels. This preserves panel-specific perspective while the
+ * retail Q8 scroll/rounding remains pixel-exact on the center panel. */
+bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
+                                FzeroMode7Texel center_left,
+                                FzeroMode7Texel center_right,
+                                FzeroMode7Texel raw,
+                                int logical_width, int panel_width,
+                                FzeroMode7Texel *aligned);

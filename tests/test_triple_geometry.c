@@ -85,6 +85,51 @@ int main(void) {
   CHECK(FzeroTripleGroundLocate(&ground, center, &center_ground));
   CHECK(fabs(center_ground.x - 335.25) < 1.5);
   CHECK(fabs(center_ground.y - 344.0) < 1.0);
+  FzeroMode7Line race_y100 = {85824, 56832, 0, 244, 0};
+  FzeroTripleVec3 align_ray_left, align_ray_right;
+  FzeroMode7Texel align_left, align_right;
+  CHECK(FzeroTripleRay(&panel[1], 1279, 646, 2560, 1440,
+                       &align_ray_left));
+  CHECK(FzeroTripleRay(&panel[1], 1280, 646, 2560, 1440,
+                       &align_ray_right));
+  CHECK(FzeroTripleGroundLocate(&ground, align_ray_left, &align_left));
+  CHECK(FzeroTripleGroundLocate(&ground, align_ray_right, &align_right));
+  const int aligned_samples[] = {640, 1280, 1920};
+  for (int i = 0; i < 3; ++i) {
+    FzeroMode7Texel raw, corrected;
+    int x = aligned_samples[i];
+    CHECK(FzeroTripleRay(&panel[1], x, 646, 2560, 1440, &center));
+    CHECK(FzeroTripleGroundLocate(&ground, center, &raw));
+    CHECK(FzeroTripleGroundAlignLine(race_y100, align_left, align_right,
+                                     raw, 342, 2560, &corrected));
+    double logical_x = 128 + ((x + 0.5) / 2560.0 - 0.5) * 342;
+    CHECK(fabs(corrected.x -
+        (race_y100.origin_x + logical_x * race_y100.step_x) / 256) < 1e-6);
+    CHECK(fabs(corrected.y -
+        (race_y100.origin_y + logical_x * race_y100.step_y) / 256) < 1e-6);
+  }
+  FzeroMode7Line exact_line = {25600, 51200, 0, 256, 0};
+  FzeroMode7Texel exact;
+  CHECK(FzeroTripleGroundAlignLine(exact_line,
+      (FzeroMode7Texel){0, 0}, (FzeroMode7Texel){0, 0.5},
+      (FzeroMode7Texel){0, 0.25 - 1e-12}, 342, 2560, &exact));
+  CHECK(exact.x == 100 && exact.y == 328); /* integer-floor stability */
+  FzeroMode7Texel race_left, race_right;
+  CHECK(FzeroTripleRay(&panel[0], 1280, 900, 2560, 1440, &left));
+  CHECK(FzeroTripleRay(&panel[1], 1280, 900, 2560, 1440, &center));
+  CHECK(FzeroTripleRay(&panel[2], 1279, 900, 2560, 1440, &right));
+  CHECK(FzeroTripleGroundLocate(&ground, left, &race_left));
+  CHECK(FzeroTripleGroundLocate(&ground, center, &center_ground));
+  CHECK(FzeroTripleGroundLocate(&ground, right, &race_right));
+  CHECK(hypot(race_left.x - center_ground.x,
+              race_left.y - center_ground.y) > 20);
+  CHECK(hypot(race_right.x - center_ground.x,
+              race_right.y - center_ground.y) > 20);
+  /* Frame 1300 is a transition with a two-line pitch near 79 degrees. */
+  FzeroMode7Line transition_far = {298624, 72704, 0, 120, 0};
+  FzeroMode7Line transition_near = {286592, 73472, 0, 114, 0};
+  CHECK(!FzeroTripleGroundCalibrate(&rig, 342, transition_far, 80,
+                                    transition_near, 180, &ground));
   rig.right_yaw_deg = 90;
   CHECK(!FzeroTripleBuild(&rig, panel));
   puts("F-Zero triple-screen physical rays passed");
