@@ -54,6 +54,18 @@ include(${SNESRECOMP_ROOT}/runner/runner.cmake)
 include(${RECOMP_UI_ROOT}/recomp_ui.cmake)
 find_package(OpenGL REQUIRED)
 
+add_library(fzero_triple_geometry STATIC src/fzero_triple_geometry.c
+    src/fzero_triple_ground.c)
+target_include_directories(fzero_triple_geometry PUBLIC "${CMAKE_SOURCE_DIR}/src")
+if(NOT MSVC)
+    target_link_libraries(fzero_triple_geometry PUBLIC m)
+endif()
+if(BUILD_TESTING)
+    add_executable(fzero_triple_geometry_tests tests/test_triple_geometry.c)
+    target_link_libraries(fzero_triple_geometry_tests PRIVATE fzero_triple_geometry)
+    add_test(NAME fzero_triple_geometry COMMAND fzero_triple_geometry_tests)
+endif()
+
 add_executable(FZeroRenderCapture tools/render_capture.c src/fzero_renderer.c)
 target_include_directories(FZeroRenderCapture PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
 target_link_libraries(FZeroRenderCapture PRIVATE fzero_video)

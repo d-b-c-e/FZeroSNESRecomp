@@ -12,6 +12,36 @@ SNES Mode 7: each scanline contains an affine map from screen X to a texel in a
 flat world plane. Vehicles, effects, scenery, and the HUD are SNES tile and OAM
 layers composed in screen space.
 
+## Prototype status (2026-09-27)
+
+`src/fzero_triple_geometry.*` now calculates distinct eye rays for three
+physical panels, including the bezel gap. `src/fzero_triple_ground.*` is an
+experimental flat-ground calibration from two captured Mode 7 scanlines. A
+deterministic test checks panel symmetry, independent sightlines, and that
+center-panel ground rays reproduce synthetic source scanlines. These are
+renderer building blocks only: **the shipping game still uses one wide affine
+view**. No three-panel compositor or sprite reprojection is active yet.
+
+The initial test fixture uses the locally saved rig measurements: three
+2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
+distance, 8 mm bezel gap, and 70° left/right yaw. The projection math mirrors
+the renderer-neutral eye-ray API added in private `dbce-triple-screen-toolkit`
+revision `63b7c558645a4851416d7c2807c86fa56ffe9259`, with bezel spacing
+added at this adapter boundary. The private toolkit is not a public build
+dependency. Curved panels are currently approximated by their visible chords.
+
+Active-race captures at simulation frames 1600, 1650, 1700, 1800, and 1900
+(including a sustained steering input) fit the two-line ground model over
+scanlines 60–210: horizontal scale error stays within 0.49%, and the
+recovered scanline center differs by at most 1.2 texture units. Frame 1600
+also exposed a required longitudinal scale factor (0.4322 in that frame); assuming
+isotropic world units produced errors up to 375 texture units. The corrected
+factor has a captured-line regression fixture in the C test. This validates a
+small sample of race frames, not every scene or camera transition. The next
+gate is pixel comparison and scene-transition rejection; reject calibration
+when the fit is poor rather than distorting the player's view. Until then, keep the new module
+disconnected from the runtime renderer.
+
 Consequently:
 
 - A wider viewport is useful, but it is not three independent projections.
