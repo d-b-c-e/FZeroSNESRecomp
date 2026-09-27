@@ -25,7 +25,7 @@ static const char *const descriptions[] = {
 typedef struct WheelOption { const char *key, *label; int fallback, min, max; } WheelOption;
 static const WheelOption wheel_options[] = {
   {"Deadzone", "Center dead zone (%)", 0, 0, 20},
-  {"SteeringRangePercent", "Travel to full steering (%)", 50, 10, 100},
+  {"SteeringRangePercent", "Travel to full steering (%)", 100, 10, 100},
   {"SteeringResponsePercent", "Response curve (%)", 50, 25, 200},
   {"SteeringAxis", "Steering axis", 0, 0, 15},
   {"AcceleratorAxis", "Accelerator axis", -1, -1, 15},

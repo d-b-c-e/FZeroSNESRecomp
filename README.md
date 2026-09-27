@@ -174,9 +174,10 @@ launcher's **Controls** page. Turn rewind on under **Settings** before using
 its wheel button.
 
 For a first wheel test, try **Center dead zone 0%**, **Travel to full steering
-50%**, and **Response curve 50%**. The latter two are the defaults for raw
-wheels, making center steering stronger while giving full lock sooner; tune
-them to taste in the launcher. The **FFB device name** must uniquely match
+100%**, and **Response curve 50%**. The latter two are the defaults for raw
+wheels, making center steering stronger while preserving full travel and
+tapering sensitivity near the outside; tune them to taste in the launcher.
+The **FFB device name** must uniquely match
 the DirectInput wheel reported by the toolkit log. Force feedback remains
 opt-in and should be tested with modest strength first.
 
@@ -246,7 +247,7 @@ adding `AnalogSteering = 1` to that controller's GUID section in `config.ini`:
 [Controller.030000006e3400000600000000000000]
 AnalogSteering = 1
 Deadzone = 0
-SteeringRangePercent = 50
+SteeringRangePercent = 100
 SteeringResponsePercent = 50
 ```
 
