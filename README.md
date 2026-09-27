@@ -166,8 +166,10 @@ switch, depth and interval are remembered in the same file.
 
 The launcher opens before Play when started with `--launcher`. On its **Mods**
 page, the **Controls** group contains **Racing wheel controls** and **Force
-feedback**. Select a raw-button row, press the wheel button to bind it, use
-Backspace to clear it, or Escape to cancel capture. This includes the four
+feedback**. Click an axis or button binding, then move or press that control
+on the wheel; optional binds can be cleared with Backspace, and Escape cancels
+capture. Accelerator and brake inversion are checkboxes. The FFB device is a
+dropdown of currently connected force-feedback devices. Button binds include the four
 directions, every SNES face/shoulder/system button, **Open save-state menu**,
 and **Open rewind**. These are independent of the keyboard bindings on the
 launcher's **Controls** page. Turn rewind on under **Settings** before using

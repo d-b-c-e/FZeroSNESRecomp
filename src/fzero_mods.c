@@ -51,6 +51,8 @@ static const WheelOption wheel_options[] = {
 #define WHEEL_OPTIONS ((int)(sizeof(wheel_options) / sizeof(wheel_options[0])))
 static int wheel_values[WHEEL_OPTIONS], wheel_enabled, ffb_enabled, ffb_strength;
 static char ffb_device[256], wheel_section[64];
+static char ffb_devices[16][256];
+static int ffb_device_count;
 static const char *wheel_config;
 static void (*wheel_write)(const char *, const char *, const char *, const char *);
 static int count(void *ctx) { (void)ctx; return wheel_config ? 7 : 5; }
@@ -100,20 +102,31 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
     memset(out, 0, sizeof(*out));
     COPY(out->id, spec->key); COPY(out->label, spec->label);
     out->type = RECOMP_MOD_OPTION_INTEGER; out->step = 1;
-    if (index >= 9) {
+    if (index == 7 || index == 8) {
+      out->type = RECOMP_MOD_OPTION_BOOLEAN;
+    } else if (index >= 3 && index <= 5) {
+      out->type = RECOMP_MOD_OPTION_RAW_AXIS;
+      COPY(out->device_guid, wheel_section + strlen("Controller."));
+    } else if (index >= 9) {
       out->type = RECOMP_MOD_OPTION_RAW_BUTTON;
       COPY(out->device_guid, wheel_section + strlen("Controller."));
     }
     out->min_value = spec->min; out->max_value = spec->max;
-    snprintf(out->value, sizeof(out->value), "%d", wheel_values[index]);
-    snprintf(out->default_value, sizeof(out->default_value), "%d", spec->fallback);
+    if (out->type == RECOMP_MOD_OPTION_BOOLEAN) {
+      COPY(out->value, wheel_values[index] ? "true" : "false");
+      COPY(out->default_value, "false");
+    } else {
+      snprintf(out->value, sizeof(out->value), "%d", wheel_values[index]);
+      snprintf(out->default_value, sizeof(out->default_value), "%d", spec->fallback);
+    }
     return 1;
   }
   if (kind == 7 && index >= 0 && index < 2) {
     memset(out, 0, sizeof(*out));
     COPY(out->id, index ? "Device" : "Strength");
-    COPY(out->label, index ? "FFB device name" : "Strength (%)");
-    out->type = index ? RECOMP_MOD_OPTION_TEXT : RECOMP_MOD_OPTION_INTEGER;
+    COPY(out->label, index ? "FFB device" : "Strength (%)");
+    out->type = index ? RECOMP_MOD_OPTION_CHOICE : RECOMP_MOD_OPTION_INTEGER;
+    out->choice_count = index ? ffb_device_count + 1 : 0;
     out->min_value = 0; out->max_value = 100; out->step = 1;
     if (index) { COPY(out->value, ffb_device); COPY(out->default_value, ""); }
     else { snprintf(out->value, sizeof(out->value), "%d", ffb_strength); COPY(out->default_value, "35"); }
@@ -149,6 +162,17 @@ static int choice_get(void *ctx, const char *package, const char *feature,
   (void)ctx;
   if (!identity(package, feature) || !option || !out || index < 0) return 0;
   const char *value = NULL;
+  if (identity(package, feature) == 7 && !strcmp(option, "Device") &&
+      index <= ffb_device_count) {
+    memset(out, 0, sizeof(*out));
+    if (index == 0) {
+      COPY(out->label, "No device selected");
+    } else {
+      COPY(out->value, ffb_devices[index - 1]);
+      COPY(out->label, ffb_devices[index - 1]);
+    }
+    return 1;
+  }
   if (identity(package, feature) == 1 && !strcmp(option, "aspect") && index < 4) value = aspects[index];
   if (identity(package, feature) == 2 && !strcmp(option, "fps") && index < 8) value = rates[index];
   if (!value) return 0;
@@ -178,7 +202,19 @@ static int set_option(void *ctx, const char *package, const char *feature,
   if (identity(package, feature) == 6 || identity(package, feature) == 7) {
     if (identity(package, feature) == 7 && !strcmp(option, "Device")) {
       if (strlen(value) >= sizeof(ffb_device)) return 0;
+      int found = !value[0];
+      for (int i = 0; i < ffb_device_count; ++i)
+        if (!strcmp(value, ffb_devices[i])) found = 1;
+      if (!found) return 0;
       COPY(ffb_device, value); return 1;
+    }
+    if (identity(package, feature) == 6 &&
+        (!strcmp(option, "AcceleratorInvert") ||
+         !strcmp(option, "BrakeInvert"))) {
+      int index = !strcmp(option, "AcceleratorInvert") ? 7 : 8;
+      if (strcmp(value, "true") && strcmp(value, "false")) return 0;
+      wheel_values[index] = !strcmp(value, "true");
+      return 1;
     }
     char *end;
     long parsed = strtol(value, &end, 10);
@@ -236,6 +272,7 @@ const RecompLauncherCModProvider *FzeroModsProvider(FzeroVideoSettings *settings
   static RecompLauncherCModProvider provider;
   video = settings; config_path = path; error_text[0] = 0;
   wheel_config = NULL; wheel_write = NULL;
+  ffb_device_count = 0;
   memset(&provider, 0, sizeof(provider));
   provider.package_count = count; provider.package_get = package_get;
   provider.feature_count = count; provider.feature_get = feature_get;
@@ -248,10 +285,16 @@ const RecompLauncherCModProvider *FzeroModsProvider(FzeroVideoSettings *settings
 const RecompLauncherCModProvider *FzeroModsProviderWheel(
     FzeroVideoSettings *settings, const char *video_path,
     const char *control_path, const char *wheel_guid,
-    void (*write_ini)(const char *, const char *, const char *, const char *)) {
+    void (*write_ini)(const char *, const char *, const char *, const char *),
+    int (*list_ffb_devices)(char names[][256], int max_devices)) {
   const RecompLauncherCModProvider *provider = FzeroModsProvider(settings, video_path);
   if (!control_path || !wheel_guid || !wheel_guid[0]) return provider;
   wheel_config = control_path; wheel_write = write_ini;
+  if (list_ffb_devices) {
+    ffb_device_count = list_ffb_devices(ffb_devices, 16);
+    if (ffb_device_count < 0) ffb_device_count = 0;
+    if (ffb_device_count > 16) ffb_device_count = 16;
+  }
   snprintf(wheel_section, sizeof(wheel_section), "Controller.%s", wheel_guid);
   wheel_enabled = 1; ffb_enabled = 0; ffb_strength = 35;
   ffb_device[0] = 0;

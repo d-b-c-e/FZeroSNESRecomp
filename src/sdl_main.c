@@ -561,7 +561,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   game.msu1_note = "Select a music folder containing Conn/Cubear v11 f-zero_msu1.ips and your PCM tracks. Works with stock F-Zero and BS Deluxe.";
   game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
                                     settings->player_gamepad_guid[0],
-                                    launcher_ini_kv_write);
+                                    launcher_ini_kv_write, FzeroFfbListDevices);
   game.rom_cache_path = "rom.cfg";
   /* Draws the Controls page's SaveStateMenu and Rewind rows, and the
    * Settings page's rewind enable / depth / interval controls. The hotkey

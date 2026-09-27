@@ -3,7 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(1); } } while (0)
-static int wrote_wheel_range, wrote_rewind, wrote_ffb;
+static int wrote_wheel_range, wrote_rewind, wrote_ffb, wrote_brake_invert;
+static char wrote_device[256];
+static int list_ffb(char names[][256], int max_devices) {
+  CHECK(max_devices >= 2);
+  strcpy(names[0], "MOZA R12 Base");
+  strcpy(names[1], "Other FFB wheel");
+  return 2;
+}
 static void note_ini(const char *path, const char *section,
                      const char *key, const char *value) {
   CHECK(!strcmp(path, "wheel-options.ini"));
@@ -13,6 +20,10 @@ static void note_ini(const char *path, const char *section,
       !strcmp(key, "ButtonRewind")) wrote_rewind = atoi(value);
   if (!strcmp(section, "ForceFeedback") &&
       !strcmp(key, "Strength")) wrote_ffb = atoi(value);
+  if (!strcmp(section, "ForceFeedback") &&
+      !strcmp(key, "Device")) strcpy(wrote_device, value);
+  if (!strcmp(section, "Controller.test-guid") &&
+      !strcmp(key, "BrakeInvert")) wrote_brake_invert = atoi(value);
 }
 int main(void) {
   FzeroVideoSettings s, loaded; FzeroVideoStock(&s); /* start from nothing enabled to test each toggle */
@@ -72,7 +83,7 @@ int main(void) {
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 0));
   CHECK(!s.bs_deluxe && s.enhanced && !s.fps_enabled);
   p = FzeroModsProviderWheel(&s, "test-mods.ini", "wheel-options.ini",
-                             "test-guid", note_ini);
+                             "test-guid", note_ini, list_ffb);
   CHECK(p->feature_count(NULL) == 7);
   RecompLauncherCModFeature wheel, ffb;
   CHECK(p->feature_get(NULL, 5, &wheel) && wheel.option_count == 23);
@@ -80,6 +91,16 @@ int main(void) {
   CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 22, &option));
   CHECK(option.type == RECOMP_MOD_OPTION_RAW_BUTTON);
   CHECK(!strcmp(option.device_guid, "test-guid"));
+  CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 3, &option));
+  CHECK(option.type == RECOMP_MOD_OPTION_RAW_AXIS);
+  CHECK(!strcmp(option.device_guid, "test-guid"));
+  CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 8, &option));
+  CHECK(option.type == RECOMP_MOD_OPTION_BOOLEAN && !strcmp(option.value, "false"));
+  CHECK(p->feature_option_get(NULL, ffb.package_id, ffb.id, 1, &option));
+  CHECK(option.type == RECOMP_MOD_OPTION_CHOICE && option.choice_count == 3);
+  RecompLauncherCModChoice choice;
+  CHECK(p->feature_choice_get(NULL, ffb.package_id, ffb.id, "Device", 1, &choice));
+  CHECK(!strcmp(choice.value, "MOZA R12 Base"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
                               "SteeringRangePercent", "45"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
@@ -88,8 +109,15 @@ int main(void) {
                                "ButtonRewind", "128"));
   CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
                               "Strength", "40"));
+  CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                              "Device", "MOZA R12 Base"));
+  CHECK(!p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                               "Device", "unknown"));
+  CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                              "BrakeInvert", "true"));
   CHECK(p->commit(NULL, NULL));
   CHECK(wrote_wheel_range == 45 && wrote_rewind == 37 && wrote_ffb == 40);
+  CHECK(wrote_brake_invert == 1 && !strcmp(wrote_device, "MOZA R12 Base"));
   remove("test-mods.ini");
   puts("Independent widescreen and presentation FPS plugins passed");
   return 0;

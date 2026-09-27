@@ -39,6 +39,24 @@ int wrapped_delta(uint16_t current, uint16_t previous, int modulus) {
 }
 }  // namespace
 
+int FzeroFfbListDevices(char names[][256], int max_devices) {
+  if (!names || max_devices <= 0) return 0;
+#ifdef _WIN32
+  WheelFfbApi api{};
+  if (!WheelFfb_LoadBeside(&api, GetModuleHandleW(nullptr), L"WheelFfb.dll"))
+    return 0;
+  int found = api.EnumerateDevices();
+  int count = 0;
+  for (int i = 0; i < found && count < max_devices; ++i) {
+    if (api.GetDeviceName(i, names[count], 256) && names[count][0]) ++count;
+  }
+  WheelFfb_Unload(&api);
+  return count;
+#else
+  return 0;
+#endif
+}
+
 void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
                      size_t ram_size, uint32_t input, int strength,
                      FzeroFfbOutput *out) {

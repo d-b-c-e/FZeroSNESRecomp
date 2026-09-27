@@ -37,6 +37,11 @@ int main() {
   CHECK(!out.racing);
 
 #ifdef _WIN32
+  char devices[16][256]{};
+  int device_count = FzeroFfbListDevices(devices, 16);
+  CHECK(device_count >= 0 && device_count <= 16);
+  for (int i = 0; i < device_count; ++i)
+    std::printf("FFB device %d: %s\n", i, devices[i]);
   /* The optional runtime must remain harmless when its configured wheel is
    * absent (and also when the DLL was not staged for this test target). */
   const char *config_path = "fzero_ffb_test.ini";

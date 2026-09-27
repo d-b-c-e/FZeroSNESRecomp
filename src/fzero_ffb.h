@@ -31,6 +31,8 @@ void FzeroFfbInit(const char *config_path, void *native_window);
 void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input);
 void FzeroFfbShutdown(void);
 void FzeroFfbSilence(void);
+/* Exact DirectInput device names available for force feedback. */
+int FzeroFfbListDevices(char names[][256], int max_devices);
 
 #ifdef __cplusplus
 }
