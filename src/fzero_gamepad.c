@@ -114,7 +114,9 @@ static void load_raw_profile(SDL_Joystick *stick) {
   s_deadzone = (percent * 32767 + 50) / 100;
   FzeroIniReadInt(s_config, section, "AnalogSteering", &analog);
   s_analog_steering = analog != 0;
-  s_range_percent = 100; s_response_percent = 100;
+  /* Raw racing wheels need a shorter useful travel and more response near
+   * center than a gamepad stick. Match the launcher's wheel defaults. */
+  s_range_percent = 50; s_response_percent = 50;
   FzeroIniReadInt(s_config, section, "SteeringRangePercent", &s_range_percent);
   FzeroIniReadInt(s_config, section, "SteeringResponsePercent", &s_response_percent);
   s_raw_axis = 0; s_gas_axis = s_brake_axis = -1;
