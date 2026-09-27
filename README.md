@@ -162,6 +162,30 @@ Both keys are rebindable in the launcher's **Controls** page, as
 executable and take effect the next time you start the game. The rewind
 switch, depth and interval are remembered in the same file.
 
+### Racing-wheel setup in the launcher
+
+The launcher opens before Play when started with `--launcher`. On its **Mods**
+page, the **Controls** group contains **Racing wheel controls** and **Force
+feedback**. Select a raw-button row, press the wheel button to bind it, use
+Backspace to clear it, or Escape to cancel capture. This includes the four
+directions, every SNES face/shoulder/system button, **Open save-state menu**,
+and **Open rewind**. These are independent of the keyboard bindings on the
+launcher's **Controls** page. Turn rewind on under **Settings** before using
+its wheel button.
+
+For a first wheel test, try **Center dead zone 0%**, **Travel to full steering
+50%**, and **Response curve 50%**. The latter two are the defaults for raw
+wheels, making center steering stronger while giving full lock sooner; tune
+them to taste in the launcher. The **FFB device name** must uniquely match
+the DirectInput wheel reported by the toolkit log. Force feedback remains
+opt-in and should be tested with modest strength first.
+
+Under **Settings > Audio**, disable **MSU-1** for original cartridge
+music, or enable it and select a supported music pack for enhanced music. Use
+**Settings > Display > Shader > None** for an unfiltered image; also turn off linear
+filtering there for the sharpest pixels. These settings do not require an
+in-game menu.
+
 ### SimHub telemetry
 
 The Windows build can emit a Forza Horizon-compatible 324-byte UDP packet for
@@ -198,7 +222,8 @@ Device=MOZA R12 Base
 Strength=40
 ```
 
-Use the exact name shown by Windows or the toolkit log. `Strength` is clamped
+These fields can also be set through the launcher. Use the exact name shown
+by Windows or the toolkit log. `Strength` is clamped
 to 0-100. The model provides speed-sensitive steering resistance, a hardware
 damper, track texture, and finite collision pulses. If the configured wheel or
 `WheelFfb.dll` is missing, the game continues with force feedback disabled.
@@ -220,7 +245,9 @@ adding `AnalogSteering = 1` to that controller's GUID section in `config.ini`:
 ```ini
 [Controller.030000006e3400000600000000000000]
 AnalogSteering = 1
-Deadzone = 3
+Deadzone = 0
+SteeringRangePercent = 50
+SteeringResponsePercent = 50
 ```
 
 Full wheel lock is held every frame. Smaller deflections produce evenly
@@ -247,7 +274,8 @@ ButtonStart=36
 
 Set `AcceleratorInvert=1` or `BrakeInvert=1` when an axis runs backwards.
 Available button keys are `ButtonA`, `ButtonB`, `ButtonX`, `ButtonY`,
-`ButtonL`, `ButtonR`, `ButtonSelect`, and `ButtonStart`.
+`ButtonL`, `ButtonR`, `ButtonSelect`, `ButtonStart`, `ButtonUp`, `ButtonDown`,
+`ButtonLeft`, `ButtonRight`, `ButtonSaveStateMenu`, and `ButtonRewind`.
 
 ### Where states are kept
 
