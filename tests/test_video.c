@@ -16,7 +16,8 @@ static void viewport_tests(void) {
   FzeroVideoDefaults(&settings); /* shipped defaults: every mod on, Fit, Auto rate */
   CHECK(settings.enhanced && settings.aspect == FZERO_ASPECT_FIT && settings.fps == 0 &&
         settings.fps_enabled && settings.bs_deluxe);
-  CHECK(!settings.hd_mode7 && settings.hd_scale == 2 && !settings.diagnostics);
+  CHECK(!settings.hd_mode7 && settings.hd_scale == 2 && !settings.diagnostics &&
+        !settings.triple_screen);
   FzeroVideoStock(&settings);
   CHECK(!settings.enhanced && settings.aspect == FZERO_ASPECT_STOCK && !settings.fps_enabled && !settings.bs_deluxe);
   FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);
@@ -95,9 +96,11 @@ static void config_tests(void) {
   FzeroVideoSettings a, b;
   FzeroVideoDefaults(&a);
   a.enhanced = true; a.aspect = FZERO_ASPECT_FIT; a.fps = 165;
+  a.triple_screen = true;
   CHECK(FzeroVideoSave(&a, "test-video.ini"));
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
-  CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165);
+  CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165 &&
+        b.triple_screen);
   a.fps = 0; a.aspect = FZERO_ASPECT_21_9;
   CHECK(FzeroVideoSave(&a, "test-video.ini")); /* atomic replacement */
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));

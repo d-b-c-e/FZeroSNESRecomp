@@ -4,6 +4,7 @@
  */
 
 #include "fzero_runtime.h"
+#include "fzero_renderer.h"
 #include "fzero_mods.h"
 #include "fzero_deluxe.h"
 #include "fzero_hotkeys.h"
@@ -960,7 +961,16 @@ typedef struct FzeroPresenter {
   int logical_width;
   FzeroViewport viewport;
   int drawable_width, drawable_height;
+  SDL_Texture *triple_texture;
+  uint32_t *triple_pixels;
+  bool triple_active;
 } FzeroPresenter;
+
+enum { kTriplePanelWidth = 640, kTriplePanelHeight = 360,
+       kTripleSpanWidth = 7680, kTripleSpanHeight = 1440 };
+static const FzeroTripleRig kTripleRig = {
+    708.4166, 398.4843, 660.0, 0.0, 70.0, 70.0, 8.0,
+    kTriplePanelWidth, kTriplePanelHeight};
 
 static SDL_Texture *g_overlay_texture;
 static int g_overlay_texture_w, g_overlay_texture_h;
@@ -970,7 +980,10 @@ static int g_overlay_texture_w, g_overlay_texture_h;
  * belongs across the bottom third of it, not centred over the middle. */
 static FzeroRect overlay_rect(const FzeroPresenter *p, int is_menu) {
   FzeroRect game =
-      FzeroDestination(p->viewport, p->drawable_width, p->drawable_height);
+      FzeroDestination(p->viewport,
+          p->triple_active ? p->drawable_width / 3 : p->drawable_width,
+          p->drawable_height);
+  if (p->triple_active) game.x += p->drawable_width / 3;
   if (is_menu) return game;
   int strip = game.h / 3;
   if (strip < 1) strip = 1;
@@ -1042,8 +1055,27 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
   diagnostic_start = FzeroDiagnosticsBegin();
   SDL_SetRenderDrawColor(p->renderer, 0, 0, 0, 255);
   SDL_RenderClear(p->renderer);
+  if (p->triple_active && p->triple_texture && p->triple_pixels &&
+      FzeroRendererDrawTripleSides(p->triple_pixels,
+          (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
+          &kTripleRig, p->logical_width)) {
+    SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
+                      kTriplePanelWidth * kBytesPerPixel);
+    SDL_Rect left_src = {0, 0, kTriplePanelWidth, kTriplePanelHeight};
+    SDL_Rect right_src = {0, kTriplePanelHeight, kTriplePanelWidth, kTriplePanelHeight};
+    SDL_Rect left_dst = {0, 0, p->drawable_width / 3, p->drawable_height};
+    SDL_Rect right_dst = {2 * p->drawable_width / 3, 0,
+                          p->drawable_width / 3, p->drawable_height};
+    snesrecomp_sdl_render_texture(p->renderer, p->triple_texture,
+                                  &left_src, &left_dst);
+    snesrecomp_sdl_render_texture(p->renderer, p->triple_texture,
+                                  &right_src, &right_dst);
+  }
   FzeroRect rect =
-      FzeroDestination(p->viewport, p->drawable_width, p->drawable_height);
+      FzeroDestination(p->viewport,
+          p->triple_active ? p->drawable_width / 3 : p->drawable_width,
+          p->drawable_height);
+  if (p->triple_active) rect.x += p->drawable_width / 3;
   SDL_Rect destination = {rect.x, rect.y, rect.w, rect.h};
   snesrecomp_sdl_render_texture(p->renderer, p->texture, &source, &destination);
   overlay_draw_sdl(p, panel, pw, ph, is_menu);
@@ -1639,6 +1671,10 @@ int main(int argc, char **argv) {
   const Uint32 kHighDpiFlag = SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
   bool use_gl_renderer = launcher_settings.shader_path[0] != 0;
+  bool triple_requested = g_video.triple_screen && launcher_settings.fullscreen &&
+                          !use_gl_renderer;
+  if (g_video.triple_screen && !triple_requested)
+    fprintf(stderr, "[fzero-triple] experimental mode needs fullscreen and Shader=None; using stock view\n");
   if (use_gl_renderer) fzero_gl_prepare_window();
   /* Window scale is a real row on the Settings page, so it has to size the
    * window: it was drawn, saved and then ignored in favour of a hardcoded
@@ -1707,7 +1743,13 @@ int main(int argc, char **argv) {
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
   else
     snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-  FzeroViewport viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
+  bool triple_active = triple_requested && drawable_width == kTripleSpanWidth &&
+                       drawable_height == kTripleSpanHeight;
+  if (triple_requested && !triple_active)
+    fprintf(stderr, "[fzero-triple] expected 7680x1440 Surround; got %dx%d, using stock view\n",
+            drawable_width, drawable_height);
+  FzeroViewport viewport = FzeroCalculateViewport(&g_video,
+      triple_active ? drawable_width / 3 : drawable_width, drawable_height);
   FzeroSetViewport(viewport);
   FzeroSetDeferredPresentation(true);
   int logical_width = viewport.width;
@@ -1811,6 +1853,23 @@ int main(int argc, char **argv) {
   presenter.texture = texture;
   presenter.gl = use_gl_renderer ? &gl_renderer : NULL;
   presenter.pixels = pixels;
+  if (triple_requested) {
+    presenter.triple_pixels = calloc((size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
+                                     sizeof(*presenter.triple_pixels));
+    presenter.triple_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STREAMING, kTriplePanelWidth, 2 * kTriplePanelHeight);
+    if (!presenter.triple_pixels || !presenter.triple_texture) {
+      fprintf(stderr, "[fzero-triple] unable to allocate side panels; using stock view\n");
+      triple_requested = triple_active = false;
+      viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
+      FzeroSetViewport(viewport);
+      logical_width = viewport.width;
+      FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
+    } else {
+      snesrecomp_sdl_set_texture_opaque(presenter.triple_texture);
+      snesrecomp_sdl_set_texture_linear(presenter.triple_texture, true);
+    }
+  }
 
   /* Outside the loop on purpose. A hotkey press is a request that survives
    * until it is acted on: the event pump runs every host iteration but a
@@ -1997,7 +2056,10 @@ int main(int argc, char **argv) {
         snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
       else
         snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-      FzeroViewport next = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
+      triple_active = triple_requested && drawable_width == kTripleSpanWidth &&
+                      drawable_height == kTripleSpanHeight;
+      FzeroViewport next = FzeroCalculateViewport(&g_video,
+          triple_active ? drawable_width / 3 : drawable_width, drawable_height);
       if (next.width != viewport.width || next.aspect != viewport.aspect) {
         viewport = next;
         FzeroSetViewport(viewport);
@@ -2052,6 +2114,7 @@ int main(int argc, char **argv) {
     presenter.drawable_height = drawable_height;
     presenter.texture = texture;
     presenter.renderer = renderer;
+    presenter.triple_active = triple_active;
 
     if (panel) {
       /* A panel owns the screen: freeze the guest, and let the window keep
@@ -2080,7 +2143,7 @@ int main(int argc, char **argv) {
 
     if (FzeroClockPresentationDue(&clock, now)) {
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
-      FzeroPresent(FzeroClockAlpha(&clock, now));
+      FzeroPresent(triple_active ? 1.0 : FzeroClockAlpha(&clock, now));
       FzeroDiagnosticsEnd(FZERO_DIAG_COMPOSITION, diagnostic_start);
       present_frame(&presenter, NULL, 0, 0, 0);
       FzeroDiagnosticsPresented();
@@ -2145,6 +2208,8 @@ int main(int argc, char **argv) {
     SDL_DestroyTexture(g_overlay_texture);
     g_overlay_texture = NULL;
   }
+  if (presenter.triple_texture) SDL_DestroyTexture(presenter.triple_texture);
+  free(presenter.triple_pixels);
   if (use_gl_renderer) {
     fzero_gl_destroy(&gl_renderer);
   } else {

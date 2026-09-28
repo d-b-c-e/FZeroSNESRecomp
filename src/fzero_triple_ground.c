@@ -100,7 +100,18 @@ bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
                                 FzeroMode7Texel raw,
                                 int logical_width, int panel_width,
                                 FzeroMode7Texel *aligned) {
-  if (!aligned || logical_width < 256 || panel_width < 2) return false;
+  FzeroTripleLineAlignment alignment;
+  return FzeroTripleGroundBuildLineAlignment(line, center_left, center_right,
+             logical_width, panel_width, &alignment) &&
+         FzeroTripleGroundApplyLineAlignment(&alignment, raw, aligned);
+}
+
+bool FzeroTripleGroundBuildLineAlignment(FzeroMode7Line line,
+                                         FzeroMode7Texel center_left,
+                                         FzeroMode7Texel center_right,
+                                         int logical_width, int panel_width,
+                                         FzeroTripleLineAlignment *out) {
+  if (!out || logical_width < 256 || panel_width < 2) return false;
   double px = center_right.x - center_left.x;
   double py = center_right.y - center_left.y;
   double norm = px * px + py * py;
@@ -109,10 +120,20 @@ bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
   double ox = line.step_x * factor, oy = line.step_y * factor;
   double a = (px * ox + py * oy) / norm;
   double b = (px * oy - py * ox) / norm;
-  double dx = raw.x - (center_left.x + center_right.x) * 0.5;
-  double dy = raw.y - (center_left.y + center_right.y) * 0.5;
-  aligned->x = center_x(line) + a * dx - b * dy;
-  aligned->y = center_y(line) + b * dx + a * dy;
+  *out = (FzeroTripleLineAlignment){center_x(line), center_y(line),
+      (center_left.x + center_right.x) * 0.5,
+      (center_left.y + center_right.y) * 0.5, a, b};
+  return true;
+}
+
+bool FzeroTripleGroundApplyLineAlignment(const FzeroTripleLineAlignment *alignment,
+                                         FzeroMode7Texel raw,
+                                         FzeroMode7Texel *aligned) {
+  if (!alignment || !aligned) return false;
+  double dx = raw.x - alignment->raw_center_x;
+  double dy = raw.y - alignment->raw_center_y;
+  aligned->x = alignment->center_x + alignment->a * dx - alignment->b * dy;
+  aligned->y = alignment->center_y + alignment->b * dx + alignment->a * dy;
   /* A nominally exact integer can land one ULP below it after the inverse
    * rotation. Mode 7 floors texels, so that would shift an entire straight
    * scanline by one pixel despite the analytic center match. */

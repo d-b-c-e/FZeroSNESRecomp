@@ -114,6 +114,14 @@ int main(void) {
       (FzeroMode7Texel){0, 0}, (FzeroMode7Texel){0, 0.5},
       (FzeroMode7Texel){0, 0.25 - 1e-12}, 342, 2560, &exact));
   CHECK(exact.x == 100 && exact.y == 328); /* integer-floor stability */
+  FzeroTripleLineAlignment alignment;
+  FzeroMode7Texel batched;
+  CHECK(FzeroTripleGroundBuildLineAlignment(exact_line,
+      (FzeroMode7Texel){0, 0}, (FzeroMode7Texel){0, 0.5},
+      342, 2560, &alignment));
+  CHECK(FzeroTripleGroundApplyLineAlignment(&alignment,
+      (FzeroMode7Texel){0, 0.25 - 1e-12}, &batched));
+  CHECK(batched.x == exact.x && batched.y == exact.y);
   FzeroMode7Texel race_left, race_right;
   CHECK(FzeroTripleRay(&panel[0], 1280, 900, 2560, 1440, &left));
   CHECK(FzeroTripleRay(&panel[1], 1280, 900, 2560, 1440, &center));

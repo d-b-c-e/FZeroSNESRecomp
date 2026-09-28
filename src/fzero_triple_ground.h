@@ -27,3 +27,14 @@ bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
                                 FzeroMode7Texel raw,
                                 int logical_width, int panel_width,
                                 FzeroMode7Texel *aligned);
+typedef struct FzeroTripleLineAlignment {
+  double center_x, center_y, raw_center_x, raw_center_y, a, b;
+} FzeroTripleLineAlignment;
+bool FzeroTripleGroundBuildLineAlignment(FzeroMode7Line line,
+                                         FzeroMode7Texel center_left,
+                                         FzeroMode7Texel center_right,
+                                         int logical_width, int panel_width,
+                                         FzeroTripleLineAlignment *out);
+bool FzeroTripleGroundApplyLineAlignment(const FzeroTripleLineAlignment *alignment,
+                                         FzeroMode7Texel raw,
+                                         FzeroMode7Texel *aligned);

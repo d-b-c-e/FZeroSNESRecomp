@@ -8,7 +8,10 @@ int main(void) {
   const RecompLauncherCModProvider *p = FzeroModsProvider(&s, "test-mods.ini");
   RecompLauncherCModFeature w, f;
   RecompLauncherCModOption option;
-  CHECK(p->package_count(NULL) == 5 && p->feature_count(NULL) == 5);
+  CHECK(p->package_count(NULL) == 6 && p->feature_count(NULL) == 6);
+  RecompLauncherCModFeature triple;
+  CHECK(p->feature_get(NULL, 5, &triple) && !triple.enabled && triple.option_count == 0);
+  CHECK(p->feature_enable(NULL, triple.package_id, triple.id, 1) && s.triple_screen);
   RecompLauncherCModFeature diag;
   CHECK(p->feature_get(NULL, 4, &diag) && !diag.enabled && diag.option_count == 0);
   CHECK(!p->feature_option_get(NULL, diag.package_id, diag.id, 0, &option));
@@ -53,7 +56,7 @@ int main(void) {
   CHECK(p->feature_option_get(NULL, f.package_id, f.id, 0, &option) && !strcmp(option.id, "fps"));
   CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini"));
   CHECK(loaded.enhanced && !loaded.fps_enabled && loaded.fps == 144 && loaded.bs_deluxe);
-  CHECK(loaded.hd_mode7 && loaded.hd_scale == 10 && loaded.diagnostics);
+  CHECK(loaded.hd_mode7 && loaded.hd_scale == 10 && loaded.diagnostics && loaded.triple_screen);
   CHECK(p->feature_enable(NULL, diag.package_id, diag.id, 0) && !s.diagnostics);
   CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini") && !loaded.diagnostics);
   CHECK(p->feature_enable(NULL, hd.package_id, hd.id, 0));

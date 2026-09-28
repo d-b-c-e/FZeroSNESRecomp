@@ -25,6 +25,7 @@ typedef struct FzeroVideoSettings {
   bool hd_mode7; /* Independent, opt-in spatial resolution enhancement. */
   unsigned hd_scale; /* Integer 2..10; retained while disabled. */
   bool diagnostics; /* Opt-in local performance reports; off by default. */
+  bool triple_screen; /* Experimental Surround ground projection. */
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {

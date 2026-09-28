@@ -31,6 +31,24 @@ the game, and deliberately renders sky black and omits all vehicles, effects,
 HUD, menus, and other screen-space layers. A visually plausible track-only
 image must not be mistaken for playable triple-screen support.
 
+### Experimental runtime integration (work in progress)
+
+The launcher now exposes an opt-in **Triple Screen (experimental)** mod. Its
+SDL presenter accepts only a 7680×1440 fullscreen Surround surface with no
+shader selected, draws the normal game compositor in the center 2560×1440
+panel, and evaluates separate 640×360 ground rays for each side panel. Menus,
+save-state and rewind overlays stay centered. A rejected camera calibration,
+wrong display mode, or non-race scene falls back to the centered game view.
+The sides still have dark sky and no vehicles/effects. This is **not** complete
+triple-screen support and must not replace a working install without a rig
+test. The physical values are currently a pinned copy of the saved rig profile;
+the versioned toolkit layout/status adapter has not yet been connected.
+On one captured active-race frame, both live side buffers matched the offline
+reference byte-for-byte. Cached rays and per-row alignment reduce the two
+640×360 side projections to about 10 ms of single-thread CPU time per frame
+on the development rig; center composition, uploads, and presentation are
+additional costs. This is a benchmark, not an on-rig frame-time guarantee.
+
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
 distance, 8 mm bezel gap, and 70° left/right yaw. The projection math mirrors
