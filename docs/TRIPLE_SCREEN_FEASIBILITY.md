@@ -94,6 +94,13 @@ and impact captures remained byte-identical to the prior renderer. Alternating
 composition from roughly 11.94–11.97 ms to 11.31–11.42 ms per frame. The
 `FZERO_TRIPLE_DISABLE_ROW=1` diagnostic switch retains the direct path for
 future pixel comparisons; this CPU result is not a new display-pacing result.
+The side skyline's horizon is now solved on each physical panel plane. At the
+saved rig's centered eye position this is byte-identical on five sampled race
+frames. A ROM-free raised-eye fixture (120 mm above panel center) shows why
+the exact solution matters for other layouts: interpolating normalized top
+and bottom rays misses the true horizon by over nine output pixels on an
+angled panel. That fixture validates the horizon equation, not complete
+raised-eye calibration or presentation support.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
