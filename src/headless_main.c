@@ -13,6 +13,8 @@
 #include "fzero_msu.h"
 #include "fzero_state_mode.h"
 #include "fzero_replay.h"
+#include "fzero_playthrough.h"
+#include "fzero_ffb.h"
 
 #include "audio_trace.h"
 #include "common_rtl.h"
@@ -308,6 +310,7 @@ int main(int argc, char **argv) {
     free(rom);
     return 2;
   }
+  sha256_compute(rom, rom_size, rom_hash); /* identify the effective cartridge */
   RtlRegisterGame(FzeroGameInfo());
   if (!SnesInit(rom, (int)rom_size)) {
     fputs("failed to initialize the F-Zero cartridge\n", stderr);
@@ -328,6 +331,44 @@ int main(int argc, char **argv) {
     return 3;
   }
   RtlReadSram();
+  FzeroPlaythrough playthrough = {0};
+  const char *record_path = getenv("FZERO_RECORD_PLAYTHROUGH");
+  const char *replay_path = getenv("FZERO_REPLAY_PLAYTHROUGH");
+  if (record_path && *record_path && replay_path && *replay_path) {
+    fputs("record and replay cannot be combined\n", stderr);
+    free(rom); return 2;
+  }
+  const char *case_path = replay_path && *replay_path ? replay_path : record_path;
+  if (case_path && *case_path) {
+    char state_path[2048];
+    if (!FzeroPlaythroughStatePath(case_path, state_path, sizeof(state_path))) {
+      fputs("playthrough path is too long\n", stderr);
+      free(rom); return 2;
+    }
+    if (replay_path && *replay_path) {
+      if (getenv("FZERO_STATE_LOAD") || getenv("FZERO_LIFECYCLE_TEST") ||
+          getenv("SNESRECOMP_INPUT_SCRIPT") ||
+          !FzeroPlaythroughPlaybackOpen(&playthrough, case_path, rom_hash) ||
+          !FzeroStateFileAcceptable(state_path) || !RtlLoadSnapshot(state_path)) {
+        fputs("playthrough identity/state invalid; replay refused\n", stderr);
+        FzeroPlaythroughAbort(&playthrough);
+        free(rom); return 3;
+      }
+      frame_limit = (long)playthrough.total;
+      fprintf(stderr, "[fzero-playthrough] replaying %ld verified frames\n", frame_limit);
+    } else {
+      FILE *existing = fopen(state_path, "rb");
+      if (existing) fclose(existing);
+      if (existing || getenv("FZERO_LIFECYCLE_TEST") ||
+          getenv("FZERO_STATE_LOAD") ||
+          !FzeroPlaythroughRecordOpen(&playthrough, case_path, rom_hash) ||
+          !RtlSaveSnapshot(state_path)) {
+        fputs("unable to create fresh playthrough input/state files\n", stderr);
+        FzeroPlaythroughAbort(&playthrough);
+        free(rom); return 3;
+      }
+    }
+  }
   /* Reproduce a reported transition from a private, mode-checked snapshot. */
   const char *initial_state = getenv("FZERO_STATE_LOAD");
   if (initial_state && *initial_state) {
@@ -365,6 +406,11 @@ int main(int argc, char **argv) {
   FzeroBeginDrawing(pixels, (size_t)frame_width * 4u);
 
   AttractStats stats = {0};
+  FzeroFfbState ffb_model = {0};
+  const char *ffb_trace = getenv("FZERO_FFB_MODEL_TRACE");
+  int ffb_strength = 12;
+  if (ffb_trace && getenv("FZERO_FFB_MODEL_STRENGTH"))
+    ffb_strength = atoi(getenv("FZERO_FFB_MODEL_STRENGTH"));
   WavWriter wav;
   if (!wav_open(&wav, getenv("SNESRECOMP_WAV"))) {
     fputs("unable to open WAV capture\n", stderr);
@@ -423,7 +469,32 @@ int main(int argc, char **argv) {
       FzeroBeginDrawing(pixels, (size_t)frame_width * 4u);
       fprintf(stderr, "[fzero-viewport] frame=%ld width=%d\n", frame, frame_width);
     }
-    (void)RtlRunFrame(scripted_input(input_spans, input_span_count, frame));
+    uint32_t frame_input = scripted_input(input_spans, input_span_count, frame);
+    if (playthrough.mode == 2 &&
+        !FzeroPlaythroughNextInput(&playthrough, &frame_input)) {
+      fprintf(stderr, "[fzero-playthrough] missing input at frame %ld\n", frame);
+      FzeroPlaythroughAbort(&playthrough); free(rom); return 9;
+    }
+    (void)RtlRunFrame(frame_input);
+    if ((playthrough.mode == 1 &&
+         !FzeroPlaythroughRecordFrame(&playthrough, frame_input, g_ram,
+                                     sizeof(g_ram))) ||
+        (playthrough.mode == 2 &&
+         !FzeroPlaythroughVerifyFrame(&playthrough, g_ram, sizeof(g_ram)))) {
+      fprintf(stderr, "[fzero-playthrough] input/state divergence at frame %ld\n", frame);
+      FzeroPlaythroughAbort(&playthrough); free(rom); return 9;
+    }
+    if (ffb_trace) {
+      FzeroFfbOutput force = {0};
+      FzeroFfbCompute(&ffb_model, g_ram, sizeof(g_ram), frame_input,
+                     ffb_strength, &force);
+      if (force.collision_pulse || (force.racing && frame % 120 == 0))
+        fprintf(stderr, "[fzero-ffb-model] frame=%ld racing=%d spring=%d "
+                        "damper=%d road=%d collision=%d\n", frame,
+                force.racing, force.spring_coefficient,
+                force.damper_coefficient, force.road_magnitude,
+                force.collision_pulse);
+    }
     if (getenv("FZERO_FFB_RAM_TRACE") && g_ram[0x54] == 2 && g_ram[0x55] >= 3) {
       static uint16_t previous_energy = 0xffff;
       static uint32_t previous_flags = UINT32_MAX;
@@ -435,7 +506,7 @@ int main(int argc, char **argv) {
           frame % 120 == 0)
         fprintf(stderr, "[fzero-ffb-ram] frame=%ld input=%03x energy=%u prev=%u "
                         "flags=%08x rough=%02x speed=%02x\n", frame,
-                scripted_input(input_spans, input_span_count, frame), energy,
+                frame_input, energy,
                 previous_energy, flags, g_ram[0xc7], g_ram[0xbd]);
       previous_energy = energy;
       previous_flags = flags;
@@ -479,7 +550,8 @@ int main(int argc, char **argv) {
     }
   }
 
-  int output_ok = wav_close(&wav) &&
+  int playthrough_ok = playthrough.mode == 0 || FzeroPlaythroughClose(&playthrough);
+  int output_ok = playthrough_ok && wav_close(&wav) &&
                   write_ppm(getenv("SNESRECOMP_FRAME_DUMP"), pixels,
                             frame_width) &&
                   write_wram_dump(getenv("SNESRECOMP_WRAM_DUMP"));

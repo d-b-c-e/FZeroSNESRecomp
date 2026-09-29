@@ -166,6 +166,9 @@ add_executable(FZeroSNESRecompHeadless
     ${FZERO_GEN_SOURCES}
     src/headless_host.c
     src/headless_main.c
+    src/fzero_playthrough.c
+    src/fzero_ffb.cpp
+    src/fzero_hotkeys.c
     src/fzero_runtime.c)
 
 # The desktop host takes the REAL host_report.c (always-on breadcrumb ring,
@@ -187,6 +190,7 @@ add_executable(FZeroSNESRecomp
     src/fzero_analog.c
     src/fzero_telemetry.cpp
     src/fzero_ffb.cpp
+    src/fzero_playthrough.c
     src/fzero_runtime.c)
 
 function(configure_fzero_target target)
@@ -247,6 +251,9 @@ if(WIN32)
 endif()
 
 if(BUILD_TESTING)
+    add_executable(fzero_playthrough_tests tests/test_playthrough.c src/fzero_playthrough.c)
+    target_include_directories(fzero_playthrough_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
+    add_test(NAME fzero_playthrough COMMAND fzero_playthrough_tests)
     add_executable(fzero_telemetry_tests tests/test_telemetry.cpp
         src/fzero_telemetry.cpp src/fzero_hotkeys.c)
     target_include_directories(fzero_telemetry_tests PRIVATE

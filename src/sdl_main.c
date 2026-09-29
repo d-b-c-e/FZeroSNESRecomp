@@ -13,6 +13,7 @@
 #include "fzero_ffb.h"
 #include "fzero_msu.h"
 #include "fzero_replay.h"
+#include "fzero_playthrough.h"
 #include "fzero_state_mode.h"
 #include "fzero_diagnostics.h"
 #include "fzero_build.h"
@@ -83,6 +84,12 @@ static const char *kVideoConfig = "fzero-video.ini";
 static char video_config_path[1024];
 /* config.ini, exe-anchored: the launcher's [KeyMap] and the game's hotkeys. */
 static char g_config_path[1024];
+static FzeroPlaythrough g_playthrough;
+static void abort_playthrough(const char *reason) {
+  if (g_playthrough.mode != 1) return;
+  fprintf(stderr, "[fzero-playthrough] recording invalidated: %s\n", reason);
+  FzeroPlaythroughAbort(&g_playthrough);
+}
 static const char *const kFzeroAspectLabels[] = {
     "4:3",
     "16:9",
@@ -851,6 +858,7 @@ static int perform_state_action(SDL_Window *window, int save, int slot,
   }
   FzeroDiagnosticsEvent(save ? (ok ? "save" : "save_failed") : (ok ? "load" : "load_failed"), slot);
   if (!save && ok) g_reset_presentation_clock = true;
+  if (!save && ok) abort_playthrough("loaded save state");
   set_state_feedback(window, save ? "save" : "load", slot, ok, feedback_until);
   fprintf(stderr, "[fzero-state] %s slot %d: %s\n", save ? "save" : "load",
           slot + 1, ok ? "ok" : "FAILED");
@@ -1654,6 +1662,8 @@ int main(int argc, char **argv) {
     fprintf(stderr, "[fzero-msu1] %s Starting with original audio.\n", FzeroMsuError());
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "MSU-1 pack not loaded", FzeroMsuError(), NULL);
   }
+  uint8_t playthrough_rom_sha[32];
+  sha256_compute(rom, rom_size, playthrough_rom_sha);
 
   /* Match the shared host: keep gamepads live through launcher/game focus
    * transitions and host overlays (SDL otherwise suppresses their state). */
@@ -1697,6 +1707,26 @@ int main(int argc, char **argv) {
   if (!FzeroDeluxeSelectSaveRoot()) Die(FzeroDeluxeError());
   if (!FzeroMsuSelectSaveRoot()) Die(FzeroMsuError());
   RtlReadSram();
+  const char *record_path = getenv("FZERO_RECORD_PLAYTHROUGH");
+  if (record_path && *record_path) {
+    char state_path[2048];
+    bool valid_path = FzeroPlaythroughStatePath(record_path, state_path,
+                                               sizeof(state_path));
+    bool state_exists = false;
+    if (valid_path) {
+      FILE *existing = fopen(state_path, "rb");
+      if (existing) { fclose(existing); state_exists = true; }
+    }
+    if (!valid_path || state_exists ||
+        !FzeroPlaythroughRecordOpen(&g_playthrough, record_path,
+                                   playthrough_rom_sha) ||
+        !RtlSaveSnapshot(state_path)) {
+      abort_playthrough("could not create fresh input/state files");
+      fprintf(stderr, "[fzero-playthrough] recording unavailable: %s\n", record_path);
+    } else {
+      fprintf(stderr, "[fzero-playthrough] recording from boot: %s\n", record_path);
+    }
+  }
   /* After the machine exists: the ring's slots are whole-machine snapshots
    * and it sizes them from a real one. */
   snes_rewind_configure();
@@ -2000,6 +2030,7 @@ int main(int argc, char **argv) {
             break;
           case SDLK_r:
             if (mod & KMOD_CTRL) {
+              abort_playthrough("guest reset");
               RtlReset(1);
               FzeroGameInfo()->session_reset();
               FzeroSetViewport(viewport);
@@ -2147,6 +2178,9 @@ int main(int argc, char **argv) {
       }
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       (void)RtlRunFrame(input);
+      if (g_playthrough.mode == 1 &&
+          !FzeroPlaythroughRecordFrame(&g_playthrough, input, g_ram, sizeof(g_ram)))
+        fprintf(stderr, "[fzero-playthrough] write failed; case incomplete\n");
       FzeroTelemetryFrame(g_ram, sizeof(g_ram), input);
       FzeroFfbFrame(g_ram, sizeof(g_ram), input);
       FzeroDiagnosticsEnd(FZERO_DIAG_SIMULATION, diagnostic_start);
@@ -2176,6 +2210,7 @@ int main(int argc, char **argv) {
     presenter.triple_active = triple_active;
 
     if (panel) {
+      abort_playthrough("state/rewind overlay opened");
       /* A panel owns the screen: freeze the guest, and let the window keep
        * repainting the frame the player stopped at with the panel over it.
        * Audio goes quiet for the duration, as it would for any paused
@@ -2278,6 +2313,11 @@ int main(int argc, char **argv) {
   }
   FzeroTelemetryShutdown();
   FzeroFfbShutdown();
+  if (g_playthrough.mode == 1) {
+    if (!FzeroPlaythroughClose(&g_playthrough))
+      fprintf(stderr, "[fzero-playthrough] close failed; case incomplete\n");
+    else fprintf(stderr, "[fzero-playthrough] recording complete\n");
+  }
   SDL_DestroyWindow(window);
   SDL_DestroyMutex(g_audio_mutex);
   g_audio_mutex = NULL;
