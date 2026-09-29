@@ -1047,6 +1047,31 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
   const uint8_t *pixels = hd_frame ? (const uint8_t *)hd_frame : p->pixels;
   int width = p->logical_width * (int)scale;
   int height = kFrameHeight * (int)scale;
+  /* Sparse, opt-in luminance probe. If a white flash is already present in
+   * the source pixels, it is upstream of SDL/Surround presentation. */
+  if (getenv("FZERO_RENDER_TRACE") && !panel && pixels) {
+    static unsigned count, previous_mean;
+    static int previous_hd = -1;
+    unsigned sum = 0, samples = 0;
+    const uint32_t *sample_pixels = (const uint32_t *)pixels;
+    for (int y = height / 32; y < height; y += height / 16)
+      for (int x = width / 64; x < width; x += width / 32) {
+        uint32_t color = sample_pixels[(size_t)y * width + x];
+        sum += ((color >> 16) & 255) + ((color >> 8) & 255) + (color & 255);
+        ++samples;
+      }
+    unsigned mean = samples ? sum / (3 * samples) : 0;
+    int hd = hd_frame != NULL;
+    if (count++ % 120 == 0 || (count > 2 && mean > previous_mean + 24 &&
+                               mean > previous_mean * 3 / 2) ||
+        (previous_hd >= 0 && previous_hd != hd))
+      fprintf(stderr, "[fzero-render-trace] present=%u mean=%u prior=%u hd=%d "
+                      "race=%02x,%02x triple=%d\n",
+              count, mean, previous_mean, hd, g_ram[0x54], g_ram[0x55],
+              p->triple_active);
+    previous_mean = mean;
+    previous_hd = hd;
+  }
   if (p->gl) {
     fzero_gl_render(p->gl, pixels, width, height, p->viewport,
                     p->drawable_width, p->drawable_height);
