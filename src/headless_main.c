@@ -408,9 +408,20 @@ int main(int argc, char **argv) {
   AttractStats stats = {0};
   FzeroFfbState ffb_model = {0};
   const char *ffb_trace = getenv("FZERO_FFB_MODEL_TRACE");
+  const char *ffb_raw_path = getenv("FZERO_FFB_OBSERVATION_RAW");
+  FILE *ffb_raw = NULL;
   int ffb_strength = 12;
-  if (ffb_trace && getenv("FZERO_FFB_MODEL_STRENGTH"))
+  if ((ffb_trace || (ffb_raw_path && *ffb_raw_path)) && getenv("FZERO_FFB_MODEL_STRENGTH"))
     ffb_strength = atoi(getenv("FZERO_FFB_MODEL_STRENGTH"));
+  if (ffb_raw_path && *ffb_raw_path) {
+    if (playthrough.mode != 2 || ffb_strength < 0 || ffb_strength > 100 ||
+        !(ffb_raw = fopen(ffb_raw_path, "wbx")) ||
+        fprintf(ffb_raw, "FZFFB1\t%d\n", ffb_strength) < 0) {
+      fputs("device-free force observation requires valid playback and a new output path\n", stderr);
+      if (ffb_raw) fclose(ffb_raw);
+      FzeroPlaythroughAbort(&playthrough); free(rom); return 4;
+    }
+  }
   WavWriter wav;
   if (!wav_open(&wav, getenv("SNESRECOMP_WAV"))) {
     fputs("unable to open WAV capture\n", stderr);
@@ -484,11 +495,20 @@ int main(int argc, char **argv) {
       fprintf(stderr, "[fzero-playthrough] input/state divergence at frame %ld\n", frame);
       FzeroPlaythroughAbort(&playthrough); free(rom); return 9;
     }
-    if (ffb_trace) {
+    if (ffb_trace || ffb_raw) {
       FzeroFfbOutput force = {0};
       FzeroFfbCompute(&ffb_model, g_ram, sizeof(g_ram), frame_input,
                      ffb_strength, &force);
-      if (force.collision_pulse || (force.racing && frame % 120 == 0))
+      if (ffb_raw && fprintf(ffb_raw, "%ld\t%llu\t%d\t%d\t%d\t%d\t%d\t%d\t%d\n",
+                             frame, (unsigned long long)g_cpu.master_cycles,
+                             force.racing, force.constant_force,
+                             force.spring_coefficient, force.damper_coefficient,
+                             force.road_magnitude, force.road_frequency_millihz,
+                             force.collision_pulse) < 0) {
+        fputs("force observation write failed\n", stderr);
+        fclose(ffb_raw); FzeroPlaythroughAbort(&playthrough); free(rom); return 9;
+      }
+      if (ffb_trace && (force.collision_pulse || (force.racing && frame % 120 == 0)))
         fprintf(stderr, "[fzero-ffb-model] frame=%ld racing=%d spring=%d "
                         "damper=%d road=%d collision=%d\n", frame,
                 force.racing, force.spring_coefficient,
@@ -567,6 +587,12 @@ int main(int argc, char **argv) {
        stats.video_changes >= (uint64_t)(frame_limit / 600) &&
        stats.audio_active_frames >= (uint64_t)(frame_limit / 10) &&
        stats.audio_peak > 0 && audio_samples > 0);
+
+  if (ffb_raw) {
+    if (qualified && output_ok && fprintf(ffb_raw, "complete\t%ld\n", frame_limit) < 0)
+      output_ok = 0;
+    if (fclose(ffb_raw)) output_ok = 0;
+  }
 
   fprintf(stderr,
           "fzero_native: %s frames=%ld resume=%06x master=%llu "
