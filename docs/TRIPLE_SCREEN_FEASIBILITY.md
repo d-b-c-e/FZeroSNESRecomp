@@ -87,6 +87,13 @@ Additional private replay captures at frames 2,000, 4,000, 6,000, 8,000, and
 14.0–14.2 ms with direct skyline sampling. Both paths correctly rejected
 frame 11,200's non-race camera. These are offline side-buffer results, not a
 new Surround presentation test.
+The ground intersection now evaluates one rational projection per physical
+panel row instead of a normalized ray at every side pixel. Nine private race
+and impact captures remained byte-identical to the prior renderer. Alternating
+200-iteration offline A/B measurements at 640×360 per side reduced side
+composition from roughly 11.94–11.97 ms to 11.31–11.42 ms per frame. The
+`FZERO_TRIPLE_DISABLE_ROW=1` diagnostic switch retains the direct path for
+future pixel comparisons; this CPU result is not a new display-pacing result.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
