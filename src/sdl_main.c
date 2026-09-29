@@ -1708,6 +1708,30 @@ int main(int argc, char **argv) {
   if (!FzeroMsuSelectSaveRoot()) Die(FzeroMsuError());
   RtlReadSram();
   const char *record_path = getenv("FZERO_RECORD_PLAYTHROUGH");
+  const char *replay_path = getenv("FZERO_REPLAY_PLAYTHROUGH");
+  bool replay_failed = false;
+  if (record_path && *record_path && replay_path && *replay_path) {
+    fprintf(stderr, "[fzero-playthrough] record and replay cannot be combined\n");
+    free(rom);
+    return 2;
+  }
+  if (replay_path && *replay_path) {
+    char state_path[2048];
+    if (FzeroReplayHasInput() ||
+        !FzeroPlaythroughStatePath(replay_path, state_path, sizeof(state_path)) ||
+        !FzeroPlaythroughPlaybackOpen(&g_playthrough, replay_path,
+                                     playthrough_rom_sha) ||
+        !FzeroStateFileAcceptable(state_path) ||
+        !RtlLoadSnapshot(state_path)) {
+      fprintf(stderr, "[fzero-playthrough] identity/state invalid; visual replay refused\n");
+      FzeroPlaythroughAbort(&g_playthrough);
+      free(rom);
+      return 3;
+    }
+    fprintf(stderr, "[fzero-playthrough] visual replay: %llu verified frames, "
+                    "physical FFB disabled\n",
+            (unsigned long long)g_playthrough.total);
+  }
   if (record_path && *record_path) {
     char state_path[2048];
     bool valid_path = FzeroPlaythroughStatePath(record_path, state_path,
@@ -1760,7 +1784,7 @@ int main(int argc, char **argv) {
                                          SDL_PROP_WINDOW_WIN32_HWND_POINTER,
                                          NULL);
 #endif
-  FzeroFfbInit(g_config_path, native_window);
+  if (g_playthrough.mode != 2) FzeroFfbInit(g_config_path, native_window);
   if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
   FzeroGlRenderer gl_renderer;
@@ -1864,7 +1888,7 @@ int main(int argc, char **argv) {
   SDL_GameController *pad = NULL;
   FzeroGamepadConfigure(g_config_path, g_selftest_pad ? g_selftest_guid : launcher_settings.player_gamepad_guid[0],
                          launcher_settings.deadzone[0]);
-  FzeroGamepadRefresh(&pad);
+  if (g_playthrough.mode != 2) FzeroGamepadRefresh(&pad);
 
   int running = 1;
   int paused = 0;
@@ -2158,6 +2182,13 @@ int main(int argc, char **argv) {
         (void)snes_rewind_open();
       }
       if (FzeroReplayHasInput()) input = FzeroReplayInput((unsigned)frames);
+      if (g_playthrough.mode == 2 &&
+          !FzeroPlaythroughNextInput(&g_playthrough, &input)) {
+        fprintf(stderr, "[fzero-playthrough] missing input at frame %ld\n", frames);
+        replay_failed = true;
+        running = 0;
+        break;
+      }
       /* Seat 0's word, before the guest sees it: the overlays are a player-1
        * facility, and the press that closed one must neither reach the game
        * nor re-open the panel. */
@@ -2181,8 +2212,17 @@ int main(int argc, char **argv) {
       if (g_playthrough.mode == 1 &&
           !FzeroPlaythroughRecordFrame(&g_playthrough, input, g_ram, sizeof(g_ram)))
         fprintf(stderr, "[fzero-playthrough] write failed; case incomplete\n");
-      FzeroTelemetryFrame(g_ram, sizeof(g_ram), input);
-      FzeroFfbFrame(g_ram, sizeof(g_ram), input);
+      if (g_playthrough.mode == 2 &&
+          !FzeroPlaythroughVerifyFrame(&g_playthrough, g_ram, sizeof(g_ram))) {
+        fprintf(stderr, "[fzero-playthrough] input/state divergence at frame %ld\n", frames);
+        replay_failed = true;
+        running = 0;
+        break;
+      }
+      if (g_playthrough.mode != 2) {
+        FzeroTelemetryFrame(g_ram, sizeof(g_ram), input);
+        FzeroFfbFrame(g_ram, sizeof(g_ram), input);
+      }
       FzeroDiagnosticsEnd(FZERO_DIAG_SIMULATION, diagnostic_start);
       if (g_fail || !FzeroLastLleResult()) {
         fprintf(stderr, "[fzero-failure] frame=%ld resume=$%06x bus_fault=%d execution=%d state=%02x,%02x,%02x car=%02x\n",
@@ -2198,6 +2238,10 @@ int main(int argc, char **argv) {
       frames++;
       FzeroClockSimulationDone(&clock);
       now = monotonic_seconds();
+      if (g_playthrough.mode == 2 && (uint64_t)frames >= g_playthrough.total) {
+        running = 0;
+        break;
+      }
       if (auto_close_frames > 0 && frames >= auto_close_frames) { running = 0; break; }
     }
 
@@ -2282,7 +2326,7 @@ int main(int argc, char **argv) {
       fprintf(stderr, "Unable to write WRAM capture\n");
     if (dump) fclose(dump);
   }
-  RtlWriteSram();
+  if (g_playthrough.mode != 2) RtlWriteSram();
   FzeroSetMode7Hd(0, NULL, 0);
   free(hd_pixels);
   debug_server_shutdown();
@@ -2317,6 +2361,11 @@ int main(int argc, char **argv) {
     if (!FzeroPlaythroughClose(&g_playthrough))
       fprintf(stderr, "[fzero-playthrough] close failed; case incomplete\n");
     else fprintf(stderr, "[fzero-playthrough] recording complete\n");
+  } else if (g_playthrough.mode == 2) {
+    if (!FzeroPlaythroughClose(&g_playthrough)) {
+      fprintf(stderr, "[fzero-playthrough] visual replay incomplete\n");
+      replay_failed = true;
+    } else fprintf(stderr, "[fzero-playthrough] visual replay complete\n");
   }
   SDL_DestroyWindow(window);
   SDL_DestroyMutex(g_audio_mutex);
@@ -2325,5 +2374,5 @@ int main(int argc, char **argv) {
   free(rom);
   /* A self-test that printed FAIL must not exit 0: a harness that only reads
    * the exit status would otherwise record a pass. */
-  return g_selftest_failed ? 4 : 0;
+  return replay_failed ? 9 : g_selftest_failed ? 4 : 0;
 }
