@@ -539,6 +539,11 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
 
   RecompLauncherCGameInfo game;
   memset(&game, 0, sizeof(game));
+  /* The shared launcher may select Keyboard and clear its gamepad GUID.
+   * The raw wheel mod is independent of that input-source choice, so keep
+   * its configured identity through the launcher session and save. */
+  char wheel_guid[40];
+  snprintf(wheel_guid, sizeof(wheel_guid), "%s", settings->player_gamepad_guid[0]);
   launcher_profile_apply("snes", &game);
   game.name = "F-Zero";
   game.region = "(USA)";
@@ -560,7 +565,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   game.msu1_supported = 1;
   game.msu1_note = "Select a music folder containing Conn/Cubear v11 f-zero_msu1.ips and your PCM tracks. Works with stock F-Zero and BS Deluxe.";
   game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
-                                    settings->player_gamepad_guid[0],
+                                    wheel_guid,
                                     launcher_ini_kv_write, FzeroFfbListDevices);
   game.rom_cache_path = "rom.cfg";
   /* Draws the Controls page's SaveStateMenu and Rewind rows, and the
@@ -612,6 +617,9 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
       recomp_launcher_run_window("F-Zero \xE2\x80\x94 Launcher", settings,
                                  &game, assets_dir, initial_rom, path,
                                  path_size);
+  if (!settings->player_gamepad_guid[0][0] && wheel_guid[0])
+    snprintf(settings->player_gamepad_guid[0],
+             sizeof(settings->player_gamepad_guid[0]), "%s", wheel_guid);
   /* Whatever the launcher did, keep what the player chose there. Quitting is
    * as good a moment to persist as pressing Play. */
   save_launcher_settings(settings);
