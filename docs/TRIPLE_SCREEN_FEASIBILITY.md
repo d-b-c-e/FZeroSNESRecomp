@@ -29,6 +29,13 @@ and captured-race calibrations round-trip through all three panel planes in
 ROM-free tests. This is geometry groundwork for placing world-anchored objects;
 it does not recover missing OAM artwork, infer a vehicle's exact ground anchor,
 or make the current side buffers render vehicles or effects.
+For the two visible opponents in captured frame 1800, mapping their wrapped
+WRAM course positions through the frame's Mode 7 center and inverse camera
+lands within 3 native horizontal pixels and 5 vertical pixels of the guest's
+recorded screen anchors. The screen-locked player has a separate vertical
+offset; treating all six cars' artwork as though its top-left were the ground
+contact would be wrong. The side-view visibility/OAM generation problem is
+still open.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
