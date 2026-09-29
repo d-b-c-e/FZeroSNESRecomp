@@ -218,6 +218,11 @@ from 7.244/7.192 ms to 5.624/5.638 ms per side-buffer pair; both outputs
 were byte-identical. The full 11,364-frame verified replay still passed all
 164 cached/direct sky comparisons with zero side rejections. This is an
 offline CPU improvement, not a new measured Surround frame-rate result.
+Inlining the adjacent guarded rational-row lookup reduced the same two
+500-iteration captures a further 5.624/5.638 to 5.472/5.458 ms. Their complete
+side images stayed byte-identical, and another full verified replay passed
+164/164 atlas comparisons with zero side rejections. The incremental timing
+gain is small; no physical presentation rate is inferred from it.
 The SDL presenter now retains the uploaded side texture when another host
 presentation reuses the same projected emulated frame. A ROM-free test confirms
 the projection version remains stable on a cache hit and advances when the
