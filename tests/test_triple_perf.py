@@ -1,6 +1,8 @@
 import unittest
+import tempfile
+from pathlib import Path
 
-from tools.summarize_triple_perf import summarize
+from tools.summarize_triple_perf import expand_logs, summarize
 
 
 def sample(elapsed, missed, scene, draw_total, draw_calls,
@@ -40,6 +42,16 @@ class TriplePerfTests(unittest.TestCase):
     def test_requires_matching_samples(self):
         with self.assertRaisesRegex(ValueError, "no scene 2 samples"):
             summarize([sample(2000, 0, 1, 5, 10)])
+
+    def test_expands_native_shell_wildcard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = root / "performance-a.jsonl"
+            expected.touch()
+            self.assertEqual(expand_logs([root / "performance-*.jsonl"]),
+                             [expected])
+            with self.assertRaisesRegex(ValueError, "no logs match"):
+                expand_logs([root / "absent-*.jsonl"])
 
 
 if __name__ == "__main__":

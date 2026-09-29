@@ -8,7 +8,9 @@ with a split draw mean.
 """
 
 import argparse
+import glob
 import json
+import sys
 from pathlib import Path
 
 
@@ -16,11 +18,15 @@ STAGES = ("simulation", "ppu", "composition", "upload",
           "triple_projection", "triple_upload", "draw_submit", "present")
 
 
+class NoSamplesError(ValueError):
+    pass
+
+
 def summarize(rows, scene=2):
     samples = [row for row in rows if row.get("kind") == "sample"
                and row.get("scene") == scene and row.get("simulation_delta", 0)]
     if not samples:
-        raise ValueError(f"no scene {scene} samples")
+        raise NoSamplesError(f"no scene {scene} samples")
     stage_totals = {name: [0.0, 0] for name in STAGES}
     for sample in samples:
         for name in STAGES:
@@ -55,6 +61,17 @@ def read_jsonl(path):
                     raise ValueError(f"{path}:{number}: {error}") from error
 
 
+def expand_logs(patterns):
+    """Expand patterns ourselves: PowerShell may pass wildcards literally."""
+    paths = []
+    for pattern in patterns:
+        matches = sorted(glob.glob(str(pattern)))
+        if not matches:
+            raise ValueError(f"no logs match {pattern}")
+        paths.extend(Path(match) for match in matches)
+    return paths
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("logs", nargs="+", type=Path)
@@ -62,9 +79,16 @@ def main():
                         help="scene byte to summarize (default: race=2)")
     args = parser.parse_args()
     modes = set()
-    for path in args.logs:
+    try:
+        paths = expand_logs(args.logs)
+    except ValueError as error:
+        parser.error(str(error))
+    for path in paths:
         try:
             result = summarize(read_jsonl(path), args.scene)
+        except NoSamplesError as error:
+            print(f"{path}: skipped ({error})", file=sys.stderr)
+            continue
         except (OSError, ValueError) as error:
             parser.error(str(error))
         mode = "split" if result["split"] else "combined"
@@ -81,6 +105,8 @@ def main():
     if len(modes) > 1:
         print("Caution: combined draw_submit includes side projection/upload; "
               "split draw_submit does not.")
+    if not modes:
+        parser.error(f"no scene {args.scene} samples in the matched logs")
 
 
 if __name__ == "__main__":
