@@ -1233,6 +1233,55 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
         }
       }
     }
+    if (!probe->raster_sprite_pixels) continue;
+    double dx = texel.x - ground.camera_x, dy = texel.y - ground.camera_y;
+    double lateral = dx * ground.right_x + dy * ground.right_y;
+    double forward = (dx * ground.forward_x + dy * ground.forward_y) /
+                     ground.forward_scale;
+    FzeroTripleVec3 anchor = {lateral,
+        -ground.camera_height * ground.pitch_cos + forward * ground.pitch_sin,
+        -ground.camera_height * ground.pitch_sin - forward * ground.pitch_cos};
+    if (!isfinite(anchor.x) || !isfinite(anchor.y) ||
+        !isfinite(anchor.z) || !(anchor.z < -1.0)) continue;
+    double scale_x = rig->width_mm / logical_width *
+                     (-anchor.z / rig->eye_distance_mm);
+    double scale_y = rig->height_mm / 224.0 *
+                     (-anchor.z / rig->eye_distance_mm);
+    if (!isfinite(scale_x) || !isfinite(scale_y) ||
+        !(scale_x > 0 && scale_y > 0)) continue;
+    probe->billboard_valid = true;
+    probe->billboard_x = anchor.x;
+    probe->billboard_y = anchor.y;
+    probe->billboard_z = anchor.z;
+    probe->billboard_scale_x = scale_x;
+    probe->billboard_scale_y = scale_y;
+    for (int panel = 0; panel < 3; ++panel) {
+      double left = INFINITY, top = INFINITY, right = -INFINITY, bottom = -INFINITY;
+      unsigned corners_projected = 0;
+      for (int corner = 0; corner < 4; ++corner) {
+        int sx = corner & 1 ? probe->raster_right + 1 : probe->raster_left;
+        int sy = corner & 2 ? probe->raster_bottom + 1 : probe->raster_top;
+        FzeroTripleVec3 point = {anchor.x + (sx - probe->guest_x) * scale_x,
+                                 anchor.y - (sy - probe->guest_y) * scale_y,
+                                 anchor.z};
+        double px, py;
+        if (!FzeroTripleProjectDirection(&panels[panel], point,
+                                         rig->panel_width_px,
+                                         rig->panel_height_px,
+                                         &px, &py)) continue;
+        ++corners_projected;
+        if (px < left) left = px;
+        if (px > right) right = px;
+        if (py < top) top = py;
+        if (py > bottom) bottom = py;
+      }
+      if (corners_projected != 4 || !isfinite(left) || !isfinite(top)) continue;
+      probe->billboard_projected[panel] = true;
+      probe->billboard_left[panel] = left;
+      probe->billboard_top[panel] = top;
+      probe->billboard_right[panel] = right;
+      probe->billboard_bottom[panel] = bottom;
+    }
   }
   return true;
 }
@@ -1253,17 +1302,6 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
   FzeroTripleSurface panels[3];
   if (!FzeroTripleBuild(rig, panels)) return false;
   const FzeroSourceFrame *f = &frames[current];
-  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
-  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
-  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
-  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
-  FzeroTripleGround ground;
-  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180,
-                                 &ground)) return false;
-  FzeroMode7Texel center = {course_centre(scanout.m7matrix, 4),
-                            course_centre(scanout.m7matrix, 5)};
-  const int camera_x = read_i16(f->ram + 0xb70);
-  const int camera_y = read_i16(f->ram + 0xb90);
   const int pw = rig->panel_width_px, ph = rig->panel_height_px;
   const size_t area = (size_t)pw * ph;
   const FzeroViewport viewport = {FZERO_MAX_WIDTH,
@@ -1275,25 +1313,11 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
   for (int car = 1; car < 6; ++car) {
     const FzeroTripleVehicleProbe *probe = &probes[car];
     if ((probe->state & 0x88) != 0x88 || !probe->oam_slots ||
-        !probe->raster_sprite_pixels) continue;
-    FzeroMode7Texel texel;
-    if (!FzeroTripleGroundWorldTexel(probe->world_x, probe->world_y,
-                                     camera_x, camera_y, center, &texel)) continue;
-    double dx = texel.x - ground.camera_x, dy = texel.y - ground.camera_y;
-    double lateral = dx * ground.right_x + dy * ground.right_y;
-    double forward = (dx * ground.forward_x + dy * ground.forward_y) /
-                     ground.forward_scale;
-    FzeroTripleVec3 anchor = {lateral,
-        -ground.camera_height * ground.pitch_cos + forward * ground.pitch_sin,
-        -ground.camera_height * ground.pitch_sin - forward * ground.pitch_cos};
-    if (!isfinite(anchor.x) || !isfinite(anchor.y) ||
-        !isfinite(anchor.z) || !(anchor.z < -1.0)) continue;
-    double scale_x = rig->width_mm / logical_width *
-                     (-anchor.z / rig->eye_distance_mm);
-    double scale_y = rig->height_mm / 224.0 *
-                     (-anchor.z / rig->eye_distance_mm);
-    if (!isfinite(scale_x) || !isfinite(scale_y) ||
-        !(scale_x > 0 && scale_y > 0)) continue;
+        !probe->raster_sprite_pixels || !probe->billboard_valid) continue;
+    FzeroTripleVec3 anchor = {probe->billboard_x, probe->billboard_y,
+                              probe->billboard_z};
+    double scale_x = probe->billboard_scale_x;
+    double scale_y = probe->billboard_scale_y;
     for (int y = probe->raster_top; y <= probe->raster_bottom; ++y) {
       if (y < 0 || y >= 224) continue;
       memcpy(&scanout, f->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
@@ -1309,29 +1333,15 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
       }
     }
     for (int side = 0; side < 3; side += 2) {
-      if (!probe->projected[side] || probe->panel_x[side] < 0 ||
-          probe->panel_x[side] >= pw || probe->panel_y[side] < 0 ||
-          probe->panel_y[side] >= ph) continue;
-      double left = INFINITY, top = INFINITY, right = -INFINITY, bottom = -INFINITY;
-      for (int corner = 0; corner < 4; ++corner) {
-        int sx = corner & 1 ? probe->raster_right + 1 : probe->raster_left;
-        int sy = corner & 2 ? probe->raster_bottom + 1 : probe->raster_top;
-        FzeroTripleVec3 point = {anchor.x + (sx - probe->guest_x) * scale_x,
-                                 anchor.y - (sy - probe->guest_y) * scale_y,
-                                 anchor.z};
-        double px, py;
-        if (!FzeroTripleProjectDirection(&panels[side], point, pw, ph,
-                                         &px, &py)) continue;
-        if (px < left) left = px;
-        if (px > right) right = px;
-        if (py < top) top = py;
-        if (py > bottom) bottom = py;
-      }
-      if (!isfinite(left) || !isfinite(top)) continue;
-      int x0 = (int)fmax(0, floor(left) - 2);
-      int x1 = (int)fmin(pw - 1, ceil(right) + 2);
-      int y0 = (int)fmax(0, floor(top) - 2);
-      int y1 = (int)fmin(ph - 1, ceil(bottom) + 2);
+      if (!probe->billboard_projected[side] ||
+          probe->billboard_right[side] < 0 ||
+          probe->billboard_left[side] >= pw ||
+          probe->billboard_bottom[side] < 0 ||
+          probe->billboard_top[side] >= ph) continue;
+      int x0 = (int)fmax(0, floor(probe->billboard_left[side]) - 2);
+      int x1 = (int)fmin(pw - 1, ceil(probe->billboard_right[side]) + 2);
+      int y0 = (int)fmax(0, floor(probe->billboard_top[side]) - 2);
+      int y1 = (int)fmin(ph - 1, ceil(probe->billboard_bottom[side]) + 2);
       for (int y = y0; y <= y1; ++y)
         for (int x = x0; x <= x1; ++x) {
           FzeroTripleVec3 ray;

@@ -57,20 +57,28 @@ int main(int argc, char **argv) {
       fprintf(stderr, "vehicle probe rejected capture\n");
       return 3;
     }
-    puts("car,state,world_x,world_y,guest_x,guest_y,oam_slots,raster_sprite_pixels,raster_left,raster_top,raster_right,raster_bottom,panel,x,y,on_panel");
+    puts("car,state,world_x,world_y,guest_x,guest_y,oam_slots,raster_sprite_pixels,raster_left,raster_top,raster_right,raster_bottom,panel,x,y,on_panel,billboard_left,billboard_top,billboard_right,billboard_bottom,billboard_intersects");
     for (int car = 0; car < 6; ++car)
       for (int side = 0; side < 3; ++side) {
         const FzeroTripleVehicleProbe *probe = &probes[car];
         double x = probe->panel_x[side], y = probe->panel_y[side];
         int on_panel = probe->projected[side] &&
             x >= 0 && x < pw && y >= 0 && y < ph;
-        printf("%d,%02x,%d,%d,%d,%d,%u,%u,%d,%d,%d,%d,%d,%.2f,%.2f,%d\n",
+        int intersects = probe->billboard_projected[side] &&
+            probe->billboard_right[side] >= 0 &&
+            probe->billboard_left[side] < pw &&
+            probe->billboard_bottom[side] >= 0 &&
+            probe->billboard_top[side] < ph;
+        printf("%d,%02x,%d,%d,%d,%d,%u,%u,%d,%d,%d,%d,%d,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%d\n",
             car, probe->state, probe->world_x, probe->world_y,
             probe->guest_x, probe->guest_y, probe->oam_slots,
             probe->raster_sprite_pixels,
             probe->raster_left, probe->raster_top,
             probe->raster_right, probe->raster_bottom,
-            side, x, y, on_panel);
+            side, x, y, on_panel,
+            probe->billboard_left[side], probe->billboard_top[side],
+            probe->billboard_right[side], probe->billboard_bottom[side],
+            intersects);
       }
   }
   if (vehicles_only) return 0;

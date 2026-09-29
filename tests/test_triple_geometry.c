@@ -67,6 +67,29 @@ int main(void) {
     CHECK(fabs(depth * ray.x - sprite_point.x) < 2);
     CHECK(fabs(depth * ray.y - sprite_point.y) < 2);
   }
+  /* An object's anchor can leave the center while its billboard still
+   * intersects both panels. Anchor-only visibility clips that seam art. */
+  FzeroTripleRig seam_rig = rig;
+  seam_rig.panel_width_px = 512;
+  seam_rig.panel_height_px = 288;
+  FzeroTripleSurface seam_panels[3];
+  FzeroTripleVec3 seam_ray;
+  CHECK(FzeroTripleBuild(&seam_rig, seam_panels));
+  CHECK(FzeroTripleRay(&seam_panels[2], 6, 148, 512, 288, &seam_ray));
+  FzeroTripleVec3 seam_anchor = {
+      seam_ray.x * (-500 / seam_ray.z),
+      seam_ray.y * (-500 / seam_ray.z), -500};
+  double seam_center_x, seam_center_y, seam_left_x, seam_left_y;
+  CHECK(FzeroTripleProjectDirection(&seam_panels[1], seam_anchor,
+                                    512, 288, &seam_center_x, &seam_center_y));
+  FzeroTripleVec3 seam_left = {
+      seam_anchor.x - 16 * seam_rig.width_mm / 342 *
+                       (500 / seam_rig.eye_distance_mm),
+      seam_anchor.y, seam_anchor.z};
+  CHECK(FzeroTripleProjectDirection(&seam_panels[1], seam_left,
+                                    512, 288, &seam_left_x, &seam_left_y));
+  CHECK(seam_center_x >= 512 && seam_left_x < 512);
+  CHECK(fabs(seam_center_y - seam_left_y) < 1e-9);
   CHECK(fabs(left.x - center.x) > 0.25); /* three distinct sightlines */
   CHECK(fabs(panel[0].lower_left.x + panel[0].right.x +
              rig.bezel_gap_mm - panel[1].lower_left.x) < 1e-9);

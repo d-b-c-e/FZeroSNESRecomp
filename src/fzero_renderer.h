@@ -45,6 +45,12 @@ typedef struct FzeroTripleVehicleProbe {
   int raster_left, raster_top, raster_right, raster_bottom;
   bool projected[3];
   double panel_x[3], panel_y[3];
+  /* Offline billboard approximation of the decoded OBJ raster, including
+   * portions whose anchor is beyond a panel edge. Not live composition. */
+  bool billboard_valid, billboard_projected[3];
+  double billboard_x, billboard_y, billboard_z, billboard_scale_x, billboard_scale_y;
+  double billboard_left[3], billboard_top[3];
+  double billboard_right[3], billboard_bottom[3];
 } FzeroTripleVehicleProbe;
 bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
                                       int logical_width,

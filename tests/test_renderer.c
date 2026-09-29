@@ -723,6 +723,7 @@ static void test_triple_sky_horizon(void) {
   CHECK(probes[2].state == 0x88 && probes[2].oam_slots == 0 &&
         probes[2].raster_sprite_pixels == 0);
   CHECK(probes[2].raster_left == -1 && probes[2].raster_right == -1);
+  CHECK(!probes[2].billboard_valid);
   CHECK(probes[2].world_x == 1034 && probes[2].world_y == 384);
   CHECK(probes[2].projected[1]);
 }
