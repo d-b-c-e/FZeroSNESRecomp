@@ -67,6 +67,14 @@ and energy. On the 11,364-frame rig recording, the two near-white frames at
 headless indices 6142–6143 were already present in the guest compositor:
 the captured image shows a white background with an explosion and HUD, not a
 Surround-only rendering fault. The SDL flash guard held these same two frames.
+`FZERO_TRIPLE_SIDE_LUMA_TRACE=1` additionally composes both side panels at the
+runtime's 512×288 resolution on every race frame and reports bright or sharply
+brighter side frames alongside the center mean. In the full verified replay,
+headless frames 6142–6143 measured left/right 255/255 and center 246/249.
+The only other logged side jumps were moderate (frame 3001: 155/128; frame
+6178: 118/147); no side-only near-white frame was detected. This rules out a
+side-compositor white flash in this recording, not a later SDL/GPU/Surround
+presentation artifact or a different playthrough.
 One smaller luminance rise at 3025 was a track surface turning light grey and
 persisting in following frames; it should not be suppressed as a flash.
 Device-free FFB model tracing requested collision pulses at frames 3417, 5526,
