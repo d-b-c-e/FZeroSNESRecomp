@@ -613,24 +613,17 @@ static void test_triple_fallback(void) {
   for (size_t i = 1; i <= 2 * 16 * 9; ++i) CHECK(sides[i] == 0xdeadbeef);
 }
 
-static void test_triple_sky_horizon(void) {
-  /* ROM-free race-shaped frame: red Mode 1 panorama above the IRQ split,
-   * green Mode 7 below. A turned side ray remains above the ground plane well
-   * after the stock split; it must show sky there, not a black triangle. */
-  setup();
-  memset(p.vram, 0, sizeof(p.vram));
-  for (int i = 0x7800; i < 0x8000; ++i) p.vram[i] = 1;
-  for (int y = 0; y < 8; ++y) p.vram[16 + y] = 255;
-  ram[0x55] = 3;
-  FzeroRendererBeginFrame(ram, 101);
+static void publish_triple_sky(unsigned frame, unsigned sky_color) {
+  FzeroRendererBeginFrame(ram, frame);
   for (int line = 1; line <= 224; ++line) {
     p.bgmode = line <= 47 ? 1 : 7;
     p.screenEnabled[0] = 1;
     if (line <= 47) {
       p.bgXsc[0] = 0x79;
-      p.hScroll[0] = 0;
+      p.hScroll[0] = frame == 102 ? 7 : 0;
       p.vScroll[0] = 36;
-      p.cgram[1] = 31;
+      p.m7matrix[0] = frame & 1; /* Unused in Mode 1, changes between frames. */
+      p.cgram[1] = sky_color;
     } else {
       int magnitude = 352 - (line - 81) * 242 / 100;
       p.m7matrix[0] = p.m7matrix[3] = 0;
@@ -643,13 +636,48 @@ static void test_triple_sky_horizon(void) {
     FzeroRendererCaptureLine(&p, (unsigned)line);
   }
   FzeroRendererEndFrame(&p, stock);
+}
+
+static void test_triple_sky_horizon(void) {
+  /* ROM-free race-shaped frame: red Mode 1 panorama above the IRQ split,
+   * green Mode 7 below. A turned side ray remains above the ground plane well
+   * after the stock split; it must show sky there, not a black triangle. */
+  setup();
+  memset(p.vram, 0, sizeof(p.vram));
+  for (int i = 0x7800; i < 0x8000; ++i) p.vram[i] = 1;
+  for (int y = 0; y < 8; ++y) p.vram[16 + y] = 255;
+  ram[0x55] = 3;
+  publish_triple_sky(101, 31);
   enum { width = 64, height = 36, area = width * height };
   FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, width, height};
-  uint32_t sides[2 * area];
+  uint32_t sides[2 * area], cold[2 * area];
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
   CHECK(sides[0] == 0xff0000 && sides[area + width - 1] == 0xff0000);
   CHECK(sides[12 * width] == 0xff0000);
   CHECK(sides[area + 12 * width + width - 1] == 0xff0000);
+  /* Add a coloured tile pattern, then scroll it. The atlas must follow the
+   * scrolling panorama instead of retaining panel-column pixels. */
+  for (int i = 0x7800; i < 0x8000; ++i) p.vram[i] = i & 1 ? 2 : 1;
+  for (int y = 0; y < 8; ++y) p.vram[32 + y] = 0xff00;
+  p.cgram[2] = 0x7c00;
+  publish_triple_sky(102, 31);
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  publish_triple_sky(103, 31);
+  CHECK(FzeroRendererDrawTripleSides(cold, 2 * area, &rig, 342));
+  CHECK(memcmp(sides, cold, sizeof(sides)));
+  /* A warm-atlas and cold render of the same changed-scroll frame must agree. */
+  FzeroRendererReset();
+  publish_triple_sky(103, 31);
+  memcpy(sides, cold, sizeof(sides));
+  CHECK(FzeroRendererDrawTripleSides(cold, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
+  /* Used palette and VRAM changes must both invalidate the skyline cache. */
+  publish_triple_sky(104, 0x7c00);
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  for (int y = 0; y < 8; ++y) p.vram[16 + y] = p.vram[32 + y] = 0;
+  publish_triple_sky(105, 0x7c00);
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(sides[0] == 0);
 }
 
 int main(void) {

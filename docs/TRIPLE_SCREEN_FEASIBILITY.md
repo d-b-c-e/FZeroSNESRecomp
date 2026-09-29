@@ -60,6 +60,13 @@ and suppressed two near-white impact frames. Its measured race composition
 averaged 4.48 ms and GPU draw submission 8.33 ms; 272 presentations were
 missed, versus 46 in a prior ground-only replay. Runs were not simultaneous,
 so this is a performance warning rather than a controlled A/B benchmark.
+The source-tile atlas reuses the BG1/BG2 panorama through horizontal scroll
+changes and validates the exact VRAM words it sampled. On one fixed 640×360
+capture, a controlled 200-iteration CPU comparison measured 13.07 ms with
+direct skyline sampling and 11.70 ms with the atlas; their output files were
+byte-identical. This isolated speedup does not establish a 60 Hz rig result:
+subsequent live replays ran alongside other desktop windows and had variable
+presentation pacing. The normal install remains untouched.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye

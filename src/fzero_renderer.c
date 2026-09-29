@@ -33,6 +33,19 @@ static struct {
   int logical_width;
   bool valid;
 } triple_cache;
+/* BG1/BG2 panorama tiles are mostly static while horizontal scroll changes
+ * with steering. Cache source pixels in panorama coordinates, not final panel
+ * columns. Exact tracked VRAM reads invalidate the atlas when art changes. */
+static struct {
+  uint16_t *pixels[2];
+  size_t capacity[2];
+  int rows;
+  uint8_t vram_used[0x8000];
+  uint16_t vram[0x8000];
+  uint8_t registers[80][PPU_SAVESTATE_REGS_SIZE];
+  bool valid;
+} sky_atlas;
+static uint8_t *sky_vram_reads;
 
 bool FzeroRendererLoadCapture(const char *path) {
   triple_cache.valid = false;
@@ -53,6 +66,7 @@ bool FzeroRendererHasFrame(void) { return frames[current].valid; }
 void FzeroRendererReset(void) {
   frames[0].valid = frames[1].valid = false;
   triple_cache.valid = false;
+  sky_atlas.valid = false;
 }
 void FzeroRendererBeginFrame(const uint8_t ram[0x20000], unsigned frame) {
   triple_cache.valid = false;
@@ -132,6 +146,10 @@ void FzeroRendererEndFrame(const Ppu *p, const uint32_t stock[256 * 224]) {
 
 static unsigned tile_pixel(const uint16_t *vram, unsigned address, int x, int y, int bpp) {
   unsigned a = (address + y) & 0x7fff;
+  if (sky_vram_reads) {
+    sky_vram_reads[a] = 1;
+    if (bpp == 4) sky_vram_reads[(a + 8) & 0x7fff] = 1;
+  }
   unsigned shift = 7 - x;
   unsigned bits = vram[a] >> shift;
   unsigned pixel = (bits & 1) | ((bits >> 7) & 2);
@@ -172,6 +190,7 @@ static uint16_t background_pixel(const Ppu *p, const uint16_t *vram,
   unsigned address = (sc & 0xfc) * 256 + (tx & 31) + (ty & 31) * 32;
   if ((sc & 1) && (tx & 32)) address += 1024;
   if ((sc & 2) && (ty & 32)) address += (sc & 1) ? 2048 : 1024;
+  if (sky_vram_reads) sky_vram_reads[address & 0x7fff] = 1;
   unsigned tile = vram[address & 0x7fff];
   int cx = px % size, cy = py % size;
   if (tile & 0x4000) cx = size - 1 - cx;
@@ -782,6 +801,103 @@ bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *out, size_t capac
   return render_frame(out, viewport, alpha, scale, native);
 }
 
+static void sky_cache_trace(const char *reason, int index) {
+  if (!getenv("FZERO_TRIPLE_SKY_TRACE")) return;
+  static unsigned hit_count, miss_count;
+  if (!strcmp(reason, "hit")) {
+    if (++hit_count <= 5 || hit_count % 120 == 0)
+      fprintf(stderr, "[fzero-triple-sky] hit=%u miss=%u\n", hit_count, miss_count);
+  } else if (++miss_count <= 10 || miss_count % 120 == 0) {
+    fprintf(stderr, "[fzero-triple-sky] miss=%u hit=%u reason=%s index=%d\n",
+            miss_count, hit_count, reason, index);
+  }
+}
+
+static bool cached_atlas_matches(const FzeroSourceFrame *f, int rows) {
+  if (!sky_atlas.valid || sky_atlas.rows != rows) {
+    sky_cache_trace("shape", rows); return false;
+  }
+  /* Only these registers affect BG tile pixel fetches. Scroll is applied
+   * when sampling the atlas; brightness, windows, colour math and the current
+   * palette are applied afterwards from the current captured scanline. */
+  const size_t mode = offsetof(Ppu, bgmode);
+  const size_t maps = offsetof(Ppu, bgXsc);
+  const size_t tiles = offsetof(Ppu, bgTileAdr);
+  for (int y = 0; y < rows; ++y) {
+    const FzeroRasterLine *line = &f->lines[y];
+    int offset = -1;
+    if (line->registers[mode] != sky_atlas.registers[y][mode]) offset = (int)mode;
+    else if (memcmp(line->registers + maps,
+                    sky_atlas.registers[y] + maps, 2)) offset = (int)maps;
+    else if (memcmp(line->registers + tiles,
+                    sky_atlas.registers[y] + tiles, sizeof(uint16_t))) offset = (int)tiles;
+    if (offset >= 0) {
+      sky_cache_trace("register", y * PPU_SAVESTATE_REGS_SIZE + offset);
+      return false;
+    }
+  }
+  for (int a = 0; a < 0x8000; ++a)
+    if (sky_atlas.vram_used[a] && f->vram[a] != sky_atlas.vram[a]) {
+      sky_cache_trace("vram", a); return false;
+    }
+  sky_cache_trace("hit", 0);
+  return true;
+}
+
+static bool sky_atlas_supported(const FzeroSourceFrame *f, int rows) {
+  if (rows > 51) return false; /* background_pixel's panorama strip range. */
+  Ppu *p = &scanout; /* PPU_bigTiles expects a pointer identifier. */
+  for (int y = 0; y < rows; ++y) {
+    memcpy(&scanout, f->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
+    for (int layer = 0; layer < 2; ++layer) {
+      int first = layer == 0 ? 36 : 92;
+      int scroll = scanout.vScroll[layer];
+      if (PPU_bigTiles(p, layer) ||
+          scanout.bgXsc[layer] != (layer == 0 ? 0x79 : 0x71) ||
+          scanout.hScroll[layer] >= 256 || scroll < first || scroll > 204 ||
+          (scroll - first) % 56) return false;
+    }
+  }
+  return true;
+}
+
+static bool build_sky_atlas(const FzeroSourceFrame *f, int rows) {
+  static const int periods[2] = {896, 768};
+  for (int layer = 0; layer < 2; ++layer) {
+    size_t needed = (size_t)rows * periods[layer];
+    if (sky_atlas.capacity[layer] < needed) {
+      uint16_t *pixels = realloc(sky_atlas.pixels[layer],
+                                 needed * sizeof(*pixels));
+      if (!pixels) return false;
+      sky_atlas.pixels[layer] = pixels;
+      sky_atlas.capacity[layer] = needed;
+    }
+  }
+  sky_atlas.valid = false;
+  memset(sky_atlas.vram_used, 0, sizeof(sky_atlas.vram_used));
+  sky_vram_reads = sky_atlas.vram_used;
+  for (int y = 0; y < rows; ++y) {
+    memcpy(&scanout, f->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
+    for (int layer = 0; layer < 2; ++layer) {
+      uint16_t h = scanout.hScroll[layer], v = scanout.vScroll[layer];
+      scanout.hScroll[layer] = 0;
+      scanout.vScroll[layer] = layer == 0 ? 36 : 92;
+      for (int x = 0; x < periods[layer]; ++x)
+        sky_atlas.pixels[layer][(size_t)y * periods[layer] + x] =
+            background_pixel(&scanout, f->vram, layer, x, y + 1, true);
+      scanout.hScroll[layer] = h;
+      scanout.vScroll[layer] = v;
+    }
+    memcpy(sky_atlas.registers[y], f->lines[y].registers,
+           PPU_SAVESTATE_REGS_SIZE);
+  }
+  sky_vram_reads = NULL;
+  memcpy(sky_atlas.vram, f->vram, sizeof(sky_atlas.vram));
+  sky_atlas.rows = rows;
+  sky_atlas.valid = true;
+  return true;
+}
+
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width) {
   static FzeroTripleVec3 *cached_rays;
@@ -848,7 +964,7 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   /* Mode 1 occupies the skyline band above the Mode 7 IRQ split. Its stock
    * rows alone leave a triangular black gap on the turned panels, because a
    * physical side ray can remain above the ground horizon after that split.
-   * Cache each BG1/BG2 panorama row by panel angle, then lower its skyline to
+   * Sample each BG1/BG2 panorama row by panel angle, then lower its skyline to
    * the ground-plane horizon per column. The topmost blue sky fills any area
    * outside the guest panorama's vertical range. BG3/OBJ/HUD remain center-only. */
   int sky_count = 0;
@@ -857,8 +973,14 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
     if ((scanout.bgmode & 7) != 1 || (scanout.inidisp & 128)) break;
     ++sky_count;
   }
-  uint32_t *sky_pixels = sky_count ? malloc((size_t)sky_count * 2 * pw * sizeof(*sky_pixels)) : NULL;
+  bool use_atlas = sky_count && !getenv("FZERO_TRIPLE_DISABLE_ATLAS") &&
+                   sky_atlas_supported(f, sky_count);
+  if (use_atlas && !cached_atlas_matches(f, sky_count) &&
+      !build_sky_atlas(f, sky_count)) return false;
+  uint32_t *sky_pixels = sky_count ?
+      malloc((size_t)sky_count * 2 * pw * sizeof(uint32_t)) : NULL;
   if (sky_count && !sky_pixels) return false;
+  static const int periods[2] = {896, 768};
   for (int source_y = 0; source_y < sky_count; ++source_y) {
     const FzeroRasterLine *raster = &f->lines[source_y];
     memcpy(&scanout, raster->registers, PPU_SAVESTATE_REGS_SIZE);
@@ -871,8 +993,17 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
             if (!(scanout.screenEnabled[sub] & (1u << layer)) ||
                 ((scanout.screenWindowed[sub] & (1u << layer)) &&
                  in_window(&scanout, layer, column, 0))) continue;
-            uint16_t pixel = background_pixel(&scanout, f->vram, layer,
-                                              column, source_y + 1, true);
+            uint16_t pixel;
+            if (use_atlas) {
+              int first = layer == 0 ? 36 : 92;
+              int panorama_x = ((scanout.vScroll[layer] - first) / 56 * 256 +
+                                scanout.hScroll[layer] + column) % periods[layer];
+              if (panorama_x < 0) panorama_x += periods[layer];
+              pixel = sky_atlas.pixels[layer][(size_t)source_y * periods[layer] + panorama_x];
+            } else {
+              pixel = background_pixel(&scanout, f->vram, layer,
+                                       column, source_y + 1, true);
+            }
             if (pixel > screens[sub]) screens[sub] = pixel;
           }
         sky_pixels[(size_t)source_y * 2 * pw + side * pw + x] =
