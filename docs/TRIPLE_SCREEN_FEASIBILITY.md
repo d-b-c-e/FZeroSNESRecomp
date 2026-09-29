@@ -66,9 +66,13 @@ this recording contained some pixels, but the first car-3 occurrence (headless
 frame 2777, capture 2778) contained only ten pixels in logical columns
 321–326, rows 47–48. The wide reference image shows no recognizable full
 opponent there. That car's world anchor projects into the right side panel
-while its guest OAM fragment remains near the center edge; blindly drawing
-both would duplicate it. Side-car visibility, scaling and center masking still
-need a verified game-state rule before this layer can be enabled.
+while its guest OAM fragment sits just outside the 16:9 center crop. A full
+replay classification found 42 of 43 such decoded-art occurrences entirely
+outside that crop. The exception at headless frame 10721 overlaps it by only
+one logical column; decoded fragment sizes range from 5 to 1,314 pixels.
+This makes an owner-filtered side-art preview plausible, but does not solve
+perspective sizing, priority, seam clipping, or the four projected anchors
+without OAM. No side vehicle layer is enabled yet.
 `FZeroTripleRuntimeCapture capture.bin sides.ppm --runtime` writes the exact
 512×288 side-buffer size used by the SDL triple presenter. Without that flag,
 the tool retains its 640×360 high-resolution comparison fixture. The two
