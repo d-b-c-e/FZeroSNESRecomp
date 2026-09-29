@@ -49,16 +49,19 @@ verified live/visible game state, not just a plausible world coordinate.
 replay frame. The complete 11,364-frame recorded drive passed its state hashes:
 9,846 of 9,847 race-state frames accepted the triple calibration, with one
 rejection at frame 1042 near race entry. It found 47 projected side-panel
-opponent-anchor occurrences; 43 carried OAM artwork in the captured frame,
-including car 3 with eight reserved tiles near the right panel's inner edge
+opponent-anchor occurrences; 43 had non-sentinel OAM reservations at scanline
+100, including car 3 with eight reserved slots near the right panel's inner edge
 at frame 2777. Four had no OAM reservations (car 4 in state
 `CC`, at frames 4652 and 6197–6199). The state meaning remains unresolved;
 these numbers describe data availability, not intended car visibility or
 physical display output. No later sustained-race calibration rejection was
 observed in that recording.
-The opt-in camera trace logs the first twelve side anchors with artwork,
-including guest-screen position and reserved tile count, to select immutable
-captures for an offline sprite experiment without changing guest memory.
+The opt-in camera trace logs the first twelve side anchors with reservations,
+including guest-screen position and slot count, to select immutable captures
+for an offline sprite experiment without changing guest memory. A reservation
+alone does **not** prove drawable pixels: the wide reference render of frame
+2777 shows no corresponding opponent. Visibility/tile decoding must be checked
+before moving these slots to a side panel.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
@@ -124,6 +127,16 @@ the exact solution matters for other layouts: interpolating normalized top
 and bottom rays misses the true horizon by over nine output pixels on an
 angled panel. That fixture validates the horizon equation, not complete
 raised-eye calibration or presentation support.
+An offline three-panel composite of captured frames 1800 and 2777 used the
+runtime-capture tool's actual 640×360 side buffers and a matching scaled
+center image. At frame 1800, the green track-edge marker meets the center
+within about 2–3 output pixels at both inner side edges. An attempted
+ground-coordinate seam warp changed much of the side texture for only a tiny
+edge improvement, so it was discarded. This is an offline visual/marker check,
+not proof of physical bezel alignment at the runtime's 512×288 side resolution.
+At captured crash frames 6143–6144, the side output is white along with the
+guest center image; this is the same original-game impact flash described in
+`PLAYTHROUGH_RECORDING.md`, not evidence of a side-only renderer fault.
 The normal runtime no longer precomputes normalized rays for every side-panel
 pixel; it retains only top/bottom edge rays for skyline work. At the current
 512×288-per-side runtime resolution, that reduces the ray cache from about
