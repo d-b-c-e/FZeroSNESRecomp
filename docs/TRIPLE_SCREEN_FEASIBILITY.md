@@ -101,6 +101,13 @@ the exact solution matters for other layouts: interpolating normalized top
 and bottom rays misses the true horizon by over nine output pixels on an
 angled panel. That fixture validates the horizon equation, not complete
 raised-eye calibration or presentation support.
+The normal runtime no longer precomputes normalized rays for every side-panel
+pixel; it retains only top/bottom edge rays for skyline work. At the current
+512×288-per-side runtime resolution, that reduces the ray cache from about
+6.75 MiB to 48 KiB. The full ray cache is allocated only if the offline
+`FZERO_TRIPLE_DISABLE_ROW=1` comparison path is selected. Five race captures
+remained byte-identical; one 640×360 offline first-render measurement fell
+from about 17 ms to 13 ms, while steady composition stayed near 11.3 ms.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
