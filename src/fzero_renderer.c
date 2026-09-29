@@ -27,8 +27,15 @@ typedef struct FzeroSourceFrame {
 static FzeroSourceFrame frames[2];
 static unsigned current;
 static Ppu scanout; /* Private renderer scratch; never points at guest state. */
+static struct {
+  uint32_t *output;
+  FzeroTripleRig rig;
+  int logical_width;
+  bool valid;
+} triple_cache;
 
 bool FzeroRendererLoadCapture(const char *path) {
+  triple_cache.valid = false;
   FILE *f = fopen(path, "rb");
   if (!f) return false;
   /* Alternate buffers the way FzeroRendererBeginFrame does, so replaying a
@@ -45,8 +52,10 @@ bool FzeroRendererHasFrame(void) { return frames[current].valid; }
 
 void FzeroRendererReset(void) {
   frames[0].valid = frames[1].valid = false;
+  triple_cache.valid = false;
 }
 void FzeroRendererBeginFrame(const uint8_t ram[0x20000], unsigned frame) {
+  triple_cache.valid = false;
   current ^= 1;
   FzeroSourceFrame *f = &frames[current];
   f->valid = false;
@@ -784,6 +793,12 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   const FzeroSourceFrame *f = &frames[current];
   if (!f->valid || f->ram[0x54] != 2 || f->ram[0x55] < 3 || !f->ram[0x81])
     return false;
+  /* A high-refresh presenter may show the same emulated frame more than once.
+   * The two ground panels are expensive per-pixel projections and do not use
+   * presentation alpha; retain them until the next published source frame. */
+  if (triple_cache.valid && triple_cache.output == output &&
+      triple_cache.logical_width == logical_width &&
+      !memcmp(&triple_cache.rig, rig, sizeof(*rig))) return true;
   FzeroTripleSurface panels[3];
   if (!FzeroTripleBuild(rig, panels)) return false;
   const int pw = rig->panel_width_px, ph = rig->panel_height_px;
@@ -855,5 +870,9 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
       }
     }
   }
+  triple_cache.output = output;
+  triple_cache.rig = *rig;
+  triple_cache.logical_width = logical_width;
+  triple_cache.valid = true;
   return true;
 }
