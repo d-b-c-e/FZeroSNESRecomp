@@ -70,6 +70,8 @@ def create_case(args: argparse.Namespace) -> None:
     root = args.case.resolve().parent
     if args.case.exists():
         raise ValueError("case already exists; original case identity is immutable")
+    if args.state.resolve() != Path(str(args.drive.resolve()) + ".state"):
+        raise ValueError("F-Zero loads only the .state sibling of its .fzpt source")
     rom_digest, count = drive_header(args.drive)
     config = ini(args.config)
     video = ini(args.video)
@@ -97,6 +99,22 @@ def create_case(args: argparse.Namespace) -> None:
         with patch_copy.open("xb") as stream:
             stream.write(patch.read_bytes())
         artifacts["msuPatch"] = artifact(root, patch_copy, "ips@1")
+    capture_sha = sha256(args.capture_exe)
+    capture_clean = False
+    if args.capture_receipt is not None:
+        with args.capture_receipt.open("r", encoding="utf-8") as stream:
+            receipt = json.load(stream)
+        if (set(receipt) != {"schema", "version", "sourceRevision", "sourceTree",
+                             "executableSha256", "dirty"} or
+                receipt["schema"] != "fzero.capture-build" or receipt["version"] != 1 or
+                receipt["sourceRevision"] != args.source_revision or
+                receipt["executableSha256"] != capture_sha or receipt["dirty"] is not False):
+            raise ValueError("capture clean receipt does not match source/executable")
+        source_tree = subprocess.run(["git", "show", "-s", "--format=%T", args.source_revision],
+                                     capture_output=True, text=True)
+        if source_tree.returncode != 0 or receipt["sourceTree"] != source_tree.stdout.strip():
+            raise ValueError("capture clean receipt source tree mismatch")
+        capture_clean = True
     case = {
         "schema": "dbce.wheel.replay-case", "version": 1,
         "caseId": args.case_id, "game": "fzero-snes-recomp",
@@ -107,8 +125,10 @@ def create_case(args: argparse.Namespace) -> None:
         "artifacts": artifacts,
         "provenance": {
             "sourceRevision": args.source_revision,
-            "dirty": False,
-            "executableSha256": sha256(args.capture_exe),
+            # Without a build-time clean receipt, conservatively label the
+            # capture provenance unverified/dirty rather than claim it was clean.
+            "dirty": not capture_clean,
+            "executableSha256": capture_sha,
         },
     }
     # Preserve a separate, unmodified source recording; the digest of the
@@ -126,6 +146,21 @@ def load_toolkit(path: Path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def verified_source_and_state(case: dict, root: Path) -> tuple[Path, Path]:
+    """Match the toolkit-pinned state to what the headless game actually opens."""
+    if (case["game"] != "fzero-snes-recomp" or case["adapter"] != "fzero-fzpt@1" or
+            case["capability"] != "game-input-replay" or
+            case["source"]["format"] != "fzero-fzpt@1" or
+            not isinstance(case["initialState"], dict) or
+            case["initialState"]["format"] != "fzero-snapshot@1"):
+        raise ValueError("not a compatible F-Zero game-input/state case")
+    source = (root / case["source"]["path"]).resolve(strict=True)
+    state = (root / case["initialState"]["path"]).resolve(strict=True)
+    if state != Path(str(source) + ".state"):
+        raise ValueError("manifest state is not the .state sibling loaded by F-Zero")
+    return source, state
 
 
 def raw_rows(path: Path, expected_count: int, strength: int):
@@ -193,10 +228,10 @@ def observe(args: argparse.Namespace) -> None:
     identity = toolkit.validate_case(args.case)
     with args.case.open("rb") as stream:
         case = toolkit.decode(stream.read())
-    if case["adapter"] != "fzero-fzpt@1" or case["clock"] != {"domain": "emulated", "ticksPerSecond": MASTER_HZ}:
+    if case["clock"] != {"domain": "emulated", "ticksPerSecond": MASTER_HZ}:
         raise ValueError("not a compatible F-Zero replay case")
     root = args.case.resolve().parent
-    source = root / case["source"]["path"]
+    source, _ = verified_source_and_state(case, root)
     _, frame_count = drive_header(source)
     config = ini(root / case["artifacts"]["config"]["path"])
     video = ini(root / case["artifacts"]["video"]["path"])
@@ -268,6 +303,8 @@ def main() -> int:
         create.add_argument("--" + name, type=Path, required=True)
     create.add_argument("--case-id", required=True)
     create.add_argument("--source-revision", required=True)
+    create.add_argument("--capture-receipt", type=Path,
+                        help="build-time clean receipt; without it provenance.dirty=true")
     run = sub.add_parser("observe", help="verified game replay to toolkit force observations")
     for name in ("case", "toolkit", "runner", "rom", "output"):
         run.add_argument("--" + name, type=Path, required=True)

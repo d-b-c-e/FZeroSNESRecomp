@@ -3,8 +3,10 @@ from argparse import Namespace
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
-from tools.fzero_replay_adapter import create_case, raw_rows, requests, sha256
+from tools.fzero_replay_adapter import create_case, observe, raw_rows, requests, sha256
 
 
 class ReplayAdapterTests(unittest.TestCase):
@@ -29,16 +31,67 @@ class ReplayAdapterTests(unittest.TestCase):
             exe = root / "game.exe"
             exe.write_bytes(b"exe")
             case_path = root / "case.json"
-            create_case(Namespace(case=case_path, case_id="test-drive", drive=drive,
+            arguments = Namespace(case=case_path, case_id="test-drive", drive=drive,
                                   state=state, config=config, video=video, rom=rom,
-                                  msu_pack=pack, capture_exe=exe, source_revision="testrevision"))
+                                  msu_pack=pack, capture_exe=exe, source_revision="testrevision",
+                                  capture_receipt=None)
+            alternate = root / "diagnostics" / "alternate.state"
+            alternate.write_bytes(b"other state")
+            arguments.state = alternate
+            with self.assertRaisesRegex(ValueError, ".state sibling"):
+                create_case(arguments)
+            arguments.state = state
+            create_case(arguments)
             case = json.loads(case_path.read_text())
+            self.assertTrue(case["provenance"]["dirty"])  # no clean build receipt
             config_copy = root / case["artifacts"]["config"]["path"]
             patch_copy = root / case["artifacts"]["msuPatch"]["path"]
             self.assertEqual(sha256(config_copy), sha256(config))
             self.assertEqual(sha256(patch_copy), sha256(patch))
             config.write_text("[Sound]\nMsu1Enabled=0\n")
             self.assertNotEqual(sha256(config_copy), sha256(config))
+
+    def test_manifest_state_must_be_exact_loaded_sibling_before_launch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            drive = root / "drive.fzpt"
+            drive.write_bytes(b"FZPT0001" + b"x" * 32 + (1).to_bytes(8, "little") + b"\x01" + b"\x00" * 12)
+            loaded_sibling = root / "drive.fzpt.state"
+            loaded_sibling.write_bytes(b"not the recorded state")
+            pinned_state = root / "different.state"
+            pinned_state.write_bytes(b"valid but different state")
+            case_path = root / "case.json"
+            case = {
+                "schema": "dbce.wheel.replay-case", "version": 1,
+                "caseId": "mismatched-state",
+                "game": "fzero-snes-recomp", "adapter": "fzero-fzpt@1",
+                "capability": "game-input-replay",
+                "clock": {"domain": "emulated", "ticksPerSecond": 21477272},
+                "source": {"path": drive.name, "sha256": sha256(drive), "format": "fzero-fzpt@1"},
+                "initialState": {"path": pinned_state.name, "sha256": sha256(pinned_state),
+                                 "format": "fzero-snapshot@1"},
+                "artifacts": {},
+                "provenance": {"sourceRevision": "testrevision", "dirty": True,
+                               "executableSha256": "0" * 64},
+            }
+            case_path.write_text(json.dumps(case))
+
+            def validate(path):
+                record = json.loads(path.read_text())
+                self.assertEqual(sha256(root / record["source"]["path"]), record["source"]["sha256"])
+                self.assertEqual(sha256(root / record["initialState"]["path"]),
+                                 record["initialState"]["sha256"])
+                return {"caseSha256": sha256(path)}
+
+            toolkit = SimpleNamespace(validate_case=validate, decode=lambda data: json.loads(data))
+            args = Namespace(case=case_path, toolkit=root, runner=root / "headless.exe",
+                             rom=root / "rom.sfc", output=root / "observation.jsonl", strength=12)
+            with mock.patch("tools.fzero_replay_adapter.load_toolkit", return_value=toolkit), \
+                 mock.patch("tools.fzero_replay_adapter.subprocess.run") as launch:
+                with self.assertRaisesRegex(ValueError, "not the .state sibling"):
+                    observe(args)
+                launch.assert_not_called()
+            self.assertFalse(args.output.exists())
 
     def test_complete_model_edges_and_normalization(self):
         with tempfile.TemporaryDirectory() as directory:

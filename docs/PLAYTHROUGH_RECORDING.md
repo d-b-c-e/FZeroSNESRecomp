@@ -74,6 +74,28 @@ case was made before settings snapshots were added; its original config/video
 bytes were separately saved in `diagnostics/`, and those live files must retain
 their recorded hashes for this manifest to validate.
 
+The `.state` artifact must be **exactly** the `<source>.fzpt.state` file that
+F-Zero's headless player loads. `create` rejects a different state path, and
+`observe` checks the validated manifest path again before launching the game.
+This is important even when another snapshot has a valid hash: hashing a file
+the game does not load would not establish replay identity.
+
+The September 28 case pins capture source commit
+`0fe1e6452de2b182300ccb72e96080d9054f38ba` (tree
+`cc41ec7118e019d57f848e84ebbf4a9b4adff5a9`) and the actual triple-preview
+capture executable SHA-256
+`55C495F790A27E782F0503871EF4C10F765CA2C62F48A320E2DE94E002BCA30D`.
+Those were checked against the unchanged preview executable and source record;
+the later headless observation runner is a **different binary**. The existing
+case's `dirty:false` is a pinned build-time assertion, not something the
+adapter can prove retroactively. For future cases, `create` conservatively sets
+`dirty:true` unless `--capture-receipt` supplies a build-time JSON receipt with
+exact fields `schema`, `version`, `sourceRevision`, `sourceTree`,
+`executableSha256`, `dirty`; it must identify a local Git tree and match the
+capture executable, with `schema="fzero.capture-build"`, `version=1`, and
+`dirty=false`. The receipt is consistency evidence, not a cryptographic proof
+that a binary came from a source tree.
+
 `observe` validates artifact hashes, the ROM and MSU patch, and the rig's
 recorded center viewport (`16:9` for triple-screen `Fit`). It runs the
 **headless** game with exact SNES input and per-frame WRAM checks, then validates
