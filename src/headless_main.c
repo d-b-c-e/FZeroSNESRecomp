@@ -15,6 +15,7 @@
 #include "fzero_replay.h"
 #include "fzero_playthrough.h"
 #include "fzero_ffb.h"
+#include "fzero_renderer.h"
 
 #include "audio_trace.h"
 #include "common_rtl.h"
@@ -460,6 +461,12 @@ int main(int argc, char **argv) {
   const char *lifecycle = getenv("FZERO_LIFECYCLE_TEST");
   static uint8_t replay_expected[0x20000];
   uint64_t replay_master = 0;
+  const char *triple_trace = getenv("FZERO_TRIPLE_CAMERA_TRACE");
+  bool triple_audit = triple_trace && triple_trace[0] == '1';
+  unsigned triple_race = 0, triple_accepted = 0, triple_rejected = 0;
+  unsigned triple_side_anchors = 0, triple_missing_oam = 0;
+  const FzeroTripleRig audit_rig = {708.4166, 398.4843, 660,
+                                    0, 70, 70, 8, 512, 288};
 
   for (long frame = 0; frame < frame_limit; frame++) {
     s_apu_trace_frame = frame;
@@ -578,6 +585,33 @@ int main(int argc, char **argv) {
     stats.logic_hash = next_logic;
 
     FzeroDrawPpuFrame();
+    if (triple_audit && g_ram[0x54] == 2 && g_ram[0x55] >= 3 &&
+        g_ram[0x81]) {
+      FzeroTripleVehicleProbe probes[6];
+      ++triple_race;
+      if (!FzeroRendererProbeTripleVehicles(&audit_rig, frame_width, probes)) {
+        if (++triple_rejected <= 12)
+          fprintf(stderr, "[fzero-triple-camera] rejected frame=%ld\n", frame);
+      } else {
+        ++triple_accepted;
+        for (int car = 1; car < 6; ++car) {
+          const FzeroTripleVehicleProbe *probe = &probes[car];
+          if ((probe->state & 0x88) != 0x88) continue;
+          for (int side = 0; side < 3; side += 2) {
+            double x = probe->panel_x[side], y = probe->panel_y[side];
+            if (!probe->projected[side] || x < 0 || x >= audit_rig.panel_width_px ||
+                y < 0 || y >= audit_rig.panel_height_px) continue;
+            ++triple_side_anchors;
+            if (!probe->oam_slots) {
+              if (++triple_missing_oam <= 12)
+                fprintf(stderr, "[fzero-triple-camera] missing_oam frame=%ld "
+                                "car=%d state=%02x side=%d x=%.1f y=%.1f\n",
+                        frame, car, probe->state, side, x, y);
+            }
+          }
+        }
+      }
+    }
     trace_race_luminance(pixels, frame, frame_width);
     collect_video(&stats, pixels, frame, frame_width);
 
@@ -621,6 +655,11 @@ int main(int argc, char **argv) {
       output_ok = 0;
     if (fclose(ffb_raw)) output_ok = 0;
   }
+  if (triple_audit)
+    fprintf(stderr, "[fzero-triple-camera] race=%u accepted=%u rejected=%u "
+                    "side_anchors=%u missing_oam=%u\n",
+            triple_race, triple_accepted, triple_rejected,
+            triple_side_anchors, triple_missing_oam);
 
   fprintf(stderr,
           "fzero_native: %s frames=%ld resume=%06x master=%llu "
