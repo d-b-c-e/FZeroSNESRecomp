@@ -900,7 +900,7 @@ static bool build_sky_atlas(const FzeroSourceFrame *f, int rows) {
 
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width) {
-  static FzeroTripleVec3 *cached_rays;
+  static FzeroTripleVec3 *cached_edge_rays, *cached_ground_rays;
   static FzeroTripleRig cached_rig;
   if (!output || !rig || rig->panel_width_px < 2 || rig->panel_height_px < 2 ||
       rig->panel_width_px > 4096 || rig->panel_height_px > 2160 ||
@@ -918,7 +918,37 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   FzeroTripleSurface panels[3];
   if (!FzeroTripleBuild(rig, panels)) return false;
   const int pw = rig->panel_width_px, ph = rig->panel_height_px;
-  if (!cached_rays || memcmp(&cached_rig, rig, sizeof(*rig))) {
+  /* The normal rational ground path only needs rays at the two vertical
+   * edges for skyline angle and the optional old-horizon comparison. */
+  bool use_row_projection = !getenv("FZERO_TRIPLE_DISABLE_ROW");
+  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
+  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
+  FzeroTripleGround ground;
+  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180, &ground))
+    return false;
+  if (!cached_edge_rays || memcmp(&cached_rig, rig, sizeof(*rig))) {
+    FzeroTripleVec3 *rays = malloc((size_t)4 * pw * sizeof(*rays));
+    if (!rays) return false;
+    for (int side = 0; side < 2; ++side)
+      for (int edge = 0; edge < 2; ++edge)
+        for (int x = 0; x < pw; ++x)
+          if (!FzeroTripleRay(&panels[side ? 2 : 0], x,
+              edge ? ph - 1 : 0, pw, ph,
+              &rays[((size_t)side * 2 + edge) * pw + x])) {
+            free(rays);
+            return false;
+          }
+    free(cached_edge_rays);
+    free(cached_ground_rays);
+    cached_edge_rays = rays;
+    cached_ground_rays = NULL;
+    cached_rig = *rig;
+  }
+  if (!use_row_projection && !cached_ground_rays) {
     FzeroTripleVec3 *rays = malloc((size_t)2 * pw * ph * sizeof(*rays));
     if (!rays) return false;
     for (int side = 0; side < 2; ++side)
@@ -929,19 +959,8 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
             free(rays);
             return false;
           }
-    free(cached_rays);
-    cached_rays = rays;
-    cached_rig = *rig;
+    cached_ground_rays = rays;
   }
-  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
-  if ((scanout.bgmode & 7) != 7) return false;
-  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
-  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
-  if ((scanout.bgmode & 7) != 7) return false;
-  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
-  FzeroTripleGround ground;
-  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180, &ground))
-    return false;
 
   FzeroCourse course = course_open(f, true);
   /* The race switches to BG mode 1 for the skyline, then Mode 7 for the
@@ -956,7 +975,7 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   double pixels_per_radian = (logical_width * 0.5) / half_angle;
   for (int side = 0; side < 2; ++side)
     for (int x = 0; x < pw; ++x) {
-      FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph + x];
+      FzeroTripleVec3 ray = cached_edge_rays[(size_t)side * 2 * pw + x];
       double column = 128.0 + atan2(ray.x, -ray.z) * pixels_per_radian;
       if (!isfinite(column) || fabs(column) > 100000.0) return false;
       sky_columns[side * pw + x] = (int)lround(column);
@@ -1022,9 +1041,9 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
             free(sky_pixels); return false;
           }
         } else {
-          const FzeroTripleVec3 top = cached_rays[(size_t)side * pw * ph + x];
-          const FzeroTripleVec3 bottom = cached_rays[(size_t)side * pw * ph +
-              (size_t)(ph - 1) * pw + x];
+          const FzeroTripleVec3 top = cached_edge_rays[(size_t)side * 2 * pw + x];
+          const FzeroTripleVec3 bottom =
+              cached_edge_rays[((size_t)side * 2 + 1) * pw + x];
           double d0 = -top.z * ground.pitch_sin - top.y * ground.pitch_cos;
           double d1 = -bottom.z * ground.pitch_sin - bottom.y * ground.pitch_cos;
           horizon = fabs(d1 - d0) > 1e-9 ? -d0 * (ph - 1) / (d1 - d0) :
@@ -1050,7 +1069,6 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   }
   /* Flat-ground projection is rational in panel X. The direct ray path stays
    * available for pixel-exact offline A/B checks of new camera fixtures. */
-  bool use_row_projection = !getenv("FZERO_TRIPLE_DISABLE_ROW");
   for (int y = 0; y < ph; ++y) {
     int source_y = (int)((y + 0.5) * 224 / ph);
     if (source_y > 223) source_y = 223;
@@ -1083,7 +1101,7 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
         if (align && use_row_projection)
           located = FzeroTripleGroundRowLocate(&row, x, &texel);
         else if (align) {
-          FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph +
+          FzeroTripleVec3 ray = cached_ground_rays[(size_t)side * pw * ph +
               (size_t)y * pw + x];
           located = FzeroTripleGroundLocate(&ground, ray, &texel);
         }
