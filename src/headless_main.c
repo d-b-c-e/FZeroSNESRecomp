@@ -23,6 +23,7 @@
 #include "snes/dsp.h"
 #include "snes/ppu.h"
 #include "snes/snes.h"
+#include "snes/msu1.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -38,6 +39,14 @@ static const uint8_t kFzeroSha256[32] = {
 };
 
 enum { kFzeroRomSize = 0x80000u, kMaxInputSpans = 128 };
+
+static long s_apu_trace_frame;
+static int apu_trace_write(uint16 reg, uint8 value) {
+  if (s_apu_trace_frame >= 1200 && s_apu_trace_frame < 1600)
+    fprintf(stderr, "[fzero-apu] frame=%ld reg=%04x value=%02x\n",
+            s_apu_trace_frame, reg, value);
+  return 0;
+}
 
 typedef struct AttractStats {
   uint64_t logic_hash;
@@ -305,6 +314,7 @@ int main(int argc, char **argv) {
     free(rom);
     return 3;
   }
+  if (getenv("FZERO_APU_TRACE")) RtlAddApuPortObserver(apu_trace_write);
   const char *save_root = getenv("SNESRECOMP_SAVE_ROOT");
   if (save_root && save_root[0]) RtlSetSaveRoot(save_root);
   if (!FzeroDeluxeSelectSaveRoot()) {
@@ -368,6 +378,7 @@ int main(int argc, char **argv) {
   uint64_t replay_master = 0;
 
   for (long frame = 0; frame < frame_limit; frame++) {
+    s_apu_trace_frame = frame;
     if (lifecycle && frame == 1500) {
       RtlEnsureSaveDir();
       char path[1024]; RtlSaveSlotPath(11, path, sizeof(path));
@@ -439,6 +450,9 @@ int main(int argc, char **argv) {
     int audio_frames = (int)audio_accumulator;
     audio_accumulator -= audio_frames;
     memset(audio, 0, sizeof(audio));
+    /* Diagnostic stem: preserve the patched game's SPC output while muting
+     * only the MSU mix. The guest resets this register on its next command. */
+    if (getenv("FZERO_TEST_MUTE_MSU")) msu1_write(0x2006, 0);
     RtlRenderAudio(audio, audio_frames, 2);
     collect_audio(&stats, audio, audio_frames);
     if (!wav_append(&wav, audio, audio_frames)) {
