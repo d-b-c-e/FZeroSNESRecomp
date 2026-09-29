@@ -1115,7 +1115,7 @@ static bool draw_triple_sides(uint32_t *output, size_t capacity,
           located = FzeroTripleGroundLocate(&ground, ray, &texel);
         }
         if (!located ||
-            !FzeroTripleGroundApplyLineAlignment(&alignment, texel,
+            !FzeroTripleGroundApplyLineAlignmentInline(&alignment, texel,
                 &texel)) continue;
         texel.x = floor(texel.x);
         texel.y = floor(texel.y);

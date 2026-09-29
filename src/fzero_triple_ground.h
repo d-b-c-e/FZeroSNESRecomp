@@ -2,6 +2,7 @@
 
 #include "fzero_mode7.h"
 #include "fzero_triple_geometry.h"
+#include <math.h>
 
 /* Calibrated flat-ground camera in Mode 7 texture coordinates. This is a
  * renderer experiment, not a claim about world-space SNES sprites. */
@@ -71,3 +72,21 @@ bool FzeroTripleGroundBuildLineAlignment(FzeroMode7Line line,
 bool FzeroTripleGroundApplyLineAlignment(const FzeroTripleLineAlignment *alignment,
                                          FzeroMode7Texel raw,
                                          FzeroMode7Texel *aligned);
+/* Hot side-panel loop uses the same math in this translation unit so the
+ * compiler can inline the per-pixel transform without link-time optimization. */
+static inline bool FzeroTripleGroundApplyLineAlignmentInline(
+    const FzeroTripleLineAlignment *alignment, FzeroMode7Texel raw,
+    FzeroMode7Texel *aligned) {
+  if (!alignment || !aligned) return false;
+  double dx = raw.x - alignment->raw_center_x;
+  double dy = raw.y - alignment->raw_center_y;
+  aligned->x = alignment->center_x + alignment->a * dx - alignment->b * dy;
+  aligned->y = alignment->center_y + alignment->b * dx + alignment->a * dy;
+  /* Avoid flooring one ULP below a nominally exact Mode 7 integer. */
+  double rounded_x = nearbyint(aligned->x);
+  double rounded_y = nearbyint(aligned->y);
+  if (fabs(aligned->x - rounded_x) < 1e-7) aligned->x = rounded_x;
+  if (fabs(aligned->y - rounded_y) < 1e-7) aligned->y = rounded_y;
+  return isfinite(aligned->x) && isfinite(aligned->y) &&
+         fabs(aligned->x) < 1e6 && fabs(aligned->y) < 1e6;
+}
