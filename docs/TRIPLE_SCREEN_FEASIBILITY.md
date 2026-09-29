@@ -88,6 +88,12 @@ with bounds crossing left x=459.17–538.28 and center x=-56.32–15.54.
 Both are evidence that anchor-only culling loses seam art; they are not proof
 that every projected OBJ pixel should survive the game's priority and window
 rules. A ROM-free fixture now verifies the overlapping-panel geometry.
+`--vehicle-center-overlay center.ppm` writes a separate, black-backed offline
+overlay for that missing center art when used with `--vehicle-preview`. At the
+two captured seam frames, the side preview stayed byte-identical while the
+center overlay wrote 276 and 302 pixels respectively. External montages of
+those overlays and the stock center frame show more complete opponent shapes
+across the inner seams. No center overlay is called by the live presenter.
 The preview also lacks a solved priority,
 occlusion, and colour-math treatment and cannot invent art for the four
 side-anchor occurrences without OAM. It is deliberately not called by the live
