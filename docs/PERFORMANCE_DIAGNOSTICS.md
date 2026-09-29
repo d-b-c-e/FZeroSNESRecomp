@@ -43,6 +43,11 @@ An unwritable diagnostics folder does not stop the game.
   time, not a GPU execution measurement. No GPU fences are inserted. A large
   upload/present time can reflect earlier asynchronous GPU work. Overall CPU
   or GPU utilization alone cannot identify the limiting stage.
+- In the experimental triple-screen SDL path, `triple_projection` measures
+  the two CPU side-panel buffers and `triple_upload` measures their texture
+  upload. These stages are zero outside that path. Older reports included both
+  operations in `draw_submit`, so their draw timings cannot be compared
+  directly with reports from this build.
 - `unattributed_ms` covers input, audio-lock interactions outside measured
   stages, bookkeeping, menus, logging and other work. Simulation time already
   includes any waits inside simulation. Pause, menu and state-action events
