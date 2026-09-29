@@ -69,6 +69,11 @@ opponent there. That car's world anchor projects into the right side panel
 while its guest OAM fragment remains near the center edge; blindly drawing
 both would duplicate it. Side-car visibility, scaling and center masking still
 need a verified game-state rule before this layer can be enabled.
+`FZeroTripleRuntimeCapture capture.bin sides.ppm --runtime` writes the exact
+512×288 side-buffer size used by the SDL triple presenter. Without that flag,
+the tool retains its 640×360 high-resolution comparison fixture. The two
+PPM halves must be split at the selected panel width when assembling an
+offline three-panel preview; they are not interchangeable crops.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
