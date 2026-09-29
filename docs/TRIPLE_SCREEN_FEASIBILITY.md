@@ -156,6 +156,12 @@ pixel; it retains only top/bottom edge rays for skyline work. At the current
 `FZERO_TRIPLE_DISABLE_ROW=1` comparison path is selected. Five race captures
 remained byte-identical; one 640×360 offline first-render measurement fell
 from about 17 ms to 13 ms, while steady composition stayed near 11.3 ms.
+At the actual 512×288 runtime side-buffer size, two captured race frames
+(1800 and 6000) produced byte-identical outputs with the atlas and rational
+row projection enabled or disabled. In 200-iteration isolated CPU runs, the
+normal path took 7.34/7.49 ms per side-buffer pair, versus 8.52/8.59 ms
+without the sky atlas and 7.90/7.92 ms without the row projection. These
+measure composition only, not upload, GPU draw, presentation or live pacing.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
