@@ -25,6 +25,11 @@ const uint32_t *FzeroRendererStockFrame(void);
  * each panel_width*panel_height pixels. False means draw the stock fallback. */
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width);
+/* Offline reference path: same projection, but reads panorama pixels directly
+ * instead of using the BG source-tile atlas. Not used by the live presenter. */
+bool FzeroRendererDrawTripleSidesDirectSky(uint32_t *output, size_t capacity,
+                                           const FzeroTripleRig *rig,
+                                           int logical_width);
 /* Advances only when DrawTripleSides writes new pixels, not when it returns
  * cached pixels for another host presentation of the same emulated frame. */
 uint64_t FzeroRendererTripleSidesVersion(void);

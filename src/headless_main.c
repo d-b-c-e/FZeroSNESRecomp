@@ -284,6 +284,39 @@ static void trace_triple_side_luminance(const uint8_t *center, long frame,
   memcpy(previous, means, sizeof(previous));
 }
 
+static struct {
+  unsigned race, rejected, checked, mismatched;
+} triple_atlas_audit;
+
+/* Exercise warm atlas invalidation on every source frame, then compare a
+ * periodic exact reference over both complete side buffers. The snapshots
+ * and ROM stay local; only counts and first mismatching frame are printed. */
+static void audit_triple_atlas(long frame, int center_width,
+                               const FzeroTripleRig *rig) {
+  if (!getenv("FZERO_TRIPLE_ATLAS_AUDIT") ||
+      g_ram[0x54] != 2 || g_ram[0x55] < 3 || !g_ram[0x81]) return;
+  enum { kSideArea = 512 * 288 };
+  static uint32_t cached[2 * kSideArea], direct[2 * kSideArea];
+  ++triple_atlas_audit.race;
+  if (!FzeroRendererDrawTripleSides(cached, 2 * kSideArea, rig, center_width)) {
+    if (++triple_atlas_audit.rejected <= 12)
+      fprintf(stderr, "[fzero-triple-atlas-audit] rejected frame=%ld\n", frame);
+    return;
+  }
+  if (frame % 60) return;
+  if (!FzeroRendererDrawTripleSidesDirectSky(direct, 2 * kSideArea,
+                                               rig, center_width)) {
+    if (++triple_atlas_audit.rejected <= 12)
+      fprintf(stderr, "[fzero-triple-atlas-audit] direct rejected frame=%ld\n", frame);
+    return;
+  }
+  ++triple_atlas_audit.checked;
+  if (memcmp(cached, direct, sizeof(cached))) {
+    if (++triple_atlas_audit.mismatched <= 12)
+      fprintf(stderr, "[fzero-triple-atlas-audit] mismatch frame=%ld\n", frame);
+  }
+}
+
 static void collect_audio(AttractStats *stats, const int16_t *audio,
                           int frames) {
   int active = 0;
@@ -675,6 +708,7 @@ int main(int argc, char **argv) {
     }
     trace_race_luminance(pixels, frame, frame_width);
     trace_triple_side_luminance(pixels, frame, frame_width, &audit_rig);
+    audit_triple_atlas(frame, frame_width, &audit_rig);
     collect_video(&stats, pixels, frame, frame_width);
 
     audio_accumulator += 32040.0 / 60.098811862;
@@ -724,13 +758,20 @@ int main(int argc, char **argv) {
             triple_race, triple_accepted, triple_rejected,
             triple_side_anchors, triple_with_reservation,
             triple_with_pixels, triple_missing_oam);
+  if (getenv("FZERO_TRIPLE_ATLAS_AUDIT"))
+    fprintf(stderr, "[fzero-triple-atlas-audit] race=%u rejected=%u "
+                    "checked=%u mismatched=%u\n", triple_atlas_audit.race,
+            triple_atlas_audit.rejected, triple_atlas_audit.checked,
+            triple_atlas_audit.mismatched);
+  int atlas_ok = !getenv("FZERO_TRIPLE_ATLAS_AUDIT") ||
+                 (triple_atlas_audit.checked && !triple_atlas_audit.mismatched);
 
   fprintf(stderr,
           "fzero_native: %s frames=%ld resume=%06x master=%llu "
           "logic_changes=%llu video_active=%llu video_changes=%llu "
           "audio_samples=%u audio_active=%llu audio_peak=%u "
           "audio_underruns=%llu\n",
-          qualified && output_ok ? "PASS" : "FAIL", frame_limit,
+          qualified && output_ok && atlas_ok ? "PASS" : "FAIL", frame_limit,
           (unsigned)FzeroResumePc(), (unsigned long long)g_cpu.master_cycles,
           (unsigned long long)stats.logic_changes,
           (unsigned long long)stats.video_active_frames,
@@ -738,5 +779,5 @@ int main(int argc, char **argv) {
           (unsigned long long)stats.audio_active_frames, stats.audio_peak,
           (unsigned long long)stats.audio_underruns);
   free(rom);
-  return qualified && output_ok ? 0 : 8;
+  return qualified && output_ok && atlas_ok ? 0 : 8;
 }

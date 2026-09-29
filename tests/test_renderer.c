@@ -662,6 +662,8 @@ static void test_triple_sky_horizon(void) {
   CHECK(FzeroRendererDrawTripleSides(cold, 2 * area, &rig, 342));
   CHECK(FzeroRendererTripleSidesVersion() != version);
   CHECK(!memcmp(sides, cold, sizeof(sides)));
+  CHECK(FzeroRendererDrawTripleSidesDirectSky(cold, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   CHECK(sides[0] == 0xff0000 && sides[area + width - 1] == 0xff0000);
   CHECK(sides[12 * width] == 0xff0000);
   CHECK(sides[area + 12 * width + width - 1] == 0xff0000);
@@ -672,9 +674,13 @@ static void test_triple_sky_horizon(void) {
   p.cgram[2] = 0x7c00;
   publish_triple_sky(102, 31);
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(FzeroRendererDrawTripleSidesDirectSky(cold, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   publish_triple_sky(103, 31);
   CHECK(FzeroRendererDrawTripleSides(cold, 2 * area, &rig, 342));
   CHECK(memcmp(sides, cold, sizeof(sides)));
+  CHECK(FzeroRendererDrawTripleSidesDirectSky(sides, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   /* A warm-atlas and cold render of the same changed-scroll frame must agree. */
   FzeroRendererReset();
   publish_triple_sky(103, 31);
@@ -684,9 +690,13 @@ static void test_triple_sky_horizon(void) {
   /* Used palette and VRAM changes must both invalidate the skyline cache. */
   publish_triple_sky(104, 0x7c00);
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(FzeroRendererDrawTripleSidesDirectSky(cold, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   for (int y = 0; y < 8; ++y) p.vram[16 + y] = p.vram[32 + y] = 0;
   publish_triple_sky(105, 0x7c00);
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(FzeroRendererDrawTripleSidesDirectSky(cold, 2 * area, &rig, 342));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   CHECK(sides[0] == 0);
   /* The diagnostic must distinguish a world anchor from absent guest OAM.
    * A side compositor cannot simply move artwork that was never emitted. */

@@ -31,6 +31,7 @@ static struct {
   uint32_t *output;
   FzeroTripleRig rig;
   int logical_width;
+  bool direct_sky;
   uint64_t version;
   bool valid;
 } triple_cache;
@@ -900,8 +901,9 @@ static bool build_sky_atlas(const FzeroSourceFrame *f, int rows) {
   return true;
 }
 
-bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
-                                  const FzeroTripleRig *rig, int logical_width) {
+static bool draw_triple_sides(uint32_t *output, size_t capacity,
+                              const FzeroTripleRig *rig, int logical_width,
+                              bool direct_sky) {
   static FzeroTripleVec3 *cached_edge_rays, *cached_ground_rays;
   static FzeroTripleRig cached_rig;
   if (!output || !rig || rig->panel_width_px < 2 || rig->panel_height_px < 2 ||
@@ -916,6 +918,7 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
    * presentation alpha; retain them until the next published source frame. */
   if (triple_cache.valid && triple_cache.output == output &&
       triple_cache.logical_width == logical_width &&
+      triple_cache.direct_sky == direct_sky &&
       !memcmp(&triple_cache.rig, rig, sizeof(*rig))) return true;
   FzeroTripleSurface panels[3];
   if (!FzeroTripleBuild(rig, panels)) return false;
@@ -994,7 +997,8 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
     if ((scanout.bgmode & 7) != 1 || (scanout.inidisp & 128)) break;
     ++sky_count;
   }
-  bool use_atlas = sky_count && !getenv("FZERO_TRIPLE_DISABLE_ATLAS") &&
+  bool use_atlas = sky_count && !direct_sky &&
+                   !getenv("FZERO_TRIPLE_DISABLE_ATLAS") &&
                    sky_atlas_supported(f, sky_count);
   if (use_atlas && !cached_atlas_matches(f, sky_count) &&
       !build_sky_atlas(f, sky_count)) return false;
@@ -1125,9 +1129,21 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   triple_cache.output = output;
   triple_cache.rig = *rig;
   triple_cache.logical_width = logical_width;
+  triple_cache.direct_sky = direct_sky;
   if (++triple_cache.version == 0) ++triple_cache.version;
   triple_cache.valid = true;
   return true;
+}
+
+bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
+                                  const FzeroTripleRig *rig, int logical_width) {
+  return draw_triple_sides(output, capacity, rig, logical_width, false);
+}
+
+bool FzeroRendererDrawTripleSidesDirectSky(uint32_t *output, size_t capacity,
+                                           const FzeroTripleRig *rig,
+                                           int logical_width) {
+  return draw_triple_sides(output, capacity, rig, logical_width, true);
 }
 
 uint64_t FzeroRendererTripleSidesVersion(void) { return triple_cache.version; }
