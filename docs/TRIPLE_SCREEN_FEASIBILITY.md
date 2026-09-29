@@ -12,7 +12,7 @@ SNES Mode 7: each scanline contains an affine map from screen X to a texel in a
 flat world plane. Vehicles, effects, scenery, and the HUD are SNES tile and OAM
 layers composed in screen space.
 
-## Prototype status (2026-09-27)
+## Prototype status (2026-09-29)
 
 `src/fzero_triple_geometry.*` now calculates distinct eye rays for three
 physical panels, including the bezel gap. `src/fzero_triple_ground.*` is an
@@ -27,10 +27,10 @@ is not active yet.
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
 write three distinct ground panels into one PPM span. A per-scanline similarity
 correction matches the center panel's exact captured Mode 7 step and origin
-while retaining distinct physical rays on the side panels. It does not run in
-the game, and deliberately renders sky black and omits all vehicles, effects,
-HUD, menus, and other screen-space layers. A visually plausible track-only
-image must not be mistaken for playable triple-screen support.
+while retaining distinct physical rays on the side panels. This older offline
+ground-only tool deliberately renders sky black and omits all vehicles,
+effects, HUD, menus, and other screen-space layers. A visually plausible
+track-only image must not be mistaken for complete triple-screen support.
 
 ### Experimental runtime integration (work in progress)
 
@@ -43,18 +43,23 @@ and right ground panels; the regular Stream Deck launcher was not replaced.
 The launcher now exposes an opt-in **Triple Screen (experimental)** mod. Its
 SDL presenter accepts only a 7680×1440 fullscreen Surround surface with no
 shader selected, draws the normal game compositor in the center 2560×1440
-panel, and evaluates separate 640×360 ground rays for each side panel. Menus,
+panel, and evaluates separate 512×288 ground rays for each side panel. Menus,
 save-state and rewind overlays stay centered. A rejected camera calibration,
 wrong display mode, or non-race scene falls back to the centered game view.
-The sides still have dark sky and no vehicles/effects. This is **not** complete
+The runtime side compositor now samples the captured Mode 1 BG1/BG2 panorama
+at each panel's horizontal eye angle and carries its skyline down to the
+ground-plane horizon. This removes the black sky/gap seen in the first rig
+preview, but side vehicles and effects are still missing. This is **not** complete
 triple-screen support and must not replace a working install without a rig
 test. The physical values are currently a pinned copy of the saved rig profile;
 the versioned toolkit layout/status adapter has not yet been connected.
 On one captured active-race frame, both live side buffers matched the offline
-reference byte-for-byte. Cached rays and per-row alignment reduce the two
-640×360 side projections to about 10 ms of single-thread CPU time per frame
-on the development rig; center composition, uploads, and presentation are
-additional costs. This is a benchmark, not an on-rig frame-time guarantee.
+reference byte-for-byte before the sky pass. In an 11,364-frame recorded-drive
+replay with 7680×1440 Surround, the sky-enabled experimental build completed
+and suppressed two near-white impact frames. Its measured race composition
+averaged 4.48 ms and GPU draw submission 8.33 ms; 272 presentations were
+missed, versus 46 in a prior ground-only replay. Runs were not simultaneous,
+so this is a performance warning rather than a controlled A/B benchmark.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
@@ -73,8 +78,8 @@ isotropic world units produced errors up to 375 texture units. The corrected
 factor has a captured-line regression fixture in the C test. This validates a
 small sample of race frames, not every scene or camera transition. The next
 gate is colour/pixel comparison across more tracks, effects and camera
-transitions, with an explicit fallback wherever the calibration fails. Until
-then, keep the new module disconnected from the runtime renderer.
+transitions. The experimental runtime remains opt-in and falls back to the
+center view wherever camera calibration fails.
 
 ### Offline ground-render evidence
 
