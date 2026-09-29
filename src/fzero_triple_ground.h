@@ -17,6 +17,14 @@ bool FzeroTripleGroundCalibrate(const FzeroTripleRig *rig, int logical_width,
                                FzeroTripleGround *out);
 bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
                              FzeroTripleVec3 ray, FzeroMode7Texel *texel);
+/* Inverse of Locate for a flat-ground point in the same unwrapped texture
+ * coordinate representative as the calibrated camera. Returns subpixel panel
+ * coordinates, including points outside a panel for caller-side clipping. */
+bool FzeroTripleGroundProject(const FzeroTripleGround *ground,
+                              const FzeroTripleSurface *panel,
+                              FzeroMode7Texel texel, int panel_width,
+                              int panel_height, double *pixel_x,
+                              double *pixel_y);
 /* Per-row similarity correction: map two center-panel physical samples to
  * the exact captured Mode 7 step and center, then apply that same transform
  * to all three panels. This preserves panel-specific perspective while the

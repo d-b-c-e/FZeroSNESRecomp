@@ -73,6 +73,27 @@ int main(void) {
   CHECK(fabs(left_ground.x + right_ground.x - 1000) < 1e-8);
   CHECK(fabs(left_ground.y - right_ground.y) < 1e-8);
   CHECK(fabs(center_ground.x - 500) < 0.1);
+  /* A world-ground anchor must invert to the exact physical panel pixel.
+   * This is the geometric prerequisite for placing car sprites on the sides;
+   * it does not imply their artwork or guest OAM is available there. */
+  const int anchor_x[] = {640, 1280, 1920};
+  const int anchor_y[] = {900, 1200};
+  for (int side = 0; side < 3; ++side)
+    for (int ix = 0; ix < 3; ++ix)
+      for (int iy = 0; iy < 2; ++iy) {
+        FzeroTripleVec3 ray;
+        FzeroMode7Texel texel;
+        double projected_x, projected_y;
+        CHECK(FzeroTripleRay(&panel[side], anchor_x[ix], anchor_y[iy],
+                             2560, 1440, &ray));
+        CHECK(FzeroTripleGroundLocate(&ground, ray, &texel));
+        CHECK(FzeroTripleGroundProject(&ground, &panel[side], texel,
+                                      2560, 1440, &projected_x, &projected_y));
+        CHECK(fabs(projected_x - anchor_x[ix]) < 1e-7);
+        CHECK(fabs(projected_y - anchor_y[iy]) < 1e-7);
+      }
+  CHECK(!FzeroTripleGroundProject(&ground, &panel[1], center_ground,
+                                 0, 1440, NULL, NULL));
   /* Captured active-race frame 1600: Mode 7 scroll has a different forward
    * scale than its horizontal texel step. This guards against assuming an
    * isotropic texture plane merely because synthetic pinhole lines fit. */
@@ -85,6 +106,22 @@ int main(void) {
   CHECK(FzeroTripleGroundLocate(&ground, center, &center_ground));
   CHECK(fabs(center_ground.x - 335.25) < 1.5);
   CHECK(fabs(center_ground.y - 344.0) < 1.0);
+  /* The captured race has anisotropic forward scale, unlike the synthetic
+   * fixture above. Its rays must still invert on every angled panel. */
+  for (int side = 0; side < 3; ++side)
+    for (int ix = 0; ix < 3; ++ix)
+      for (int iy = 0; iy < 2; ++iy) {
+        FzeroTripleVec3 ray;
+        FzeroMode7Texel texel;
+        double projected_x, projected_y;
+        CHECK(FzeroTripleRay(&panel[side], anchor_x[ix], anchor_y[iy],
+                             2560, 1440, &ray));
+        CHECK(FzeroTripleGroundLocate(&ground, ray, &texel));
+        CHECK(FzeroTripleGroundProject(&ground, &panel[side], texel,
+                                      2560, 1440, &projected_x, &projected_y));
+        CHECK(fabs(projected_x - anchor_x[ix]) < 1e-7);
+        CHECK(fabs(projected_y - anchor_y[iy]) < 1e-7);
+      }
   FzeroMode7Line race_y100 = {85824, 56832, 0, 244, 0};
   FzeroTripleVec3 align_ray_left, align_ray_right;
   FzeroMode7Texel align_left, align_right;
