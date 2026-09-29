@@ -79,7 +79,16 @@ owner-tagged opponent OBJ pixels and project each as a center-facing billboard
 at its calibrated world anchor. Six private replay captures produced between
 21 and 2,012 written side pixels. In montages, the visible car fragments land
 plausibly on the side track, but cars crossing an inner edge are clipped because
-the stock center image is unchanged. The preview also lacks a solved priority,
+the stock center image is unchanged. The probe now reports the projected OBJ
+billboard bounds on all three planes. At captured frame 4351, car 4's anchor
+lands just beyond the center panel (x=522.64 at 512-pixel panel width), but
+its approximate art bounds cross center x=498.69–546.60 and right-side
+x=-23.14–31.52. Frame 9645 shows the mirror case: left-side anchor x=495.56,
+with bounds crossing left x=459.17–538.28 and center x=-56.32–15.54.
+Both are evidence that anchor-only culling loses seam art; they are not proof
+that every projected OBJ pixel should survive the game's priority and window
+rules. A ROM-free fixture now verifies the overlapping-panel geometry.
+The preview also lacks a solved priority,
 occlusion, and colour-math treatment and cannot invent art for the four
 side-anchor occurrences without OAM. It is deliberately not called by the live
 SDL presenter; the game remains in `SCREENSPACE_SPRITES` degraded state.
