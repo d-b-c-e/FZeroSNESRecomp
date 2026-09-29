@@ -1012,14 +1012,24 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   }
   if (sky_count) {
     int sky_shift[2 * 4096];
+    bool exact_horizon = !getenv("FZERO_TRIPLE_DISABLE_EXACT_HORIZON");
     for (int side = 0; side < 2; ++side)
       for (int x = 0; x < pw; ++x) {
-        const FzeroTripleVec3 top = cached_rays[(size_t)side * pw * ph + x];
-        const FzeroTripleVec3 bottom = cached_rays[(size_t)side * pw * ph + (size_t)(ph - 1) * pw + x];
-        double d0 = -top.z * ground.pitch_sin - top.y * ground.pitch_cos;
-        double d1 = -bottom.z * ground.pitch_sin - bottom.y * ground.pitch_cos;
-        double horizon = fabs(d1 - d0) > 1e-9 ? -d0 * (ph - 1) / (d1 - d0) :
-                         d0 > 0 ? 0.0 : (double)ph;
+        double horizon;
+        if (exact_horizon) {
+          if (!FzeroTripleGroundHorizon(&ground, &panels[side ? 2 : 0],
+                                       x, pw, ph, &horizon)) {
+            free(sky_pixels); return false;
+          }
+        } else {
+          const FzeroTripleVec3 top = cached_rays[(size_t)side * pw * ph + x];
+          const FzeroTripleVec3 bottom = cached_rays[(size_t)side * pw * ph +
+              (size_t)(ph - 1) * pw + x];
+          double d0 = -top.z * ground.pitch_sin - top.y * ground.pitch_cos;
+          double d1 = -bottom.z * ground.pitch_sin - bottom.y * ground.pitch_cos;
+          horizon = fabs(d1 - d0) > 1e-9 ? -d0 * (ph - 1) / (d1 - d0) :
+                    d0 > 0 ? 0.0 : (double)ph;
+        }
         if (!isfinite(horizon)) { free(sky_pixels); return false; }
         sky_shift[side * pw + x] = (int)lround(sky_count - 1 - horizon * 224.0 / ph);
       }

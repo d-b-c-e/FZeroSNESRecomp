@@ -73,6 +73,48 @@ int main(void) {
   CHECK(fabs(left_ground.x + right_ground.x - 1000) < 1e-8);
   CHECK(fabs(left_ground.y - right_ground.y) < 1e-8);
   CHECK(fabs(center_ground.x - 500) < 0.1);
+  for (int side = 0; side < 3; ++side)
+    for (int ix = 0; ix < 3; ++ix) {
+      double horizon;
+      CHECK(FzeroTripleGroundHorizon(&ground, &panel[side], sample_x[ix],
+                                    2560, 1440, &horizon));
+      double u = (sample_x[ix] + 0.5) / 2560.0;
+      double v = 1.0 - (horizon + 0.5) / 1440.0;
+      double py = panel[side].lower_left.y + u * panel[side].right.y +
+                  v * panel[side].up.y;
+      double pz = panel[side].lower_left.z + u * panel[side].right.z +
+                  v * panel[side].up.z;
+      CHECK(fabs(-pz * ground.pitch_sin - py * ground.pitch_cos) < 1e-10);
+    }
+  FzeroTripleRig raised_rig = rig;
+  raised_rig.eye_height_mm = 120;
+  FzeroTripleSurface raised_panels[3];
+  CHECK(FzeroTripleBuild(&raised_rig, raised_panels));
+  double raised_horizon;
+  CHECK(FzeroTripleGroundHorizon(&ground, &raised_panels[0], 1280,
+                                2560, 1440, &raised_horizon));
+  FzeroTripleVec3 raised_top, raised_bottom;
+  CHECK(FzeroTripleRay(&raised_panels[0], 1280, 0, 2560, 1440, &raised_top));
+  CHECK(FzeroTripleRay(&raised_panels[0], 1280, 1439, 2560, 1440,
+                       &raised_bottom));
+  double raised_d0 = -raised_top.z * ground.pitch_sin -
+                     raised_top.y * ground.pitch_cos;
+  double raised_d1 = -raised_bottom.z * ground.pitch_sin -
+                     raised_bottom.y * ground.pitch_cos;
+  /* With an eye above panel center, interpolating normalized end rays can
+   * miss the true horizon by over nine pixels on this angled panel. */
+  CHECK(fabs(raised_horizon -
+             (-raised_d0 * 1439 / (raised_d1 - raised_d0))) > 9);
+  double raised_u = (1280.5 / 2560.0);
+  double raised_v = 1.0 - (raised_horizon + 0.5) / 1440.0;
+  double raised_y = raised_panels[0].lower_left.y +
+                    raised_u * raised_panels[0].right.y +
+                    raised_v * raised_panels[0].up.y;
+  double raised_z = raised_panels[0].lower_left.z +
+                    raised_u * raised_panels[0].right.z +
+                    raised_v * raised_panels[0].up.z;
+  CHECK(fabs(-raised_z * ground.pitch_sin -
+             raised_y * ground.pitch_cos) < 1e-10);
   /* A world-ground anchor must invert to the exact physical panel pixel.
    * This is the geometric prerequisite for placing car sprites on the sides;
    * it does not imply their artwork or guest OAM is available there. */

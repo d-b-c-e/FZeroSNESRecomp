@@ -29,6 +29,13 @@ bool FzeroTripleGroundBuildRow(const FzeroTripleGround *ground,
                                FzeroTripleGroundRow *out);
 bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
                                 int x, FzeroMode7Texel *texel);
+/* Exact fractional pixel row where a column's unnormalized panel ray is
+ * parallel to the ground plane; unlike normalized end-ray interpolation,
+ * the denominator is affine in screen Y. */
+bool FzeroTripleGroundHorizon(const FzeroTripleGround *ground,
+                              const FzeroTripleSurface *panel,
+                              int x, int width, int height,
+                              double *pixel_y);
 /* Convert a nearby course-world anchor to the camera's unwrapped Mode 7
  * representative. F-Zero's course repeats every 8192x4096 world units. */
 bool FzeroTripleGroundWorldTexel(int world_x, int world_y,

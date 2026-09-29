@@ -139,6 +139,24 @@ bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
          fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
 }
 
+bool FzeroTripleGroundHorizon(const FzeroTripleGround *ground,
+                              const FzeroTripleSurface *panel,
+                              int x, int width, int height,
+                              double *pixel_y) {
+  if (!ground || !panel || !pixel_y || width < 1 || height < 1 ||
+      x < 0 || x >= width) return false;
+  double u = (x + 0.5) / width;
+  double v = 1.0 - 0.5 / height;
+  double py = panel->lower_left.y + u * panel->right.y + v * panel->up.y;
+  double pz = panel->lower_left.z + u * panel->right.z + v * panel->up.z;
+  double top = -pz * ground->pitch_sin - py * ground->pitch_cos;
+  double slope = (panel->up.z * ground->pitch_sin +
+                  panel->up.y * ground->pitch_cos) / height;
+  if (!(fabs(slope) > 1e-12) || !isfinite(slope)) return false;
+  *pixel_y = -top / slope;
+  return isfinite(*pixel_y);
+}
+
 bool FzeroTripleGroundWorldTexel(int world_x, int world_y,
                                  int camera_world_x, int camera_world_y,
                                  FzeroMode7Texel mode7_center,
