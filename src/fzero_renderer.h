@@ -25,3 +25,14 @@ const uint32_t *FzeroRendererStockFrame(void);
  * each panel_width*panel_height pixels. False means draw the stock fallback. */
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width);
+/* Read-only capture diagnostic. OAM count is the number of non-sentinel
+ * vehicle-owned slots at scanline 100, not proof that side artwork exists. */
+typedef struct FzeroTripleVehicleProbe {
+  unsigned state, oam_slots;
+  int world_x, world_y, guest_x, guest_y;
+  bool projected[3];
+  double panel_x[3], panel_y[3];
+} FzeroTripleVehicleProbe;
+bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
+                                      int logical_width,
+                                      FzeroTripleVehicleProbe out[6]);

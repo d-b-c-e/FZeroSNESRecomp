@@ -607,6 +607,8 @@ static void test_triple_fallback(void) {
     sides[i] = 0xdeadbeef;
   setup();
   publish(100);
+  FzeroTripleVehicleProbe probes[6];
+  CHECK(!FzeroRendererProbeTripleVehicles(&rig, 342, probes));
   CHECK(!FzeroRendererDrawTripleSides(sides + 1, 2 * 16 * 9 - 1, &rig, 342));
   CHECK(!FzeroRendererDrawTripleSides(sides + 1, 2 * 16 * 9, &rig, 342));
   CHECK(sides[0] == 0xdeadbeef && sides[2 * 16 * 9 + 1] == 0xdeadbeef);
@@ -678,6 +680,19 @@ static void test_triple_sky_horizon(void) {
   publish_triple_sky(105, 0x7c00);
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
   CHECK(sides[0] == 0);
+  /* The diagnostic must distinguish a world anchor from absent guest OAM.
+   * A side compositor cannot simply move artwork that was never emitted. */
+  word(0xb70, 1024); word(0xb90, 344);
+  word(0xb74, 1034); word(0xb94, 384);
+  ram[0xb04] = 0x88;
+  publish_triple_sky(106, 31);
+  FzeroTripleVehicleProbe probes[6];
+  memcpy(before, ram, sizeof(ram));
+  CHECK(FzeroRendererProbeTripleVehicles(&rig, 342, probes));
+  CHECK(!memcmp(before, ram, sizeof(ram)));
+  CHECK(probes[2].state == 0x88 && probes[2].oam_slots == 0);
+  CHECK(probes[2].world_x == 1034 && probes[2].world_y == 384);
+  CHECK(probes[2].projected[1]);
 }
 
 int main(void) {

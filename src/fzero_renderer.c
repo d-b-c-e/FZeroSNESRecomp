@@ -1126,3 +1126,55 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   triple_cache.valid = true;
   return true;
 }
+
+bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
+                                      int logical_width,
+                                      FzeroTripleVehicleProbe out[6]) {
+  const FzeroSourceFrame *f = &frames[current];
+  if (!rig || !out || !f->valid || f->ram[0x54] != 2 ||
+      f->ram[0x55] < 3 || !f->ram[0x81]) return false;
+  FzeroTripleSurface panels[3];
+  if (!FzeroTripleBuild(rig, panels)) return false;
+  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
+  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
+  FzeroTripleGround ground;
+  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180,
+                                 &ground)) return false;
+  FzeroMode7Texel center = {course_centre(scanout.m7matrix, 4),
+                            course_centre(scanout.m7matrix, 5)};
+  int camera_x = read_i16(f->ram + 0xb70);
+  int camera_y = read_i16(f->ram + 0xb90);
+  const FzeroRasterLine *raster = &f->lines[100];
+  memset(out, 0, 6 * sizeof(*out));
+  for (int car = 0; car < 6; ++car) {
+    FzeroTripleVehicleProbe *probe = &out[car];
+    probe->state = f->ram[0xb00 + car * 2];
+    probe->world_x = read_i16(f->ram + 0xb70 + car * 2);
+    probe->world_y = read_i16(f->ram + 0xb90 + car * 2);
+    probe->guest_x = read_i16(f->ram + 0xc50 + car * 2);
+    probe->guest_y = read_i16(f->ram + 0xc60 + car * 2);
+    if (!probe->state) continue;
+    for (int slot = 68; slot < 128; ++slot) {
+      if (object_owner(f, slot) != car) continue;
+      unsigned position = raster->oam[slot * 2];
+      unsigned high = raster->high_oam[slot / 4] >> ((slot % 4) * 2);
+      unsigned raw_x = (position & 255) | ((high & 1) << 8);
+      if (raw_x == 384 && (position >> 8) == 128) continue;
+      if (!raster->oam[slot * 2 + 1]) continue;
+      ++probe->oam_slots;
+    }
+    FzeroMode7Texel texel;
+    if (!FzeroTripleGroundWorldTexel(probe->world_x, probe->world_y,
+                                     camera_x, camera_y, center, &texel))
+      continue;
+    for (int side = 0; side < 3; ++side)
+      probe->projected[side] = FzeroTripleGroundProject(&ground, &panels[side],
+          texel, rig->panel_width_px, rig->panel_height_px,
+          &probe->panel_x[side], &probe->panel_y[side]);
+  }
+  return true;
+}

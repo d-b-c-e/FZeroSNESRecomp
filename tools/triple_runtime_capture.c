@@ -4,11 +4,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 int main(int argc, char **argv) {
-  if (argc != 3 && argc != 4) {
-    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations]\n");
+  bool vehicles_only = argc == 3 && !strcmp(argv[2], "--vehicles");
+  if (argc < 3 || argc > 5 || (argc == 5 && strcmp(argv[4], "--vehicles"))) {
+    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations [--vehicles]]\n"
+                    "   or: FZeroTripleRuntimeCapture capture.bin --vehicles\n");
     return 2;
   }
   if (!FzeroRendererLoadCapture(argv[1])) {
@@ -20,6 +23,26 @@ int main(int argc, char **argv) {
   FzeroVideoSettings video;
   FzeroVideoDefaults(&video);
   int logical_width = FzeroCalculateViewport(&video, 2560, 1440).width;
+  if (vehicles_only || argc == 5) {
+    FzeroTripleVehicleProbe probes[6];
+    if (!FzeroRendererProbeTripleVehicles(&rig, logical_width, probes)) {
+      fprintf(stderr, "vehicle probe rejected capture\n");
+      return 3;
+    }
+    puts("car,state,world_x,world_y,guest_x,guest_y,oam_slots,panel,x,y,on_panel");
+    for (int car = 0; car < 6; ++car)
+      for (int side = 0; side < 3; ++side) {
+        const FzeroTripleVehicleProbe *probe = &probes[car];
+        double x = probe->panel_x[side], y = probe->panel_y[side];
+        int on_panel = probe->projected[side] &&
+            x >= 0 && x < pw && y >= 0 && y < ph;
+        printf("%d,%02x,%d,%d,%d,%d,%u,%d,%.2f,%.2f,%d\n",
+            car, probe->state, probe->world_x, probe->world_y,
+            probe->guest_x, probe->guest_y, probe->oam_slots,
+            side, x, y, on_panel);
+      }
+  }
+  if (vehicles_only) return 0;
   uint32_t *buffers[2] = {
       calloc((size_t)span * ph, sizeof(uint32_t)),
       calloc((size_t)span * ph, sizeof(uint32_t))};
@@ -27,7 +50,7 @@ int main(int argc, char **argv) {
     free(buffers[0]); free(buffers[1]);
     return 3;
   }
-  int iterations = argc == 4 ? atoi(argv[3]) : 1;
+  int iterations = argc >= 4 ? atoi(argv[3]) : 1;
   if (iterations < 1 || iterations > 10000) {
     free(buffers[0]); free(buffers[1]);
     return 2;
