@@ -464,7 +464,8 @@ int main(int argc, char **argv) {
   const char *triple_trace = getenv("FZERO_TRIPLE_CAMERA_TRACE");
   bool triple_audit = triple_trace && triple_trace[0] == '1';
   unsigned triple_race = 0, triple_accepted = 0, triple_rejected = 0;
-  unsigned triple_side_anchors = 0, triple_missing_oam = 0;
+  unsigned triple_side_anchors = 0, triple_with_oam = 0;
+  unsigned triple_missing_oam = 0;
   const FzeroTripleRig audit_rig = {708.4166, 398.4843, 660,
                                     0, 70, 70, 8, 512, 288};
 
@@ -602,7 +603,14 @@ int main(int argc, char **argv) {
             if (!probe->projected[side] || x < 0 || x >= audit_rig.panel_width_px ||
                 y < 0 || y >= audit_rig.panel_height_px) continue;
             ++triple_side_anchors;
-            if (!probe->oam_slots) {
+            if (probe->oam_slots) {
+              if (++triple_with_oam <= 12)
+                fprintf(stderr, "[fzero-triple-camera] side_art frame=%ld "
+                                "car=%d state=%02x side=%d x=%.1f y=%.1f "
+                                "guest=%d,%d slots=%u\n",
+                        frame, car, probe->state, side, x, y,
+                        probe->guest_x, probe->guest_y, probe->oam_slots);
+            } else {
               if (++triple_missing_oam <= 12)
                 fprintf(stderr, "[fzero-triple-camera] missing_oam frame=%ld "
                                 "car=%d state=%02x side=%d x=%.1f y=%.1f\n",
@@ -657,9 +665,9 @@ int main(int argc, char **argv) {
   }
   if (triple_audit)
     fprintf(stderr, "[fzero-triple-camera] race=%u accepted=%u rejected=%u "
-                    "side_anchors=%u missing_oam=%u\n",
+                    "side_anchors=%u with_oam=%u missing_oam=%u\n",
             triple_race, triple_accepted, triple_rejected,
-            triple_side_anchors, triple_missing_oam);
+            triple_side_anchors, triple_with_oam, triple_missing_oam);
 
   fprintf(stderr,
           "fzero_native: %s frames=%ld resume=%06x master=%llu "
