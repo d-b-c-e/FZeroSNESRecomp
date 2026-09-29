@@ -15,6 +15,7 @@ int main() {
   FzeroFfbState state{};
   FzeroFfbOutput out{};
   ram[0x54] = 2; ram[0x55] = 3;
+  put16(ram + 0xc9, 2000);
   put16(ram + 0x0b70, 0x1ffe); put16(ram + 0x0b90, 100);
   FzeroFfbCompute(&state, ram, sizeof(ram), 0, 40, &out);
   CHECK(out.racing && out.constant_force == 0);
@@ -37,12 +38,32 @@ int main() {
     FzeroFfbCompute(&race_state, ram, sizeof(ram), 0, 35, &out);
   }
   CHECK(out.damper_coefficient > 500);
-  put16(ram + 0x0b70, 2);
+  put16(ram + 0x0b70, 2332);
+  FzeroFfbCompute(&race_state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.road_magnitude >= 400 && out.road_magnitude <= 500);
+  /* Animation RAM changes ahead of contact are not a collision signal. */
   ram[0xe0] = 1;
-  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 100, &out);
-  CHECK(out.collision_pulse == 1);
-  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 100, &out);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
   CHECK(out.collision_pulse == 0);
+  put16(ram + 0xc9, 1995);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.collision_pulse == 0);
+  put16(ram + 0xc9, 1899);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.collision_pulse == 1);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.collision_pulse == 0);
+  put16(ram + 0xc9, 1803);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.collision_pulse == 0); /* same contact's aftershock */
+  for (int i = 0; i < 8; ++i)
+    FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  put16(ram + 0xc9, 1707);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0x0100, 12, &out);
+  CHECK(out.collision_pulse == 0); /* boost energy spend */
+  put16(ram + 0xc9, 1611);
+  FzeroFfbCompute(&state, ram, sizeof(ram), 0, 12, &out);
+  CHECK(out.collision_pulse == 1);
   ram[0x55] = 0;
   FzeroFfbCompute(&state, ram, sizeof(ram), 0x0040, 100, &out);
   CHECK(!out.racing && out.constant_force == 0 && out.road_magnitude == 0);

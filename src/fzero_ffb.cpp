@@ -83,11 +83,20 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
   state->previous_y = y;
   state->have_position = racing ? 1 : 0;
 
-  const bool collision = racing &&
-      (ram[0x00e0] != 0 || ram[0x00e8] != 0 || ram[0x00e9] != 0 ||
-       ram[0x00f5] != 0);
-  out->collision_pulse = collision && !state->collision_active;
-  state->collision_active = collision ? 1 : 0;
+  /* $00C9 is the power/energy meter. In a captured wall contact it fell by
+   * 96 on the actual impact frame; the former $E0/$E8/$E9/$F5 candidates
+   * changed several frames earlier and exhausted the short FFB pulse before
+   * the hit. Small five-unit drains are not impacts. A/boost can spend power
+   * too, so it must not become a false collision cue. */
+  const uint16_t energy = read16(ram + 0x00c9);
+  const int lost_energy = state->have_energy && state->previous_energy > energy ?
+      state->previous_energy - energy : 0;
+  if (state->collision_cooldown > 0) --state->collision_cooldown;
+  out->collision_pulse = racing && state->collision_cooldown == 0 &&
+      lost_energy >= 32 && !(input & 0x0100u);
+  if (out->collision_pulse) state->collision_cooldown = 8;
+  state->previous_energy = energy;
+  state->have_energy = racing ? 1 : 0;
   out->racing = racing ? 1 : 0;
   if (!racing) return;
 
@@ -103,7 +112,7 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
   /* Surface bits are non-zero on rough/slip zones. Keep normal track texture
    * subtle and raise it on those zones; frequency follows vehicle speed. */
   const bool rough = ram[0x00c7] != 0;
-  out->road_magnitude = (int)(strength * (rough ? 38.0f : 10.0f) * speed_scale);
+  out->road_magnitude = (int)(strength * (rough ? 70.0f : 40.0f) * speed_scale);
   out->road_frequency_millihz = 18000 + (int)(speed_scale * 24000.0f);
 }
 
@@ -213,7 +222,7 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
                  output.road_magnitude, road_ok,
                  (unsigned)s_ffb.GetLastHResult());
   if (output.collision_pulse && s_collision >= 0)
-    s_ffb.PlayPeriodicBurst(s_collision, s_strength * 85, 32000);
+    s_ffb.PlayPeriodicBurst(s_collision, std::min(3500, s_strength * 100), 32000);
 #else
   (void)ram; (void)ram_size; (void)input;
 #endif

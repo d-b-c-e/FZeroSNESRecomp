@@ -11,7 +11,9 @@ typedef struct FzeroFfbState {
   uint16_t previous_x, previous_y;
   float speed;
   int have_position;
-  int collision_active;
+  uint16_t previous_energy;
+  int have_energy;
+  int collision_cooldown;
 } FzeroFfbState;
 
 typedef struct FzeroFfbOutput {
