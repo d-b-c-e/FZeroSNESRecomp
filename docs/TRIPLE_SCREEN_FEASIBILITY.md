@@ -211,6 +211,13 @@ row projection enabled or disabled. In 200-iteration isolated CPU runs, the
 normal path took 7.34/7.49 ms per side-buffer pair, versus 8.52/8.59 ms
 without the sky atlas and 7.90/7.92 ms without the row projection. These
 measure composition only, not upload, GPU draw, presentation or live pacing.
+Inlining the per-pixel Mode 7 line-alignment transform in the side renderer
+removed a cross-translation-unit call without changing its rounding and
+finite-value guards. Two 500-iteration 512×288 captured-frame CPU runs fell
+from 7.244/7.192 ms to 5.624/5.638 ms per side-buffer pair; both outputs
+were byte-identical. The full 11,364-frame verified replay still passed all
+164 cached/direct sky comparisons with zero side rejections. This is an
+offline CPU improvement, not a new measured Surround frame-rate result.
 The SDL presenter now retains the uploaded side texture when another host
 presentation reuses the same projected emulated frame. A ROM-free test confirms
 the projection version remains stable on a cache hit and advances when the
