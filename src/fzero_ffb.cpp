@@ -7,6 +7,7 @@ extern "C" {
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #ifdef _WIN32
@@ -25,6 +26,8 @@ int s_spring = -1;
 int s_road = -1;
 int s_collision = -1;
 bool s_active = false;
+unsigned s_trace_frames = 0;
+bool s_trace_enabled = false;
 #endif
 
 uint16_t read16(const uint8_t *p) {
@@ -166,6 +169,8 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
   s_road = s_ffb.CreatePeriodicEffect(25);
   s_collision = s_ffb.CreatePeriodicBurst(32, 140);
   s_active = true;
+  s_trace_frames = 0;
+  s_trace_enabled = std::getenv("FZERO_FFB_TRACE") != nullptr;
   std::fprintf(stderr, "[fzero-ffb] active on %s at %d%% (spring=%d damper=%d road=%d)\n",
                requested, s_strength, s_spring, s_damper, s_road);
 #else
@@ -186,15 +191,21 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
   if (!s_ffb.SetDeviceForcesXY(s_spring >= 0 ? 0 : output.constant_force, 0))
     std::fprintf(stderr, "[fzero-ffb] force update rejected (HRESULT %08x)\n",
                  (unsigned)s_ffb.GetLastHResult());
-  if (s_spring >= 0)
-    s_ffb.UpdateConditionEffect(s_spring, output.spring_coefficient,
-                                10000, 0, 0);
-  if (s_damper >= 0)
-    s_ffb.UpdateConditionEffect(s_damper, output.damper_coefficient,
-                                10000, 0, 0);
-  if (s_road >= 0)
-    s_ffb.UpdatePeriodicEffect(s_road, output.road_magnitude,
-                               output.road_frequency_millihz);
+  int spring_ok = s_spring < 0 ? -1 : s_ffb.UpdateConditionEffect(
+      s_spring, output.spring_coefficient, 10000, 0, 0);
+  int damper_ok = s_damper < 0 ? -1 : s_ffb.UpdateConditionEffect(
+      s_damper, output.damper_coefficient, 10000, 0, 0);
+  int road_ok = s_road < 0 ? -1 : s_ffb.UpdatePeriodicEffect(
+      s_road, output.road_magnitude, output.road_frequency_millihz);
+  if (s_trace_enabled && (++s_trace_frames % 180 == 0 ||
+                          (output.racing && s_trace_frames < 181)))
+    std::fprintf(stderr, "[fzero-ffb-trace] frame=%u racing=%d speed=%.2f "
+                 "spring=%d/%d damper=%d/%d road=%d/%d hr=%08x\n",
+                 s_trace_frames, output.racing, s_state.speed,
+                 output.spring_coefficient, spring_ok,
+                 output.damper_coefficient, damper_ok,
+                 output.road_magnitude, road_ok,
+                 (unsigned)s_ffb.GetLastHResult());
   if (output.collision_pulse && s_collision >= 0)
     s_ffb.PlayPeriodicBurst(s_collision, s_strength * 85, 32000);
 #else
@@ -219,6 +230,7 @@ void FzeroFfbShutdown(void) {
   }
   s_spring = s_damper = s_road = s_collision = -1;
   s_active = false;
+  s_trace_enabled = false;
 #endif
   std::memset(&s_state, 0, sizeof(s_state));
 }
