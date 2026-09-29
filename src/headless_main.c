@@ -465,6 +465,7 @@ int main(int argc, char **argv) {
   bool triple_audit = triple_trace && triple_trace[0] == '1';
   unsigned triple_race = 0, triple_accepted = 0, triple_rejected = 0;
   unsigned triple_side_anchors = 0, triple_with_reservation = 0;
+  unsigned triple_with_pixels = 0;
   unsigned triple_missing_oam = 0;
   const FzeroTripleRig audit_rig = {708.4166, 398.4843, 660,
                                     0, 70, 70, 8, 512, 288};
@@ -604,12 +605,21 @@ int main(int argc, char **argv) {
                 y < 0 || y >= audit_rig.panel_height_px) continue;
             ++triple_side_anchors;
             if (probe->oam_slots) {
+              if (probe->raster_sprite_pixels && ++triple_with_pixels <= 12)
+                fprintf(stderr, "[fzero-triple-camera] side_pixels frame=%ld "
+                                "car=%d state=%02x side=%d pixels=%u "
+                                "raster=%d,%d..%d,%d\n",
+                        frame, car, probe->state, side,
+                        probe->raster_sprite_pixels,
+                        probe->raster_left, probe->raster_top,
+                        probe->raster_right, probe->raster_bottom);
               if (++triple_with_reservation <= 12)
                 fprintf(stderr, "[fzero-triple-camera] side_reservation frame=%ld "
                                 "car=%d state=%02x side=%d x=%.1f y=%.1f "
-                                "guest=%d,%d slots=%u\n",
+                                "guest=%d,%d slots=%u raster_pixels=%u\n",
                         frame, car, probe->state, side, x, y,
-                        probe->guest_x, probe->guest_y, probe->oam_slots);
+                        probe->guest_x, probe->guest_y, probe->oam_slots,
+                        probe->raster_sprite_pixels);
             } else {
               if (++triple_missing_oam <= 12)
                 fprintf(stderr, "[fzero-triple-camera] missing_oam frame=%ld "
@@ -665,9 +675,11 @@ int main(int argc, char **argv) {
   }
   if (triple_audit)
     fprintf(stderr, "[fzero-triple-camera] race=%u accepted=%u rejected=%u "
-                    "side_anchors=%u with_reservation=%u missing_oam=%u\n",
+                    "side_anchors=%u with_reservation=%u with_pixels=%u "
+                    "missing_oam=%u\n",
             triple_race, triple_accepted, triple_rejected,
-            triple_side_anchors, triple_with_reservation, triple_missing_oam);
+            triple_side_anchors, triple_with_reservation,
+            triple_with_pixels, triple_missing_oam);
 
   fprintf(stderr,
           "fzero_native: %s frames=%ld resume=%06x master=%llu "

@@ -26,10 +26,15 @@ const uint32_t *FzeroRendererStockFrame(void);
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width);
 /* Read-only capture diagnostic. OAM count is the number of non-sentinel
- * vehicle-owned slots at scanline 100, not proof that side artwork exists. */
+ * vehicle-owned slots at scanline 100. Raster sprite pixels count decoded,
+ * nontransparent OBJ pixels within a 684-pixel expanded diagnostic viewport
+ * across the captured lines when the car projects onto a side panel; neither
+ * value proves the car is visible after priority,
+ * clipping and colour-window composition. */
 typedef struct FzeroTripleVehicleProbe {
-  unsigned state, oam_slots;
+  unsigned state, oam_slots, raster_sprite_pixels;
   int world_x, world_y, guest_x, guest_y;
+  int raster_left, raster_top, raster_right, raster_bottom;
   bool projected[3];
   double panel_x[3], panel_y[3];
 } FzeroTripleVehicleProbe;

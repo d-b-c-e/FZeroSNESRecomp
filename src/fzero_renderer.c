@@ -381,7 +381,7 @@ static int object_x(const FzeroSourceFrame *f, int raw_x, FzeroViewport viewport
 static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
                     const FzeroSourceFrame *previous, double alpha,
                     int y, FzeroViewport viewport, bool race_hud, bool results,
-                    uint16_t *pixels) {
+                    int owner_filter, uint16_t *pixels) {
   const FzeroRasterLine *line = &frame->lines[y];
   const uint16_t *vram = frame->vram;
   static const int sizes[8][2] = {{8,16},{8,32},{8,64},{16,32},{16,64},{32,64},{16,32},{16,32}};
@@ -399,6 +399,7 @@ static void sprites(const Ppu *p, const FzeroSourceFrame *frame,
     bool intro_counter = !race_hud && frame->ram[0x58] == 0 &&
         (results || frame->ram[0x55] <= 2) && slot >= 126;
     int owner = intro_counter ? -1 : object_owner(frame, slot);
+    if (owner_filter >= 0 && owner != owner_filter) continue;
     /* The screen-locked player and unowned effects use offscreen X as a
      * hiding mechanism, sometimes retaining Y and stale tile attributes.
      * Only verified opponent reservations can reveal those signed positions. */
@@ -624,7 +625,7 @@ static bool render_frame(uint32_t *out, FzeroViewport viewport, double alpha,
     FzeroCourseLine reference = course_line(camera_x, camera_y, centre_x, centre_y);
     if (world || results)
       sprites(&scanout, f, interpolate ? previous : NULL, alpha, y, viewport,
-              race_hud, results, object_pixels);
+              race_hud, results, -1, object_pixels);
     else
       memset(object_pixels, 0, (size_t)viewport.width * sizeof(*object_pixels));
     bool hd_line = scale > 1 && world && mode == 7 &&
@@ -1131,7 +1132,8 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
                                       int logical_width,
                                       FzeroTripleVehicleProbe out[6]) {
   const FzeroSourceFrame *f = &frames[current];
-  if (!rig || !out || !f->valid || f->ram[0x54] != 2 ||
+  if (!rig || !out || logical_width < 256 ||
+      logical_width > FZERO_MAX_WIDTH || !f->valid || f->ram[0x54] != 2 ||
       f->ram[0x55] < 3 || !f->ram[0x81]) return false;
   FzeroTripleSurface panels[3];
   if (!FzeroTripleBuild(rig, panels)) return false;
@@ -1157,6 +1159,8 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
     probe->world_y = read_i16(f->ram + 0xb90 + car * 2);
     probe->guest_x = read_i16(f->ram + 0xc50 + car * 2);
     probe->guest_y = read_i16(f->ram + 0xc60 + car * 2);
+    probe->raster_left = probe->raster_top = -1;
+    probe->raster_right = probe->raster_bottom = -1;
     if (!probe->state) continue;
     for (int slot = 68; slot < 128; ++slot) {
       if (object_owner(f, slot) != car) continue;
@@ -1175,6 +1179,37 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
       probe->projected[side] = FzeroTripleGroundProject(&ground, &panels[side],
           texel, rig->panel_width_px, rig->panel_height_px,
           &probe->panel_x[side], &probe->panel_y[side]);
+    bool on_side = false;
+    for (int side = 0; side < 3; side += 2)
+      on_side |= probe->projected[side] &&
+          probe->panel_x[side] >= 0 &&
+          probe->panel_x[side] < rig->panel_width_px &&
+          probe->panel_y[side] >= 0 &&
+          probe->panel_y[side] < rig->panel_height_px;
+    if (car <= 0 || !on_side || !probe->oam_slots) continue;
+    FzeroViewport viewport = {FZERO_MAX_WIDTH,
+                              (FZERO_MAX_WIDTH - 256) / 2, 0, true};
+    uint16_t sprite_row[FZERO_MAX_WIDTH];
+    for (int y = 0; y < 224; ++y) {
+      memcpy(&scanout, f->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
+      if ((scanout.inidisp & 128) || (scanout.bgmode & 7) != 7) continue;
+      sprites(&scanout, f, NULL, 1.0, y, viewport, true, false,
+              car, sprite_row);
+      for (int x = 0; x < FZERO_MAX_WIDTH; ++x) {
+        if (!sprite_row[x]) continue;
+        ++probe->raster_sprite_pixels;
+        int logical_x = x - viewport.extra;
+        if (probe->raster_sprite_pixels == 1) {
+          probe->raster_left = probe->raster_right = logical_x;
+          probe->raster_top = probe->raster_bottom = y;
+        } else {
+          if (logical_x < probe->raster_left) probe->raster_left = logical_x;
+          if (logical_x > probe->raster_right) probe->raster_right = logical_x;
+          if (y < probe->raster_top) probe->raster_top = y;
+          if (y > probe->raster_bottom) probe->raster_bottom = y;
+        }
+      }
+    }
   }
   return true;
 }
