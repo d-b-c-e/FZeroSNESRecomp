@@ -221,8 +221,15 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
                  output.damper_coefficient, damper_ok,
                  output.road_magnitude, road_ok,
                  (unsigned)s_ffb.GetLastHResult());
-  if (output.collision_pulse && s_collision >= 0)
-    s_ffb.PlayPeriodicBurst(s_collision, std::min(3500, s_strength * 100), 32000);
+  if (output.collision_pulse) {
+    int accepted = s_collision >= 0 ? s_ffb.PlayPeriodicBurst(
+        s_collision, std::min(3500, s_strength * 100), 32000) : 0;
+    if (s_trace_enabled)
+      std::fprintf(stderr, "[fzero-ffb-impact] frame=%u energy=%u accepted=%d "
+                   "slot=%d hr=%08x\n", s_trace_frames,
+                   (unsigned)(ram[0xc9] | ((unsigned)ram[0xca] << 8)),
+                   accepted, s_collision, (unsigned)s_ffb.GetLastHResult());
+  }
 #else
   (void)ram; (void)ram_size; (void)input;
 #endif
