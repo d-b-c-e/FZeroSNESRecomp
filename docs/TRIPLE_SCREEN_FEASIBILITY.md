@@ -36,6 +36,15 @@ recorded screen anchors. The screen-locked player has a separate vertical
 offset; treating all six cars' artwork as though its top-left were the ground
 contact would be wrong. The side-view visibility/OAM generation problem is
 still open.
+The read-only `FZeroTripleRuntimeCapture capture.bin --vehicles` probe reports
+each car's WRAM world and guest-screen anchors, its scanline-100 non-sentinel
+vehicle OAM reservation count, and projected panel coordinates. In 56 private
+captures sampled every 200 replay frames, two state-active car anchors landed
+on a side panel; one (frame 6200, right panel) had no OAM reservation to move.
+This demonstrates a missing-artwork case in the captured frame, but the car's
+state flags have not been fully decoded, so it is not proof that that car
+should have been visible to the player. Reprojection must be gated by a
+verified live/visible game state, not just a plausible world coordinate.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
