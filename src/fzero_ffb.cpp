@@ -122,7 +122,6 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
     WheelFfb_Unload(&s_ffb);
     return;
   }
-  s_ffb.SetHoldTimeoutMs(250);
   s_ffb.SetStrictDeviceSelection(1);
   const int count = s_ffb.EnumerateDevices();
   int match = -1;
@@ -144,7 +143,7 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
   s_ffb.SetPreferredDeviceGuid(guid);
   if (!s_ffb.InitDirectInput((int)(intptr_t)native_window)) {
     std::fprintf(stderr, "[fzero-ffb] could not open '%s'; disabled\n", requested);
-    WheelFfb_Unload(&s_ffb);
+    FzeroFfbShutdown();
     return;
   }
   s_ffb.InstallExitGuards();
@@ -155,6 +154,10 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
     FzeroFfbShutdown();
     return;
   }
+  /* SetHoldTimeoutMs starts a worker in WheelFfb.dll. Do not start it until
+   * every early-return path has succeeded, or unload would strand the worker
+   * executing code from an unloaded module. */
+  s_ffb.SetHoldTimeoutMs(250);
   s_spring = s_ffb.CreateConditionEffect(0);
   s_damper = s_ffb.CreateConditionEffect(1);
   s_road = s_ffb.CreatePeriodicEffect(25);

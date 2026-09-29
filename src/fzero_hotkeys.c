@@ -106,9 +106,13 @@ int FzeroIniReadString(const char *path, const char *section, const char *key,
 
     /* A trailing comment is not part of the value: the framework writer never
      * emits one, but a hand-edited file may. */
-    snprintf(out, cap, "%s", eq + 1);
+    snprintf(out, cap, "%s", skip_spaces(eq + 1));
     char *cut = strpbrk(out, ";#\r\n");
     if (cut) *cut = '\0';
+    size_t value_len = strlen(out);
+    while (value_len && (out[value_len - 1] == ' ' ||
+                         out[value_len - 1] == '\t'))
+      out[--value_len] = '\0';
     found = 1;
   }
   fclose(f);

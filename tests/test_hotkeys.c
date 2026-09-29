@@ -101,6 +101,20 @@ int main(void) {
    * is what tells them apart. */
   CHECK(FzeroIniReadString(path, "Rewind", "Rewind", text, sizeof(text)) == 0);
 
+  /* String values written as "key = value" must not accumulate spaces on
+   * every launcher save; device names and telemetry hosts need exact values. */
+  write_file(path,
+             "[ForceFeedback]\n"
+             "Device =  MOZA R12 Base  \n"
+             "[Telemetry]\n"
+             "Host = 127.0.0.1 ; comment\n");
+  CHECK(FzeroIniReadString(path, "ForceFeedback", "Device", text,
+                           sizeof(text)) == 1);
+  CHECK(!strcmp(text, "MOZA R12 Base"));
+  CHECK(FzeroIniReadString(path, "Telemetry", "Host", text,
+                           sizeof(text)) == 1);
+  CHECK(!strcmp(text, "127.0.0.1"));
+
   remove(path);
   puts("config.ini [KeyMap] parsing and settings round-trip passed");
   return 0;
