@@ -73,6 +73,16 @@ one logical column; decoded fragment sizes range from 5 to 1,314 pixels.
 This makes an owner-filtered side-art preview plausible, but does not solve
 perspective sizing, priority, seam clipping, or the four projected anchors
 without OAM. No side vehicle layer is enabled yet.
+An **offline-only** experiment now uses `FZeroTripleRuntimeCapture
+capture.bin sides.ppm --runtime --vehicle-preview` to decode the captured,
+owner-tagged opponent OBJ pixels and project each as a center-facing billboard
+at its calibrated world anchor. Six private replay captures produced between
+21 and 2,012 written side pixels. In montages, the visible car fragments land
+plausibly on the side track, but cars crossing an inner edge are clipped because
+the stock center image is unchanged. The preview also lacks a solved priority,
+occlusion, and colour-math treatment and cannot invent art for the four
+side-anchor occurrences without OAM. It is deliberately not called by the live
+SDL presenter; the game remains in `SCREENSPACE_SPRITES` degraded state.
 `FZeroTripleRuntimeCapture capture.bin sides.ppm --runtime` writes the exact
 512×288 side-buffer size used by the SDL triple presenter. Without that flag,
 the tool retains its 640×360 high-resolution comparison fixture. The two
