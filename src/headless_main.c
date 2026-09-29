@@ -543,6 +543,8 @@ int main(int argc, char **argv) {
   unsigned triple_side_anchors = 0, triple_with_reservation = 0;
   unsigned triple_with_pixels = 0;
   unsigned triple_missing_oam = 0;
+  unsigned triple_pixels_in_center = 0, triple_pixels_outside_center = 0;
+  unsigned triple_pixels_min = UINT32_MAX, triple_pixels_max = 0;
   const FzeroTripleRig audit_rig = {708.4166, 398.4843, 660,
                                     0, 70, 70, 8, 512, 288};
 
@@ -681,14 +683,38 @@ int main(int argc, char **argv) {
                 y < 0 || y >= audit_rig.panel_height_px) continue;
             ++triple_side_anchors;
             if (probe->oam_slots) {
-              if (probe->raster_sprite_pixels && ++triple_with_pixels <= 12)
-                fprintf(stderr, "[fzero-triple-camera] side_pixels frame=%ld "
-                                "car=%d state=%02x side=%d pixels=%u "
-                                "raster=%d,%d..%d,%d\n",
-                        frame, car, probe->state, side,
-                        probe->raster_sprite_pixels,
-                        probe->raster_left, probe->raster_top,
-                        probe->raster_right, probe->raster_bottom);
+              if (probe->raster_sprite_pixels) {
+                int extra = (frame_width - 256) / 2;
+                bool center_overlap = probe->raster_left <= 255 + extra &&
+                    probe->raster_right >= -extra;
+                if (center_overlap)
+                  ++triple_pixels_in_center;
+                else
+                  ++triple_pixels_outside_center;
+                if (probe->raster_sprite_pixels < triple_pixels_min)
+                  triple_pixels_min = probe->raster_sprite_pixels;
+                if (probe->raster_sprite_pixels > triple_pixels_max)
+                  triple_pixels_max = probe->raster_sprite_pixels;
+                if (center_overlap || probe->raster_sprite_pixels >= 100)
+                  fprintf(stderr, "[fzero-triple-camera] art_exception frame=%ld "
+                                  "car=%d state=%02x side=%d x=%.1f y=%.1f "
+                                  "guest=%d,%d pixels=%u raster=%d,%d..%d,%d "
+                                  "center_overlap=%d\n",
+                          frame, car, probe->state, side, x, y,
+                          probe->guest_x, probe->guest_y,
+                          probe->raster_sprite_pixels,
+                          probe->raster_left, probe->raster_top,
+                          probe->raster_right, probe->raster_bottom,
+                          center_overlap);
+                if (++triple_with_pixels <= 12)
+                  fprintf(stderr, "[fzero-triple-camera] side_pixels frame=%ld "
+                                  "car=%d state=%02x side=%d pixels=%u "
+                                  "raster=%d,%d..%d,%d\n",
+                          frame, car, probe->state, side,
+                          probe->raster_sprite_pixels,
+                          probe->raster_left, probe->raster_top,
+                          probe->raster_right, probe->raster_bottom);
+              }
               if (++triple_with_reservation <= 12)
                 fprintf(stderr, "[fzero-triple-camera] side_reservation frame=%ld "
                                 "car=%d state=%02x side=%d x=%.1f y=%.1f "
@@ -754,10 +780,13 @@ int main(int argc, char **argv) {
   if (triple_audit)
     fprintf(stderr, "[fzero-triple-camera] race=%u accepted=%u rejected=%u "
                     "side_anchors=%u with_reservation=%u with_pixels=%u "
-                    "missing_oam=%u\n",
+                    "missing_oam=%u center_overlap=%u outside_center=%u "
+                    "pixel_range=%u..%u\n",
             triple_race, triple_accepted, triple_rejected,
             triple_side_anchors, triple_with_reservation,
-            triple_with_pixels, triple_missing_oam);
+            triple_with_pixels, triple_missing_oam,
+            triple_pixels_in_center, triple_pixels_outside_center,
+            triple_with_pixels ? triple_pixels_min : 0, triple_pixels_max);
   if (getenv("FZERO_TRIPLE_ATLAS_AUDIT"))
     fprintf(stderr, "[fzero-triple-atlas-audit] race=%u rejected=%u "
                     "checked=%u mismatched=%u\n", triple_atlas_audit.race,
