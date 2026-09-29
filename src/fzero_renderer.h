@@ -49,3 +49,10 @@ typedef struct FzeroTripleVehicleProbe {
 bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
                                       int logical_width,
                                       FzeroTripleVehicleProbe out[6]);
+/* Offline-only side-car placement preview. Decodes only captured, owner-tagged
+ * OBJ art and projects it as a center-facing billboard at the calibrated
+ * ground anchor. This intentionally does not run in the game presenter. */
+bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
+                                        const FzeroTripleRig *rig,
+                                        int logical_width,
+                                        unsigned *written_pixels);

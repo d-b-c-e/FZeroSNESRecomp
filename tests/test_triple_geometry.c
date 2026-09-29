@@ -41,6 +41,32 @@ int main(void) {
     CHECK(fabs(projected_x - 640) < 1e-9);
     CHECK(fabs(projected_y - 900) < 1e-9);
   }
+  /* A center-facing sprite pixel at a car's depth must retain the source
+   * pixel scale on the center panel, while remaining projectable onto the
+   * angled panels for the offline side-vehicle preview. */
+  FzeroTripleVec3 car_anchor = {20, -80, -500};
+  double center_anchor_px_x, center_anchor_px_y, sprite_x, sprite_y;
+  CHECK(FzeroTripleProjectDirection(&panel[1], car_anchor, 2560, 1440,
+                                    &center_anchor_px_x, &center_anchor_px_y));
+  FzeroTripleVec3 sprite_point = {
+      car_anchor.x + 10 * rig.width_mm / 342 * (500 / rig.eye_distance_mm),
+      car_anchor.y - 8 * rig.height_mm / 224 * (500 / rig.eye_distance_mm),
+      car_anchor.z};
+  CHECK(FzeroTripleProjectDirection(&panel[1], sprite_point, 2560, 1440,
+                                    &sprite_x, &sprite_y));
+  CHECK(fabs(sprite_x - center_anchor_px_x - 10.0 * 2560 / 342) < 1e-9);
+  CHECK(fabs(sprite_y - center_anchor_px_y - 8.0 * 1440 / 224) < 1e-9);
+  for (int side = 0; side < 3; side += 2) {
+    FzeroTripleVec3 ray;
+    CHECK(FzeroTripleProjectDirection(&panel[side], sprite_point, 2560, 1440,
+                                      &sprite_x, &sprite_y));
+    int x = (int)lround(sprite_x), y = (int)lround(sprite_y);
+    if (x < 0 || x >= 2560 || y < 0 || y >= 1440) continue;
+    CHECK(FzeroTripleRay(&panel[side], x, y, 2560, 1440, &ray));
+    double depth = sprite_point.z / ray.z;
+    CHECK(fabs(depth * ray.x - sprite_point.x) < 2);
+    CHECK(fabs(depth * ray.y - sprite_point.y) < 2);
+  }
   CHECK(fabs(left.x - center.x) > 0.25); /* three distinct sightlines */
   CHECK(fabs(panel[0].lower_left.x + panel[0].right.x +
              rig.bezel_gap_mm - panel[1].lower_left.x) < 1e-9);

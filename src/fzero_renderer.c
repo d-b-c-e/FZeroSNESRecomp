@@ -1236,3 +1236,133 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
   }
   return true;
 }
+
+bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
+                                        const FzeroTripleRig *rig,
+                                        int logical_width,
+                                        unsigned *written_pixels) {
+  if (written_pixels) *written_pixels = 0;
+  if (!sides || !rig || !written_pixels || logical_width < 256 ||
+      logical_width > FZERO_MAX_WIDTH || rig->panel_width_px < 2 ||
+      rig->panel_height_px < 2 ||
+      rig->panel_width_px > 4096 || rig->panel_height_px > 2160 ||
+      capacity < (size_t)2 * rig->panel_width_px * rig->panel_height_px)
+    return false;
+  FzeroTripleVehicleProbe probes[6];
+  if (!FzeroRendererProbeTripleVehicles(rig, logical_width, probes)) return false;
+  FzeroTripleSurface panels[3];
+  if (!FzeroTripleBuild(rig, panels)) return false;
+  const FzeroSourceFrame *f = &frames[current];
+  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
+  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
+  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
+  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
+  FzeroTripleGround ground;
+  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180,
+                                 &ground)) return false;
+  FzeroMode7Texel center = {course_centre(scanout.m7matrix, 4),
+                            course_centre(scanout.m7matrix, 5)};
+  const int camera_x = read_i16(f->ram + 0xb70);
+  const int camera_y = read_i16(f->ram + 0xb90);
+  const int pw = rig->panel_width_px, ph = rig->panel_height_px;
+  const size_t area = (size_t)pw * ph;
+  const FzeroViewport viewport = {FZERO_MAX_WIDTH,
+                                  (FZERO_MAX_WIDTH - 256) / 2, 0, true};
+  const size_t source_count = (size_t)FZERO_MAX_WIDTH * 224;
+  uint16_t *raster = malloc(source_count * sizeof(*raster));
+  uint32_t *colors = malloc(source_count * sizeof(*colors));
+  if (!raster || !colors) { free(raster); free(colors); return false; }
+  for (int car = 1; car < 6; ++car) {
+    const FzeroTripleVehicleProbe *probe = &probes[car];
+    if ((probe->state & 0x88) != 0x88 || !probe->oam_slots ||
+        !probe->raster_sprite_pixels) continue;
+    FzeroMode7Texel texel;
+    if (!FzeroTripleGroundWorldTexel(probe->world_x, probe->world_y,
+                                     camera_x, camera_y, center, &texel)) continue;
+    double dx = texel.x - ground.camera_x, dy = texel.y - ground.camera_y;
+    double lateral = dx * ground.right_x + dy * ground.right_y;
+    double forward = (dx * ground.forward_x + dy * ground.forward_y) /
+                     ground.forward_scale;
+    FzeroTripleVec3 anchor = {lateral,
+        -ground.camera_height * ground.pitch_cos + forward * ground.pitch_sin,
+        -ground.camera_height * ground.pitch_sin - forward * ground.pitch_cos};
+    if (!isfinite(anchor.x) || !isfinite(anchor.y) ||
+        !isfinite(anchor.z) || !(anchor.z < -1.0)) continue;
+    double scale_x = rig->width_mm / logical_width *
+                     (-anchor.z / rig->eye_distance_mm);
+    double scale_y = rig->height_mm / 224.0 *
+                     (-anchor.z / rig->eye_distance_mm);
+    if (!isfinite(scale_x) || !isfinite(scale_y) ||
+        !(scale_x > 0 && scale_y > 0)) continue;
+    for (int y = probe->raster_top; y <= probe->raster_bottom; ++y) {
+      if (y < 0 || y >= 224) continue;
+      memcpy(&scanout, f->lines[y].registers, PPU_SAVESTATE_REGS_SIZE);
+      sprites(&scanout, f, NULL, 1.0, y, viewport, true, false, car,
+              raster + (size_t)y * FZERO_MAX_WIDTH);
+      for (int x = probe->raster_left; x <= probe->raster_right; ++x) {
+        int sx = x + viewport.extra;
+        if (sx < 0 || sx >= FZERO_MAX_WIDTH) continue;
+        size_t index = (size_t)y * FZERO_MAX_WIDTH + sx;
+        if (raster[index] > 0x5000)
+          colors[index] = colour(&scanout, f->lines[y].palette,
+                                 raster[index], 0x500, false);
+      }
+    }
+    for (int side = 0; side < 3; side += 2) {
+      if (!probe->projected[side] || probe->panel_x[side] < 0 ||
+          probe->panel_x[side] >= pw || probe->panel_y[side] < 0 ||
+          probe->panel_y[side] >= ph) continue;
+      double left = INFINITY, top = INFINITY, right = -INFINITY, bottom = -INFINITY;
+      for (int corner = 0; corner < 4; ++corner) {
+        int sx = corner & 1 ? probe->raster_right + 1 : probe->raster_left;
+        int sy = corner & 2 ? probe->raster_bottom + 1 : probe->raster_top;
+        FzeroTripleVec3 point = {anchor.x + (sx - probe->guest_x) * scale_x,
+                                 anchor.y - (sy - probe->guest_y) * scale_y,
+                                 anchor.z};
+        double px, py;
+        if (!FzeroTripleProjectDirection(&panels[side], point, pw, ph,
+                                         &px, &py)) continue;
+        if (px < left) left = px;
+        if (px > right) right = px;
+        if (py < top) top = py;
+        if (py > bottom) bottom = py;
+      }
+      if (!isfinite(left) || !isfinite(top)) continue;
+      int x0 = (int)fmax(0, floor(left) - 2);
+      int x1 = (int)fmin(pw - 1, ceil(right) + 2);
+      int y0 = (int)fmax(0, floor(top) - 2);
+      int y1 = (int)fmin(ph - 1, ceil(bottom) + 2);
+      for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+          FzeroTripleVec3 ray;
+          if (!FzeroTripleRay(&panels[side], x, y, pw, ph, &ray) ||
+              fabs(ray.z) < 1e-9) continue;
+          double distance = anchor.z / ray.z;
+          if (!isfinite(distance) || !(distance > 0)) continue;
+          double source_x = probe->guest_x +
+                            (distance * ray.x - anchor.x) / scale_x;
+          double source_y = probe->guest_y -
+                            (distance * ray.y - anchor.y) / scale_y;
+          if (!isfinite(source_x) || !isfinite(source_y) ||
+              source_x < probe->raster_left - 1.0 ||
+              source_x > probe->raster_right + 1.0 ||
+              source_y < probe->raster_top - 1.0 ||
+              source_y > probe->raster_bottom + 1.0) continue;
+          int sx = (int)lround(source_x);
+          int sy = (int)lround(source_y);
+          if (sx < probe->raster_left || sx > probe->raster_right ||
+              sy < probe->raster_top || sy > probe->raster_bottom ||
+              sy < 0 || sy >= 224) continue;
+          sx += viewport.extra;
+          if (sx < 0 || sx >= FZERO_MAX_WIDTH) continue;
+          size_t source = (size_t)sy * FZERO_MAX_WIDTH + sx;
+          if (raster[source] <= 0x5000) continue;
+          sides[(size_t)(side ? 1 : 0) * area + (size_t)y * pw + x] = colors[source];
+          ++*written_pixels;
+        }
+    }
+  }
+  free(raster);
+  free(colors);
+  return true;
+}

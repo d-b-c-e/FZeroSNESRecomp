@@ -658,6 +658,15 @@ static void test_triple_sky_horizon(void) {
   publish_triple_sky(101, 31);
   uint64_t version = FzeroRendererTripleSidesVersion();
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  memcpy(cold, sides, sizeof(sides));
+  unsigned preview_pixels = 99;
+  CHECK(FzeroRendererPreviewTripleVehicles(sides, 2 * area, &rig, 342,
+                                           &preview_pixels));
+  CHECK(preview_pixels == 0);
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
+  CHECK(!FzeroRendererPreviewTripleVehicles(sides, 2 * area - 1, &rig, 342,
+                                            &preview_pixels));
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   CHECK(FzeroRendererTripleSidesVersion() != version);
   version = FzeroRendererTripleSidesVersion();
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));

@@ -9,12 +9,13 @@
 
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations] [--runtime] [--vehicles]\n"
+    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations] [--runtime] [--vehicles] [--vehicle-preview]\n"
                     "   or: FZeroTripleRuntimeCapture capture.bin --vehicles [--runtime]\n");
     return 2;
   }
   bool vehicles_only = !strcmp(argv[2], "--vehicles");
   bool show_vehicles = vehicles_only, runtime_size = false;
+  bool vehicle_preview = false;
   int iterations = 1;
   bool have_iterations = false;
   for (int i = 3; i < argc; ++i) {
@@ -24,6 +25,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "--vehicles") && !vehicles_only) {
       if (show_vehicles) return 2;
       show_vehicles = true;
+    } else if (!strcmp(argv[i], "--vehicle-preview") && !vehicles_only) {
+      if (vehicle_preview) return 2;
+      vehicle_preview = true;
     } else if (!vehicles_only && !have_iterations) {
       char *end;
       long value = strtol(argv[i], &end, 10);
@@ -90,6 +94,15 @@ int main(int argc, char **argv) {
   fprintf(stderr, "side_compositor_cpu_ms_per_frame=%.3f (%d iterations)\n",
           1000.0 * (clock() - start) / CLOCKS_PER_SEC / iterations, iterations);
   uint32_t *pixels = buffers[(iterations - 1) & 1];
+  if (vehicle_preview) {
+    unsigned written = 0;
+    if (!FzeroRendererPreviewTripleVehicles(pixels, (size_t)span * ph,
+                                            &rig, logical_width, &written)) {
+      fprintf(stderr, "vehicle preview rejected capture\n");
+      free(buffers[0]); free(buffers[1]); return 3;
+    }
+    fprintf(stderr, "vehicle_preview_pixels=%u (offline only)\n", written);
+  }
   FILE *out = fopen(argv[2], "wb");
   if (!out) { free(buffers[0]); free(buffers[1]); return 3; }
   fprintf(out, "P6\n%d %d\n255\n", span, ph);
