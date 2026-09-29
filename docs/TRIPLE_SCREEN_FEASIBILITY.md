@@ -49,11 +49,16 @@ verified live/visible game state, not just a plausible world coordinate.
 replay frame. The complete 11,364-frame recorded drive passed its state hashes:
 9,846 of 9,847 race-state frames accepted the triple calibration, with one
 rejection at frame 1042 near race entry. It found 47 projected side-panel
-opponent-anchor occurrences and four without OAM reservations (car 4 in state
+opponent-anchor occurrences; 43 carried OAM artwork in the captured frame,
+including car 3 with eight reserved tiles near the right panel's inner edge
+at frame 2777. Four had no OAM reservations (car 4 in state
 `CC`, at frames 4652 and 6197–6199). The state meaning remains unresolved;
 these numbers describe data availability, not intended car visibility or
 physical display output. No later sustained-race calibration rejection was
 observed in that recording.
+The opt-in camera trace logs the first twelve side anchors with artwork,
+including guest-screen position and reserved tile count, to select immutable
+captures for an offline sprite experiment without changing guest memory.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
