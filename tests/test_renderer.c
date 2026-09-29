@@ -600,6 +600,19 @@ static void test_hd_composition_cache(void) {
   for (size_t i = 0; i < count * 4; ++i) CHECK(hd[1 + i] == 0);
 }
 
+static void test_triple_fallback(void) {
+  FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, 16, 9};
+  uint32_t sides[2 * 16 * 9 + 2];
+  for (size_t i = 0; i < sizeof(sides) / sizeof(*sides); ++i)
+    sides[i] = 0xdeadbeef;
+  setup();
+  publish(100);
+  CHECK(!FzeroRendererDrawTripleSides(sides + 1, 2 * 16 * 9 - 1, &rig, 342));
+  CHECK(!FzeroRendererDrawTripleSides(sides + 1, 2 * 16 * 9, &rig, 342));
+  CHECK(sides[0] == 0xdeadbeef && sides[2 * 16 * 9 + 1] == 0xdeadbeef);
+  for (size_t i = 1; i <= 2 * 16 * 9; ++i) CHECK(sides[i] == 0xdeadbeef);
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -655,6 +668,7 @@ int main(void) {
   test_explosion_slots();
   test_hd_mode7();
   test_hd_composition_cache();
+  test_triple_fallback();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }

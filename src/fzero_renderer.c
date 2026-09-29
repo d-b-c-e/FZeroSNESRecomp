@@ -1,5 +1,6 @@
 #include "fzero_renderer.h"
 #include "fzero_mode7.h"
+#include "fzero_triple_ground.h"
 #include "snes/mode7_hd.h"
 
 #include <math.h>
@@ -770,4 +771,89 @@ bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *out, size_t capac
       viewport.width > FZERO_MAX_WIDTH ||
       capacity < (size_t)viewport.width * 224 * scale * scale) return false;
   return render_frame(out, viewport, alpha, scale, native);
+}
+
+bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
+                                  const FzeroTripleRig *rig, int logical_width) {
+  static FzeroTripleVec3 *cached_rays;
+  static FzeroTripleRig cached_rig;
+  if (!output || !rig || rig->panel_width_px < 2 || rig->panel_height_px < 2 ||
+      rig->panel_width_px > 4096 || rig->panel_height_px > 2160 ||
+      capacity < (size_t)2 * rig->panel_width_px * rig->panel_height_px)
+    return false;
+  const FzeroSourceFrame *f = &frames[current];
+  if (!f->valid || f->ram[0x54] != 2 || f->ram[0x55] < 3 || !f->ram[0x81])
+    return false;
+  FzeroTripleSurface panels[3];
+  if (!FzeroTripleBuild(rig, panels)) return false;
+  const int pw = rig->panel_width_px, ph = rig->panel_height_px;
+  if (!cached_rays || memcmp(&cached_rig, rig, sizeof(*rig))) {
+    FzeroTripleVec3 *rays = malloc((size_t)2 * pw * ph * sizeof(*rays));
+    if (!rays) return false;
+    for (int side = 0; side < 2; ++side)
+      for (int y = 0; y < ph; ++y)
+        for (int x = 0; x < pw; ++x)
+          if (!FzeroTripleRay(&panels[side ? 2 : 0], x, y, pw, ph,
+              &rays[(size_t)side * pw * ph + (size_t)y * pw + x])) {
+            free(rays);
+            return false;
+          }
+    free(cached_rays);
+    cached_rays = rays;
+    cached_rig = *rig;
+  }
+  memcpy(&scanout, f->lines[80].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line far = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 81);
+  memcpy(&scanout, f->lines[180].registers, PPU_SAVESTATE_REGS_SIZE);
+  if ((scanout.bgmode & 7) != 7) return false;
+  FzeroMode7Line near = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel, 181);
+  FzeroTripleGround ground;
+  if (!FzeroTripleGroundCalibrate(rig, logical_width, far, 80, near, 180, &ground))
+    return false;
+
+  FzeroCourse course = course_open(f, true);
+  /* Dark sky is intentional until the side BG/OBJ compositor exists. This
+   * framebuffer never includes SNES UI, so it cannot be stretched to a side. */
+  memset(output, 0, (size_t)2 * pw * ph * sizeof(*output));
+  for (int y = 0; y < ph; ++y) {
+    int source_y = (int)((y + 0.5) * 224 / ph);
+    if (source_y > 223) source_y = 223;
+    const FzeroRasterLine *raster = &f->lines[source_y];
+    memcpy(&scanout, raster->registers, PPU_SAVESTATE_REGS_SIZE);
+    if ((scanout.bgmode & 7) != 7 || (scanout.inidisp & 128)) continue;
+    FzeroMode7Line line = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel,
+                                               (unsigned)source_y + 1);
+    FzeroCourseLine reference = course_line(course.camera_x, course.camera_y,
+        course_centre(scanout.m7matrix, 4), course_centre(scanout.m7matrix, 5));
+    FzeroTripleVec3 left_ray, right_ray;
+    FzeroMode7Texel align_left, align_right;
+    bool align = FzeroTripleRay(&panels[1], pw / 2 - 1, y, pw, ph, &left_ray) &&
+        FzeroTripleRay(&panels[1], pw / 2, y, pw, ph, &right_ray) &&
+        FzeroTripleGroundLocate(&ground, left_ray, &align_left) &&
+        FzeroTripleGroundLocate(&ground, right_ray, &align_right);
+    FzeroTripleLineAlignment alignment;
+    align = align && FzeroTripleGroundBuildLineAlignment(line, align_left,
+        align_right, logical_width, pw, &alignment);
+    for (int side = 0; side < 2; ++side) {
+      FzeroCourseCache cache = kCourseCacheEmpty;
+      for (int x = 0; x < pw; ++x) {
+        FzeroMode7Texel texel;
+        FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph + (size_t)y * pw + x];
+        if (!align || !FzeroTripleGroundLocate(&ground, ray, &texel) ||
+            !FzeroTripleGroundApplyLineAlignment(&alignment, texel,
+                &texel)) continue;
+        texel.x = floor(texel.x);
+        texel.y = floor(texel.y);
+        int tile = course_sample(&course, &reference, &cache, texel);
+        unsigned index = FzeroMode7Fetch(&line, f->vram, texel, tile);
+        uint16_t layer = index ? (uint16_t)(0x5000 | index) : 0x500;
+        uint16_t main = scanout.screenEnabled[0] & 1 ? layer : 0x500;
+        uint16_t sub = scanout.screenEnabled[1] & 1 ? layer : 0x500;
+        output[(size_t)side * pw * ph + (size_t)y * pw + x] =
+            colour(&scanout, raster->palette, main, sub, false);
+      }
+    }
+  }
+  return true;
 }

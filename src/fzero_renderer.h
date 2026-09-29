@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fzero_video.h"
+#include "fzero_triple_geometry.h"
 #include "snes/ppu.h"
 
 void FzeroRendererReset(void);
@@ -20,3 +21,7 @@ bool FzeroRendererDrawPresentation(uint32_t *native, uint32_t *hd, size_t hd_cap
 bool FzeroRendererHasFrame(void);
 bool FzeroRendererLoadCapture(const char *path);
 const uint32_t *FzeroRendererStockFrame(void);
+/* Experimental live Mode 7 side panels. Output is two contiguous ARGB panels,
+ * each panel_width*panel_height pixels. False means draw the stock fallback. */
+bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
+                                  const FzeroTripleRig *rig, int logical_width);
