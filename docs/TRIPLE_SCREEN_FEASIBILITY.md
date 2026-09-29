@@ -45,6 +45,15 @@ This demonstrates a missing-artwork case in the captured frame, but the car's
 state flags have not been fully decoded, so it is not proof that that car
 should have been visible to the player. Reprojection must be gated by a
 verified live/visible game state, not just a plausible world coordinate.
+`FZERO_TRIPLE_CAMERA_TRACE=1` runs the same read-only check on every headless
+replay frame. The complete 11,364-frame recorded drive passed its state hashes:
+9,846 of 9,847 race-state frames accepted the triple calibration, with one
+rejection at frame 1042 near race entry. It found 47 projected side-panel
+opponent-anchor occurrences and four without OAM reservations (car 4 in state
+`CC`, at frames 4652 and 6197–6199). The state meaning remains unresolved;
+these numbers describe data availability, not intended car visibility or
+physical display output. No later sustained-race calibration rejection was
+observed in that recording.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
