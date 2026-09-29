@@ -43,6 +43,20 @@ $env:SNESRECOMP_MSU1 = 'E:\Source\fzero-triple-wheel-integration\build-integrati
 The force trace prints spring, damper, road, and collision requests without
 calling the wheel DLL. A matching input/WRAM replay proves repeatable game
 simulation for that case; it does **not** prove identical GPU presentation or
-delivered wheel torque. Visual frame checks and a shared toolkit force-signal
-schema are follow-on work. The binary `.fzpt` is intentionally a F-Zero input
+delivered wheel torque. Automated GPU frame comparison and a shared toolkit
+force-signal schema are follow-on work. The binary `.fzpt` is intentionally a F-Zero input
 adapter, not a replacement for Cruis'n Collection's MAME INP format.
+
+To replay the same drive through the experimental SDL/Surround renderer,
+set `FZERO_REPLAY_PLAYTHROUGH` to the case and run the experimental executable
+with the ROM path as its argument. Keep the recorded video's 16:9 center,
+MSU mode and triple-screen settings. This path validates every WRAM checkpoint,
+exits when the drive ends, does not write SRAM, and **never initializes the
+physical FFB device**. `SDL_AUDIODRIVER=dummy` silences the test without
+changing the game's audio-consumer timing.
+
+The optional `Mods → Reduce crash flashes` setting (or one-run
+`FZERO_SUPPRESS_RACE_FLASH=1`) holds the last displayed frame during a brief,
+near-white race-impact flash. The game and FFB still advance. It is off by
+default, and the environment variable `0` overrides an enabled launcher
+setting for A/B comparison.

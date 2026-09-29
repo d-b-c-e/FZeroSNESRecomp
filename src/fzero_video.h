@@ -26,6 +26,7 @@ typedef struct FzeroVideoSettings {
   unsigned hd_scale; /* Integer 2..10; retained while disabled. */
   bool diagnostics; /* Opt-in local performance reports; off by default. */
   bool triple_screen; /* Experimental Surround ground projection. */
+  bool reduce_crash_flash; /* Hold the prior presentation over brief white impact frames. */
 } FzeroVideoSettings;
 
 typedef struct FzeroViewport {

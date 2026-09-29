@@ -97,10 +97,11 @@ static void config_tests(void) {
   FzeroVideoDefaults(&a);
   a.enhanced = true; a.aspect = FZERO_ASPECT_FIT; a.fps = 165;
   a.triple_screen = true;
+  a.reduce_crash_flash = true;
   CHECK(FzeroVideoSave(&a, "test-video.ini"));
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165 &&
-        b.triple_screen);
+        b.triple_screen && b.reduce_crash_flash);
   a.fps = 0; a.aspect = FZERO_ASPECT_21_9;
   CHECK(FzeroVideoSave(&a, "test-video.ini")); /* atomic replacement */
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));

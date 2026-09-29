@@ -11,9 +11,9 @@ static char error_text[128];
 static const char *const aspects[] = {"16:9", "21:9", "32:9", "Fit"};
 static const char *const rates[] = {"Auto", "60", "90", "120", "144", "165", "240", "360"};
 #define COPY(field, value) snprintf(field, sizeof(field), "%s", value)
-static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe", "fzero-hd-mode7", "fzero-diagnostics", "fzero-wheel", "fzero-ffb", "fzero-triple-screen"};
-static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe", "hd-mode7", "diagnostics", "wheel", "force-feedback", "triple-screen"};
-static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe", "HD Mode 7", "Diagnostics", "Racing wheel controls", "Force feedback", "Triple Screen (experimental)"};
+static const char *const packages[] = {"fzero-widescreen", "fzero-presentation-fps", "bs-deluxe", "fzero-hd-mode7", "fzero-diagnostics", "fzero-wheel", "fzero-ffb", "fzero-triple-screen", "fzero-flash-reduction"};
+static const char *const features[] = {"widescreen", "presentation-fps", "bs-deluxe", "hd-mode7", "diagnostics", "wheel", "force-feedback", "triple-screen", "flash-reduction"};
+static const char *const names[] = {"Widescreen", "Presentation FPS", "BS Deluxe", "HD Mode 7", "Diagnostics", "Racing wheel controls", "Force feedback", "Triple Screen (experimental)", "Reduce crash flashes"};
 static const char *const descriptions[] = {
   "Expand the race view and anchor the HUD at its outer edges.",
   "Choose the presentation rate independently of widescreen and game speed.",
@@ -22,7 +22,8 @@ static const char *const descriptions[] = {
   "Record hardware, active video settings and frame timings in the diagnostics folder beside the game (beside the AppImage on Linux). Off by default. Enable, play through a slowdown, then attach the newest performance JSONL file to your report. Logs stay on your machine; no ROM or save data is included.",
   "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. Button indices are zero-based SDL joystick buttons.",
   "Speed-dependent centering, damping, road texture and collision impulses on the chosen wheel.",
-  "Experimental three-panel Mode 7 ground on a 7680x1440 Surround display. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen and no shader."
+  "Experimental three-panel Mode 7 ground on a 7680x1440 Surround display. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen and no shader.",
+  "Hold the previous image through the brief near-white frames that follow hard impacts. Game simulation and force feedback continue; only the flash is hidden."
 };
 typedef struct WheelOption { const char *key, *label; int fallback, min, max; } WheelOption;
 static const WheelOption wheel_options[] = {
@@ -57,9 +58,9 @@ static char ffb_devices[16][256];
 static int ffb_device_count;
 static const char *wheel_config;
 static void (*wheel_write)(const char *, const char *, const char *, const char *);
-static int count(void *ctx) { (void)ctx; return wheel_config ? 8 : 6; }
+static int count(void *ctx) { (void)ctx; return wheel_config ? 9 : 7; }
 static int identity(const char *package, const char *feature) {
-  if (package && feature) for (int i = 0; i < 8; ++i) {
+  if (package && feature) for (int i = 0; i < 9; ++i) {
     if (!wheel_config && (i == 5 || i == 6)) continue;
     if (!strcmp(package, packages[i]) && !strcmp(feature, features[i])) return i + 1;
   }
@@ -68,25 +69,25 @@ static int identity(const char *package, const char *feature) {
 static int package_get(void *ctx, int index, RecompLauncherCModPackage *out) {
   (void)ctx;
   if (index < 0 || index >= count(NULL) || !out) return 0;
-  if (!wheel_config && index == 5) index = 7;
+  if (!wheel_config && index >= 5) index += 2;
   memset(out, 0, sizeof(*out));
   COPY(out->id, packages[index]); COPY(out->version, "1");
   COPY(out->name, names[index]); COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 8 ? video->reduce_crash_flash : index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   return 1;
 }
 static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
   (void)ctx;
   if (index < 0 || index >= count(NULL) || !out) return 0;
-  if (!wheel_config && index == 5) index = 7;
+  if (!wheel_config && index >= 5) index += 2;
   memset(out, 0, sizeof(*out));
   COPY(out->id, features[index]); COPY(out->package_id, packages[index]);
   COPY(out->package_name, names[index]); COPY(out->package_version, "1");
   COPY(out->name, names[index]); COPY(out->group, index == 5 || index == 6 ? "Controls" : index == 4 ? "Support" : index == 2 ? "Content" : "Presentation");
   COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
-  out->enabled = index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+  out->enabled = index == 8 ? video->reduce_crash_flash : index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   COPY(out->status, index == 7 && out->enabled ? "Experimental: side sprites missing" : out->enabled ? "Enabled" : "Disabled");
   if (index == 3 && video->hd_scale > 4) {
     snprintf(out->description, sizeof(out->description),
@@ -95,14 +96,14 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
         "Try 2x and 60 FPS if performance drops.", descriptions[index], video->hd_scale);
     COPY(out->status, "Warning: high CPU and memory use above 4x");
   }
-  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 2 : index == 2 || index == 4 || index == 7 ? 0 : 1;
+  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 2 : index == 2 || index == 4 || index == 7 || index == 8 ? 0 : 1;
   return 1;
 }
 static int option_get(void *ctx, const char *package, const char *feature, int index,
                       RecompLauncherCModOption *out) {
   (void)ctx;
   int kind = identity(package, feature);
-  if (!kind || kind == 3 || kind == 5 || kind == 8 || !out) return 0;
+  if (!kind || kind == 3 || kind == 5 || kind == 8 || kind == 9 || !out) return 0;
   if (kind == 6 && index >= 0 && index < WHEEL_OPTIONS) {
     const WheelOption *spec = &wheel_options[index];
     memset(out, 0, sizeof(*out));
@@ -189,7 +190,8 @@ static int choice_get(void *ctx, const char *package, const char *feature,
 static int enable(void *ctx, const char *package, const char *feature, int enabled) {
   (void)ctx;
   if (!identity(package, feature)) return 0;
-  if (identity(package, feature) == 8) video->triple_screen = enabled != 0;
+  if (identity(package, feature) == 9) video->reduce_crash_flash = enabled != 0;
+  else if (identity(package, feature) == 8) video->triple_screen = enabled != 0;
   else if (identity(package, feature) == 7) ffb_enabled = enabled != 0;
   else if (identity(package, feature) == 6) wheel_enabled = enabled != 0;
   else if (identity(package, feature) == 5) video->diagnostics = enabled != 0;

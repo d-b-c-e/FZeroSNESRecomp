@@ -1045,6 +1045,19 @@ static void overlay_draw_sdl(const FzeroPresenter *p, const uint32_t *panel,
  * after a present, what a read-back returns is undefined. */
 static void overlay_dump(const FzeroPresenter *p, int is_menu);
 
+static unsigned source_frame_mean(const uint8_t *pixels, int width, int height) {
+  if (!pixels || width <= 0 || height <= 0) return 0;
+  unsigned sum = 0, samples = 0;
+  const uint32_t *sample_pixels = (const uint32_t *)pixels;
+  for (int y = height / 32; y < height; y += height / 16)
+    for (int x = width / 64; x < width; x += width / 32) {
+      uint32_t color = sample_pixels[(size_t)y * width + x];
+      sum += ((color >> 16) & 255) + ((color >> 8) & 255) + (color & 255);
+      ++samples;
+    }
+  return samples ? sum / (3 * samples) : 0;
+}
+
 /* One present, with an optional panel over it. The game image is whatever is
  * already in `pixels`: while a panel is up the guest is frozen, so the frame
  * behind it is the moment the player stopped at. */
@@ -1060,15 +1073,7 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
   if (getenv("FZERO_RENDER_TRACE") && !panel && pixels) {
     static unsigned count, previous_mean;
     static int previous_hd = -1;
-    unsigned sum = 0, samples = 0;
-    const uint32_t *sample_pixels = (const uint32_t *)pixels;
-    for (int y = height / 32; y < height; y += height / 16)
-      for (int x = width / 64; x < width; x += width / 32) {
-        uint32_t color = sample_pixels[(size_t)y * width + x];
-        sum += ((color >> 16) & 255) + ((color >> 8) & 255) + (color & 255);
-        ++samples;
-      }
-    unsigned mean = samples ? sum / (3 * samples) : 0;
+    unsigned mean = source_frame_mean(pixels, width, height);
     int hd = hd_frame != NULL;
     if (count++ % 120 == 0 || (count > 2 && mean > previous_mean + 24 &&
                                mean > previous_mean * 3 / 2) ||
@@ -1945,6 +1950,10 @@ int main(int argc, char **argv) {
   const FzeroScriptedState scripted_load = parse_scripted_state("FZERO_STATE_LOAD_AT");
   double next_display_check = 0;
   uint64_t presentations = 0, missed_presentations = 0;
+  const char *reduce_flash_env = getenv("FZERO_SUPPRESS_RACE_FLASH");
+  bool reduce_race_flash = reduce_flash_env && *reduce_flash_env ?
+      strcmp(reduce_flash_env, "0") != 0 : g_video.reduce_crash_flash;
+  unsigned suppressed_flashes = 0;
   FzeroPresenter presenter;
   memset(&presenter, 0, sizeof(presenter));
   presenter.window = window;
@@ -2284,17 +2293,32 @@ int main(int argc, char **argv) {
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       FzeroPresent(triple_active ? 1.0 : FzeroClockAlpha(&clock, now));
       FzeroDiagnosticsEnd(FZERO_DIAG_COMPOSITION, diagnostic_start);
-      present_frame(&presenter, NULL, 0, 0, 0);
-      FzeroDiagnosticsPresented();
-      /* Offer what was just presented as the next save's thumbnail and as
-       * the filmstrip's frame for the next capture. Both downsample into
-       * small fixed buffers and keep nothing else. */
-      snes_savestate_menu_note_frame((const uint32_t *)pixels, logical_width,
+      const uint32_t *hd_frame = FzeroHdFrame();
+      unsigned hd_scale = FzeroHdScale();
+      const uint8_t *source = hd_frame ? (const uint8_t *)hd_frame : pixels;
+      unsigned mean = reduce_race_flash ? source_frame_mean(source,
+          logical_width * (int)hd_scale, kFrameHeight * (int)hd_scale) : 0;
+      bool hold_flash = reduce_race_flash && g_ram[0x54] == 2 &&
+          g_ram[0x55] >= 3 && mean >= 225 && suppressed_flashes < 6;
+      if (hold_flash) {
+        ++suppressed_flashes;
+        fprintf(stderr, "[fzero-flash] held race presentation at frame=%ld "
+                        "mean=%u consecutive=%u\n", frames, mean,
+                suppressed_flashes);
+      } else {
+        suppressed_flashes = 0;
+        present_frame(&presenter, NULL, 0, 0, 0);
+        FzeroDiagnosticsPresented();
+        /* Offer what was just presented as the next save's thumbnail and as
+         * the filmstrip's frame for the next capture. Both downsample into
+         * small fixed buffers and keep nothing else. */
+        snes_savestate_menu_note_frame((const uint32_t *)pixels, logical_width,
+                                       kFrameHeight);
+        snes_rewind_note_framebuffer((const uint32_t *)pixels, logical_width,
                                      kFrameHeight);
-      snes_rewind_note_framebuffer((const uint32_t *)pixels, logical_width,
-                                   kFrameHeight);
+        ++presentations;
+      }
       FzeroClockPresentationDone(&clock, monotonic_seconds());
-      ++presentations;
     }
     if (running) {
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
