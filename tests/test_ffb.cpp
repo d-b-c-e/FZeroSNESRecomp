@@ -24,6 +24,20 @@ int main() {
   CHECK(out.road_magnitude > 0 && out.road_magnitude <= 10000);
   CHECK(out.spring_coefficient > 0 && out.spring_coefficient <= 10000);
   CHECK(out.damper_coefficient > 0 && out.damper_coefficient <= 10000);
+  /* Typical race movement must exceed the toolkit's condition-update step
+   * at the default 35% strength, or no centering reaches the wheel. */
+  FzeroFfbState race_state{};
+  put16(ram + 0x0b70, 2312); put16(ram + 0x0b90, 344);
+  FzeroFfbCompute(&race_state, ram, sizeof(ram), 0, 35, &out);
+  put16(ram + 0x0b70, 2314);
+  FzeroFfbCompute(&race_state, ram, sizeof(ram), 0, 35, &out);
+  CHECK(out.spring_coefficient > 500);
+  for (int i = 1; i <= 8; ++i) {
+    put16(ram + 0x0b70, (uint16_t)(2314 + 2 * i));
+    FzeroFfbCompute(&race_state, ram, sizeof(ram), 0, 35, &out);
+  }
+  CHECK(out.damper_coefficient > 500);
+  put16(ram + 0x0b70, 2);
   ram[0xe0] = 1;
   FzeroFfbCompute(&state, ram, sizeof(ram), 0, 100, &out);
   CHECK(out.collision_pulse == 1);

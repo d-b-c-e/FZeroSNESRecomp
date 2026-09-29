@@ -89,7 +89,10 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
   if (!racing) return;
 
   const int direction = (input & 0x0040u) ? 1 : (input & 0x0080u) ? -1 : 0;
-  const float speed_scale = std::min(state->speed / 24.0f, 1.0f);
+  /* A captured active race at ~300 km/h advances the position by about two
+   * world units per frame. Dividing by 24 kept the default 35% spring below
+   * WheelFfb's 500-unit update step, leaving the wheel effectively limp. */
+  const float speed_scale = std::min(state->speed / 2.0f, 1.0f);
   out->constant_force = (int)(direction * strength * 55.0f * speed_scale);
   out->spring_coefficient = (int)(strength * 100.0f * speed_scale);
   out->damper_coefficient = (int)(strength * 40.0f * speed_scale);
