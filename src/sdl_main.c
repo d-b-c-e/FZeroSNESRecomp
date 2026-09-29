@@ -1725,7 +1725,8 @@ int main(int argc, char **argv) {
   }
   if (replay_path && *replay_path) {
     char state_path[2048];
-    if (FzeroReplayHasInput() ||
+    if (FzeroReplayHasInput() || getenv("FZERO_VIEWPORT_SCRIPT") ||
+        getenv("FZERO_STATE_SAVE_AT") || getenv("FZERO_STATE_LOAD_AT") ||
         !FzeroPlaythroughStatePath(replay_path, state_path, sizeof(state_path)) ||
         !FzeroPlaythroughPlaybackOpen(&g_playthrough, replay_path,
                                      playthrough_rom_sha) ||
@@ -2010,7 +2011,11 @@ int main(int argc, char **argv) {
     int panel = 0; /* 0 none, 1 save-state browser, 2 rewind filmstrip */
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) running = 0;
-      FzeroGamepadEvent(&pad, &event);
+      if (g_playthrough.mode == 2 && event.type == SDL_KEYDOWN) {
+        if (SNESRECOMP_SDL_EVENT_KEY(event) == SDLK_ESCAPE) running = 0;
+        continue; /* no user hotkey may mutate a verified visual replay */
+      }
+      if (g_playthrough.mode != 2) FzeroGamepadEvent(&pad, &event);
       if (event.type == SDL_KEYDOWN && !event.key.repeat) {
         /* Hotkeys are tested before the quick slots, so a binding on an
          * F-key takes that key from the slot behind it. */
@@ -2088,7 +2093,7 @@ int main(int argc, char **argv) {
     }
 
     update_state_feedback(window, &state_feedback_until);
-    {
+    if (g_playthrough.mode != 2) {
       int slot = debug_server_consume_loadstate();
       if (slot >= 0)
         perform_state_action(window, 0, slot, &state_feedback_until);
