@@ -23,6 +23,13 @@ integration branch now has an opt-in three-panel ground compositor, but the
 normal installed game still uses one wide view. Side-panel sprite reprojection
 is not active yet.
 
+The ground adapter also has an inverse projection from an unwrapped Mode 7
+ground coordinate to subpixel coordinates on any physical panel. Synthetic
+and captured-race calibrations round-trip through all three panel planes in
+ROM-free tests. This is geometry groundwork for placing world-anchored objects;
+it does not recover missing OAM artwork, infer a vehicle's exact ground anchor,
+or make the current side buffers render vehicles or effects.
+
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
 write three distinct ground panels into one PPM span. A per-scanline similarity
