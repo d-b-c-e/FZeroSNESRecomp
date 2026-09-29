@@ -53,6 +53,22 @@ An unwritable diagnostics folder does not stop the game.
   includes any waits inside simulation. Pause, menu and state-action events
   help identify discontinuities; a long menu can span a sample interval.
 
+For repeatable summaries without sharing private JSONL files, run
+`py -3 tools/summarize_triple_perf.py diagnostics/performance-*.jsonl`. It
+selects race-scene samples, weights stage means by call counts, and reports the
+largest missed-deadline intervals. A sample's scene is its **end** state, so
+race entry/exit intervals can straddle another scene. The tool labels old
+combined draw timing and new split timing separately; those draw means must
+not be compared as if they measure the same work.
+
+On the two older 59.95 Hz Surround recordings used for the sky/ground
+comparison, the sky-enabled drive had 269 missed deadlines in race-labelled
+samples versus 46 in the ground-only drive. Their combined draw means were
+8.324 and 6.578 ms/call, while composition means were 4.477 and 4.495 ms.
+The runs were not simultaneous and include CPU-side projection inside the old
+draw bucket, so these numbers flag a pacing risk, not a GPU bottleneck proof.
+A complete replay with the newer split-stage diagnostics is still needed.
+
 Instrumentation adds a small amount of work while enabled. With the option
 off there are no diagnostic files, allocations or performance-counter reads
 from the logger. The existing crash-report system is independent.
