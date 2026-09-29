@@ -424,6 +424,22 @@ int main(int argc, char **argv) {
       fprintf(stderr, "[fzero-viewport] frame=%ld width=%d\n", frame, frame_width);
     }
     (void)RtlRunFrame(scripted_input(input_spans, input_span_count, frame));
+    if (getenv("FZERO_FFB_RAM_TRACE") && g_ram[0x54] == 2 && g_ram[0x55] >= 3) {
+      static uint16_t previous_energy = 0xffff;
+      static uint32_t previous_flags = UINT32_MAX;
+      uint16_t energy = (uint16_t)(g_ram[0xc9] | (g_ram[0xca] << 8));
+      uint32_t flags = (uint32_t)g_ram[0xe0] | ((uint32_t)g_ram[0xe8] << 8) |
+                       ((uint32_t)g_ram[0xe9] << 16) | ((uint32_t)g_ram[0xf5] << 24);
+      if (flags != previous_flags ||
+          (previous_energy != 0xffff && previous_energy > energy + 8) ||
+          frame % 120 == 0)
+        fprintf(stderr, "[fzero-ffb-ram] frame=%ld input=%03x energy=%u prev=%u "
+                        "flags=%08x rough=%02x speed=%02x\n", frame,
+                scripted_input(input_spans, input_span_count, frame), energy,
+                previous_energy, flags, g_ram[0xc7], g_ram[0xbd]);
+      previous_energy = energy;
+      previous_flags = flags;
+    }
     if (getenv("FZERO_SCENE_TRACE"))
       fprintf(stderr, "scene %ld state=%02x,%02x,%02x training=%02x scenery=%02x sound=%02x,%02x,%02x,%02x,%02x msu=%02x,%02x,%02x,%02x brightness=%02x\n",
               frame, g_ram[0x54], g_ram[0x55], g_ram[0x56], g_ram[0x58], g_ram[0x81],
