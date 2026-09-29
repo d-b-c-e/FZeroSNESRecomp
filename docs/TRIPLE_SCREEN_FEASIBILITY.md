@@ -223,6 +223,12 @@ Inlining the adjacent guarded rational-row lookup reduced the same two
 side images stayed byte-identical, and another full verified replay passed
 164/164 atlas comparisons with zero side rejections. The incremental timing
 gain is small; no physical presentation rate is inferred from it.
+With both per-pixel call optimizations, two 300-iteration captures at the
+tool's optional 640×360 side resolution took 8.307/8.277 ms per pair,
+versus 5.457 ms for one of those captures at the live 512×288 side
+resolution. The larger buffers are not enabled in SDL: that additional CPU
+cost may erase the remaining 59.95 Hz frame budget, and visual quality on
+the rig has not been assessed at either resolution after these changes.
 The SDL presenter now retains the uploaded side texture when another host
 presentation reuses the same projected emulated frame. A ROM-free test confirms
 the projection version remains stable on a cache hit and advances when the
