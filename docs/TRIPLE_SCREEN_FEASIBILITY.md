@@ -128,6 +128,15 @@ Additional private replay captures at frames 2,000, 4,000, 6,000, 8,000, and
 14.0–14.2 ms with direct skyline sampling. Both paths correctly rejected
 frame 11,200's non-race camera. These are offline side-buffer results, not a
 new Surround presentation test.
+An opt-in `FZERO_TRIPLE_ATLAS_AUDIT=1` headless replay now keeps the atlas warm
+through every race source frame and compares both complete 512×288 side
+buffers with direct panorama sampling every 60 frames. The 11,364-frame
+recorded drive passed: 164 comparisons, zero pixel mismatches. Its one earlier
+rejection was a captured countdown frame trailing the guest's race-state
+transition. Side projection now accepts that live countdown track; the same
+replay has zero rejections and still 164/164 matching comparisons. A ROM-free
+fixture checks the countdown case. This does not validate SDL or physical
+Surround presentation.
 The ground intersection now evaluates one rational projection per physical
 panel row instead of a normalized ray at every side pixel. Nine private race
 and impact captures remained byte-identical to the prior renderer. Alternating
