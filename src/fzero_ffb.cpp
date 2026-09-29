@@ -160,6 +160,12 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
     FzeroFfbShutdown();
     return;
   }
+  /* On some bases the first constant-force write loses exclusive access and
+   * reacquires it. Do that before creating the spring/damper/road effects:
+   * reacquisition can leave already-started effects silent until a pause. */
+  if (!s_ffb.SetDeviceForcesXY(0, 0))
+    std::fprintf(stderr, "[fzero-ffb] initial zero-force update rejected (HRESULT %08x)\n",
+                 (unsigned)s_ffb.GetLastHResult());
   /* SetHoldTimeoutMs starts a worker in WheelFfb.dll. Do not start it until
    * every early-return path has succeeded, or unload would strand the worker
    * executing code from an unloaded module. */
