@@ -129,14 +129,7 @@ bool FzeroTripleGroundBuildRow(const FzeroTripleGround *ground,
 
 bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
                                 int x, FzeroMode7Texel *texel) {
-  if (!row || !texel || x < 0) return false;
-  double down = row->down + x * row->down_step;
-  if (!(down > 1e-9) || !isfinite(down)) return false;
-  double reciprocal = 1.0 / down;
-  texel->x = row->camera_x + (row->x_num + x * row->x_step) * reciprocal;
-  texel->y = row->camera_y + (row->y_num + x * row->y_step) * reciprocal;
-  return isfinite(texel->x) && isfinite(texel->y) &&
-         fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
+  return FzeroTripleGroundRowLocateInline(row, x, texel);
 }
 
 bool FzeroTripleGroundHorizon(const FzeroTripleGround *ground,

@@ -1108,7 +1108,7 @@ static bool draw_triple_sides(uint32_t *output, size_t capacity,
         FzeroMode7Texel texel;
         bool located = false;
         if (align && use_row_projection)
-          located = FzeroTripleGroundRowLocate(&row, x, &texel);
+          located = FzeroTripleGroundRowLocateInline(&row, x, &texel);
         else if (align) {
           FzeroTripleVec3 ray = cached_ground_rays[(size_t)side * pw * ph +
               (size_t)y * pw + x];

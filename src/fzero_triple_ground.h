@@ -30,6 +30,19 @@ bool FzeroTripleGroundBuildRow(const FzeroTripleGround *ground,
                                FzeroTripleGroundRow *out);
 bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
                                 int x, FzeroMode7Texel *texel);
+/* Same guarded row intersection in the renderer's per-pixel translation unit;
+ * the public wrapper remains for diagnostic callers and tests. */
+static inline bool FzeroTripleGroundRowLocateInline(
+    const FzeroTripleGroundRow *row, int x, FzeroMode7Texel *texel) {
+  if (!row || !texel || x < 0) return false;
+  double down = row->down + x * row->down_step;
+  if (!(down > 1e-9) || !isfinite(down)) return false;
+  double reciprocal = 1.0 / down;
+  texel->x = row->camera_x + (row->x_num + x * row->x_step) * reciprocal;
+  texel->y = row->camera_y + (row->y_num + x * row->y_step) * reciprocal;
+  return isfinite(texel->x) && isfinite(texel->y) &&
+         fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
+}
 /* Exact fractional pixel row where a column's unnormalized panel ray is
  * parallel to the ground plane; unlike normalized end-ray interpolation,
  * the denominator is affine in screen Y. */
