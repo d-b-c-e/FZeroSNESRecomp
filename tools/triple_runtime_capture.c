@@ -20,22 +20,33 @@ int main(int argc, char **argv) {
   FzeroVideoSettings video;
   FzeroVideoDefaults(&video);
   int logical_width = FzeroCalculateViewport(&video, 2560, 1440).width;
-  uint32_t *pixels = calloc((size_t)span * ph, sizeof(*pixels));
-  if (!pixels) return 3;
+  uint32_t *buffers[2] = {
+      calloc((size_t)span * ph, sizeof(uint32_t)),
+      calloc((size_t)span * ph, sizeof(uint32_t))};
+  if (!buffers[0] || !buffers[1]) {
+    free(buffers[0]); free(buffers[1]);
+    return 3;
+  }
   int iterations = argc == 4 ? atoi(argv[3]) : 1;
-  if (iterations < 1 || iterations > 10000) { free(pixels); return 2; }
+  if (iterations < 1 || iterations > 10000) {
+    free(buffers[0]); free(buffers[1]);
+    return 2;
+  }
   clock_t start = clock();
   for (int i = 0; i < iterations; ++i)
-    if (!FzeroRendererDrawTripleSides(pixels, (size_t)span * ph,
+    /* Alternate destinations so the same-frame output cache cannot turn a
+     * multi-iteration benchmark into one render plus no-op calls. */
+    if (!FzeroRendererDrawTripleSides(buffers[i & 1], (size_t)span * ph,
                                      &rig, logical_width)) {
     fprintf(stderr, "runtime side projection rejected capture\n");
-    free(pixels);
+    free(buffers[0]); free(buffers[1]);
     return 3;
     }
-  fprintf(stderr, "side_ground_cpu_ms_per_frame=%.3f (%d iterations)\n",
+  fprintf(stderr, "side_compositor_cpu_ms_per_frame=%.3f (%d iterations)\n",
           1000.0 * (clock() - start) / CLOCKS_PER_SEC / iterations, iterations);
+  uint32_t *pixels = buffers[(iterations - 1) & 1];
   FILE *out = fopen(argv[2], "wb");
-  if (!out) { free(pixels); return 3; }
+  if (!out) { free(buffers[0]); free(buffers[1]); return 3; }
   fprintf(out, "P6\n%d %d\n255\n", span, ph);
   for (int y = 0; y < ph; ++y) {
     for (int side = 0; side < 2; ++side) {
@@ -45,12 +56,12 @@ int main(int argc, char **argv) {
                                 (unsigned char)(pixel >> 8),
                                 (unsigned char)pixel};
         if (fwrite(rgb, sizeof(rgb), 1, out) != 1) {
-          fclose(out); free(pixels); return 3;
+          fclose(out); free(buffers[0]); free(buffers[1]); return 3;
         }
       }
     }
   }
   int result = fclose(out);
-  free(pixels);
+  free(buffers[0]); free(buffers[1]);
   return result ? 3 : 0;
 }
