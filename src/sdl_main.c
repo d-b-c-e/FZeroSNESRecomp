@@ -1105,15 +1105,24 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
   uint64_t diagnostic_start = FzeroDiagnosticsBegin();
   SDL_UpdateTexture(p->texture, &source, pixels, width * kBytesPerPixel);
   FzeroDiagnosticsEnd(FZERO_DIAG_UPLOAD, diagnostic_start);
+  bool triple_ready = false;
+  if (p->triple_active && p->triple_texture && p->triple_pixels) {
+    diagnostic_start = FzeroDiagnosticsBegin();
+    triple_ready = FzeroRendererDrawTripleSides(p->triple_pixels,
+        (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
+        &kTripleRig, p->logical_width);
+    FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_PROJECTION, diagnostic_start);
+    if (triple_ready) {
+      diagnostic_start = FzeroDiagnosticsBegin();
+      SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
+                        kTriplePanelWidth * kBytesPerPixel);
+      FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_UPLOAD, diagnostic_start);
+    }
+  }
   diagnostic_start = FzeroDiagnosticsBegin();
   SDL_SetRenderDrawColor(p->renderer, 0, 0, 0, 255);
   SDL_RenderClear(p->renderer);
-  if (p->triple_active && p->triple_texture && p->triple_pixels &&
-      FzeroRendererDrawTripleSides(p->triple_pixels,
-          (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
-          &kTripleRig, p->logical_width)) {
-    SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
-                      kTriplePanelWidth * kBytesPerPixel);
+  if (triple_ready) {
     SDL_Rect left_src = {0, 0, kTriplePanelWidth, kTriplePanelHeight};
     SDL_Rect right_src = {0, kTriplePanelHeight, kTriplePanelWidth, kTriplePanelHeight};
     SDL_Rect left_dst = {0, 0, p->drawable_width / 3, p->drawable_height};

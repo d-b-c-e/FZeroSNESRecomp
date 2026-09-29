@@ -30,9 +30,12 @@ static uint64_t previous_simulation, previous_presentations, previous_missed;
 typedef struct Timing { uint64_t ticks, maximum, calls; } Timing;
 static Timing timings[FZERO_DIAG_STAGE_COUNT];
 static const char *const stage_names[] = {
-  "simulation", "ppu", "composition", "upload", "draw_submit", "present",
+  "simulation", "ppu", "composition", "triple_projection", "triple_upload",
+  "upload", "draw_submit", "present",
   "pacing_wait", "paused"
 };
+_Static_assert(sizeof(stage_names) / sizeof(stage_names[0]) ==
+               FZERO_DIAG_STAGE_COUNT, "diagnostic stage names must match enum");
 /* 0.25 ms bins through 128 ms, then overflow. Bounded even in long sessions. */
 static uint64_t intervals[513], interval_count, interval_max;
 static unsigned sequence;
