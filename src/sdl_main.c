@@ -564,7 +564,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
       "option overrides this when that mod is enabled.";
   game.has_shader = 1;
   game.msu1_supported = 1;
-  game.msu1_note = "Select a music folder containing Conn/Cubear v11 f-zero_msu1.ips and your PCM tracks. Works with stock F-Zero and BS Deluxe.";
+  game.msu1_note = "Select a music folder with PCM tracks and the matching Conn/Cubear v11 patch: f-zero_msu1_stock.ips for stock F-Zero, f-zero_msu1.ips for BS Deluxe.";
   game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
                                     wheel_guid,
                                     launcher_ini_kv_write, FzeroFfbListDevices);

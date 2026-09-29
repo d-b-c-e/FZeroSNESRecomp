@@ -1,4 +1,5 @@
 #include "fzero_msu.h"
+#include "fzero_deluxe.h"
 #include "common_rtl.h"
 #include "cpu_state.h"
 #include "sha256.h"
@@ -12,11 +13,16 @@
 
 static bool active;
 static char error[256];
-/* Conn/Cubear v11, from the patch-only archive linked by its authors at
+/* Conn/Cubear v11 patch-only archives. Stock and BS Deluxe are different:
+ * the Deluxe IPS on stock F-Zero starts PCM but fails to mute SPC music.
+ * https://www.zeldix.net/t1447p200-f-zero and
  * https://www.zeldix.net/t2768-bs-f-zero-deluxe-msu-1 . No patch is bundled. */
-static const uint8_t patch_hash[32] = {
+static const uint8_t deluxe_patch_hash[32] = {
   0x90,0x19,0x01,0x3f,0x08,0x5f,0xf1,0x6f,0x55,0x01,0xc4,0x51,0x65,0x31,0xa0,0x44,
   0xbc,0x5f,0x36,0x70,0x3a,0xad,0xb5,0x88,0x44,0xe6,0x7c,0x54,0x56,0x41,0x35,0x32};
+static const uint8_t stock_patch_hash[32] = {
+  0xe3,0x7b,0x51,0xf1,0x16,0x92,0x42,0x2c,0x5d,0x09,0xe6,0xf2,0x6b,0x00,0x3f,0x7b,
+  0xf4,0x6d,0x65,0x11,0x59,0xb2,0x5e,0xe7,0x02,0x50,0x89,0x40,0x01,0x76,0xfe,0xcd};
 /* A non-NULL empty program prevents calls into stock/Deluxe AOT routines
  * whose baked-in instructions would bypass the imported patch. */
 static const DispatchEntry patched_program[1] = {{0}};
@@ -35,6 +41,10 @@ static void set_pack(const char *value) {
 bool FzeroMsuPrepare(uint8_t **rom, size_t *size, const char *pack, const char *rom_path) {
   active = false;
   error[0] = 0;
+  const bool deluxe = FzeroDeluxeActive();
+  const char *patch_name = deluxe ? "f-zero_msu1.ips" : "f-zero_msu1_stock.ips";
+  const size_t patch_bytes = deluxe ? 709 : 784;
+  const uint8_t *expected_hash = deluxe ? deluxe_patch_hash : stock_patch_hash;
   if (!pack || !*pack || !strcmp(pack, "0") || !strcmp(pack, "off")) {
     set_pack("");
     return true;
@@ -67,21 +77,21 @@ bool FzeroMsuPrepare(uint8_t **rom, size_t *size, const char *pack, const char *
       if (!slash || (back && back > slash)) slash = back;
       if (slash) *slash = 0; else snprintf(directory, sizeof(directory), ".");
     }
-    if (snprintf(path, sizeof(path), "%s/f-zero_msu1.ips", directory) >= (int)sizeof(path)) goto invalid;
+    if (snprintf(path, sizeof(path), "%s/%s", directory, patch_name) >= (int)sizeof(path)) goto invalid;
   }
   FILE *file = fopen(path, "rb");
   if (!file) {
-    snprintf(error, sizeof(error), "Put Conn/Cubear v11 f-zero_msu1.ips in the selected music folder (or set FZERO_MSU1_PATCH).");
+    snprintf(error, sizeof(error), "Put Conn/Cubear v11 %s in the selected music folder (or set FZERO_MSU1_PATCH).", patch_name);
     set_pack("");
     return false;
   }
-  uint8_t patch[710], digest[32];
+  uint8_t patch[785], digest[32];
   size_t count = fread(patch, 1, sizeof(patch), file);
-  bool read_ok = !ferror(file) && count == 709 && fgetc(file) == EOF;
+  bool read_ok = !ferror(file) && count == patch_bytes && fgetc(file) == EOF;
   fclose(file);
   if (!read_ok) goto invalid;
   sha256_compute(patch, count, digest);
-  if (memcmp(digest, patch_hash, 32)) goto invalid;
+  if (memcmp(digest, expected_hash, 32)) goto invalid;
   if (!rom || !*rom || !size || (*size != 0x80000 && *size != 0x100000)) goto invalid;
   uint8_t *mapped = malloc(0x100000);
   if (!mapped) goto invalid;
@@ -95,9 +105,17 @@ bool FzeroMsuPrepare(uint8_t **rom, size_t *size, const char *pack, const char *
     size_t offset = (size_t)patch[pos] << 16 | (size_t)patch[pos+1] << 8 | patch[pos+2];
     size_t length = (size_t)patch[pos+3] << 8 | patch[pos+4];
     pos += 5;
-    if (!length || pos + length > count || offset + length > 0x100000) {
-      free(mapped); goto invalid;
+    if (!length) {
+      /* The stock v11 IPS uses standard IPS RLE records to clear its
+       * expanded LoROM banks. Deluxe v11 has only literal records. */
+      if (pos + 3 > count) { free(mapped); goto invalid; }
+      size_t run = (size_t)patch[pos] << 8 | patch[pos+1];
+      if (!run || offset + run > 0x100000) { free(mapped); goto invalid; }
+      memset(mapped + offset, patch[pos+2], run);
+      pos += 3;
+      continue;
     }
+    if (pos + length > count || offset + length > 0x100000) { free(mapped); goto invalid; }
     memcpy(mapped + offset, patch + pos, length);
     pos += length;
   }
@@ -107,10 +125,12 @@ bool FzeroMsuPrepare(uint8_t **rom, size_t *size, const char *pack, const char *
   interp_bridge_set_scheduler_aot_policy(0);
   set_pack(base);
   active = true;
-  fprintf(stderr, "[fzero-msu1] Conn/Cubear v11 active; patched cartridge runs through the interpreter\n");
+  fprintf(stderr, "[fzero-msu1] Conn/Cubear v11 %s patch active; cartridge runs through the interpreter\n",
+          deluxe ? "Deluxe" : "stock");
   return true;
 invalid:
-  snprintf(error, sizeof(error), "Unsupported MSU-1 patch or path. Expected Conn/Cubear v11 (709-byte IPS); no ROM changes applied.");
+  snprintf(error, sizeof(error), "Unsupported MSU-1 patch or path. Expected Conn/Cubear v11 %s (%zu-byte IPS); no ROM changes applied.",
+           patch_name, patch_bytes);
   set_pack("");
   return false;
 }

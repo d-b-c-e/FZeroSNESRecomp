@@ -88,19 +88,22 @@ loader. An unreadable or invalid preset falls back to unfiltered output.
 
 ### MSU-1 music
 
-1. Obtain the **Conn/Cubear v11** patch from the
-   [authors' BS F-Zero Deluxe MSU-1 page](https://www.zeldix.net/t2768-bs-f-zero-deluxe-msu-1).
-2. Extract `f-zero_msu1.ips` into your music pack's folder, alongside its
-   numbered `.pcm` tracks. Keep the pack's original track numbering and common
-   filename prefix. Use a pack made for this patch's track layout.
+1. Obtain the **Conn/Cubear v11** patch for your mode: the
+   [stock F-Zero patch](https://www.zeldix.net/t1447p200-f-zero) or the
+   [BS Deluxe patch](https://www.zeldix.net/t2768-bs-f-zero-deluxe-msu-1).
+2. Put `f-zero_msu1_stock.ips` (stock) or `f-zero_msu1.ips` (BS Deluxe) in
+   your music pack's folder alongside its numbered `.pcm` tracks. Both patch
+   files may coexist. Keep the pack's original track numbering and common
+   filename prefix.
 3. Enable **MSU-1** in **Settings > Sound** and select that folder.
 
-Keep using your **unmodified USA ROM**. The app verifies the exact v11 patch
-(709 bytes, SHA-256 `9019013f085ff16f5501c4516531a044bc5f36703aadb58844e67c5456413532`)
+Keep using your **unmodified USA ROM**. The app verifies the selected v11 patch
+(stock: 784 bytes, SHA-256 `e37b51f11692422c5d09e6f26b003f7bf46d651159b25ee7025089400176fecd`;
+Deluxe: 709 bytes, SHA-256 `9019013f085ff16f5501c4516531a044bc5f36703aadb58844e67c5456413532`)
 and applies it in memory, **after BS Deluxe** if enabled. No ROM file is
-rewritten. The patch and music are not included in downloads. Missing or
+rewritten. The patches and music are not included in downloads. Missing or
 unsupported patches produce a warning and leave the original soundtrack active.
-The patch handles missing PCM tracks through its original-audio fallback.
+The patches handle missing PCM tracks through their original-audio fallback.
 
 Stock and Deluxe have been exercised with synthetic tracks and a user-supplied
 JUD6MENT pack, widescreen, and high-refresh presentation. Compatibility is
