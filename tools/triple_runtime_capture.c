@@ -8,22 +8,46 @@
 #include <time.h>
 
 int main(int argc, char **argv) {
-  bool vehicles_only = argc == 3 && !strcmp(argv[2], "--vehicles");
-  if (argc < 3 || argc > 5 || (argc == 5 && strcmp(argv[4], "--vehicles"))) {
-    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations [--vehicles]]\n"
-                    "   or: FZeroTripleRuntimeCapture capture.bin --vehicles\n");
+  if (argc < 3) {
+    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations] [--runtime] [--vehicles]\n"
+                    "   or: FZeroTripleRuntimeCapture capture.bin --vehicles [--runtime]\n");
     return 2;
+  }
+  bool vehicles_only = !strcmp(argv[2], "--vehicles");
+  bool show_vehicles = vehicles_only, runtime_size = false;
+  int iterations = 1;
+  bool have_iterations = false;
+  for (int i = 3; i < argc; ++i) {
+    if (!strcmp(argv[i], "--runtime")) {
+      if (runtime_size) return 2;
+      runtime_size = true;
+    } else if (!strcmp(argv[i], "--vehicles") && !vehicles_only) {
+      if (show_vehicles) return 2;
+      show_vehicles = true;
+    } else if (!vehicles_only && !have_iterations) {
+      char *end;
+      long value = strtol(argv[i], &end, 10);
+      if (!argv[i][0] || *end || value < 1 || value > 10000) return 2;
+      iterations = (int)value;
+      have_iterations = true;
+    } else {
+      return 2;
+    }
   }
   if (!FzeroRendererLoadCapture(argv[1])) {
     fprintf(stderr, "invalid capture\n");
     return 2;
   }
-  enum { pw = 640, ph = 360, span = 2 * pw };
+  /* The 640x360 default retains the high-resolution comparison fixture;
+   * --runtime matches the 512x288 side textures used in the SDL presenter. */
+  int pw = runtime_size ? 512 : 640;
+  int ph = runtime_size ? 288 : 360;
+  int span = 2 * pw;
   FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, pw, ph};
   FzeroVideoSettings video;
   FzeroVideoDefaults(&video);
   int logical_width = FzeroCalculateViewport(&video, 2560, 1440).width;
-  if (vehicles_only || argc == 5) {
+  if (show_vehicles) {
     FzeroTripleVehicleProbe probes[6];
     if (!FzeroRendererProbeTripleVehicles(&rig, logical_width, probes)) {
       fprintf(stderr, "vehicle probe rejected capture\n");
@@ -52,11 +76,6 @@ int main(int argc, char **argv) {
   if (!buffers[0] || !buffers[1]) {
     free(buffers[0]); free(buffers[1]);
     return 3;
-  }
-  int iterations = argc >= 4 ? atoi(argv[3]) : 1;
-  if (iterations < 1 || iterations > 10000) {
-    free(buffers[0]); free(buffers[1]);
-    return 2;
   }
   clock_t start = clock();
   for (int i = 0; i < iterations; ++i)
