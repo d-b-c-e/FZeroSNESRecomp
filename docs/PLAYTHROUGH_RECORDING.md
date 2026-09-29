@@ -61,6 +61,19 @@ near-white race-impact flash. The game and FFB still advance. It is off by
 default, and the environment variable `0` overrides an enabled launcher
 setting for A/B comparison.
 
+For a device-free source check, set `FZERO_LUMA_TRACE=1` on the headless replay.
+It samples source pixels before SDL and logs bright race frames, brightness,
+and energy. On the 11,364-frame rig recording, the two near-white frames at
+headless indices 6142–6143 were already present in the guest compositor:
+the captured image shows a white background with an explosion and HUD, not a
+Surround-only rendering fault. The SDL flash guard held these same two frames.
+One smaller luminance rise at 3025 was a track surface turning light grey and
+persisting in following frames; it should not be suppressed as a flash.
+Device-free FFB model tracing requested collision pulses at frames 3417, 5526,
+6139, and 6169 at strength 35. This verifies model decisions, not that the
+wheel received or reproduced the periodic effects; physical validation remains
+attended work.
+
 ## Shared toolkit force-observation adapter
 
 `tools/fzero_replay_adapter.py` consumes the toolkit's

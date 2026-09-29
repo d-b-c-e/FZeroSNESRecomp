@@ -213,6 +213,33 @@ static void collect_video(AttractStats *stats, const uint8_t *pixels,
   }
 }
 
+/* Device-free flash probe for a verified input recording. Sample the same
+ * source pixels as the SDL presentation guard, before any GPU or Surround
+ * scaling can affect them. Disabled unless explicitly requested. */
+static void trace_race_luminance(const uint8_t *pixels, long frame, int width) {
+  if (!getenv("FZERO_LUMA_TRACE")) return;
+  static unsigned previous_mean;
+  if (g_ram[0x54] != 2 || g_ram[0x55] < 3) {
+    previous_mean = 0;
+    return;
+  }
+  unsigned sum = 0, samples = 0;
+  const uint32_t *words = (const uint32_t *)pixels;
+  for (int y = 224 / 32; y < 224; y += 224 / 16)
+    for (int x = width / 64; x < width; x += width / 32) {
+      uint32_t color = words[(size_t)y * width + x];
+      sum += ((color >> 16) & 255) + ((color >> 8) & 255) + (color & 255);
+      ++samples;
+    }
+  unsigned mean = samples ? sum / (3 * samples) : 0;
+  if (mean >= 180 || (previous_mean && mean > previous_mean + 32))
+    fprintf(stderr, "[fzero-luma] frame=%ld mean=%u previous=%u "
+                    "brightness=%u energy=%u\n", frame, mean, previous_mean,
+            g_snes->ppu->inidisp & 15,
+            (unsigned)g_ram[0xc9] | ((unsigned)g_ram[0xca] << 8));
+  previous_mean = mean;
+}
+
 static void collect_audio(AttractStats *stats, const int16_t *audio,
                           int frames) {
   int active = 0;
@@ -551,6 +578,7 @@ int main(int argc, char **argv) {
     stats.logic_hash = next_logic;
 
     FzeroDrawPpuFrame();
+    trace_race_luminance(pixels, frame, frame_width);
     collect_video(&stats, pixels, frame, frame_width);
 
     audio_accumulator += 32040.0 / 60.098811862;
