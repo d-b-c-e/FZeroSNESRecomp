@@ -151,6 +151,14 @@ transition. Side projection now accepts that live countdown track; the same
 replay has zero rejections and still 164/164 matching comparisons. A ROM-free
 fixture checks the countdown case. This does not validate SDL or physical
 Surround presentation.
+With `FZERO_TRIPLE_SKY_TRACE=1` on the same verified drive, the atlas reported
+one initial miss and at least 9,840 hits, with zero side-output rejections.
+Repeated atlas construction is therefore not an apparent source of the
+recorded presentation misses. Retaining the temporary sky-colour buffer across
+frames was tried and discarded: two 300-iteration captured-frame CPU runs
+changed from 7.28/7.21 ms to 7.24/7.27 ms, below a convincing improvement,
+while producing byte-identical output. These are isolated CPU measurements;
+the live GPU/upload/present costs still need a new Surround trace.
 The ground intersection now evaluates one rational projection per physical
 panel row instead of a normalized ray at every side pixel. Nine private race
 and impact captures remained byte-identical to the prior renderer. Alternating
