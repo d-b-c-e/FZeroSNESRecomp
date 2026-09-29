@@ -986,7 +986,10 @@ typedef struct FzeroPresenter {
   bool triple_active;
 } FzeroPresenter;
 
-enum { kTriplePanelWidth = 640, kTriplePanelHeight = 360,
+/* 512x288 scales exactly 5x onto each 2560x1440 panel. The prior 640x360
+ * CPU projection took ~11 ms/present on the rig, beyond a 60 Hz frame budget
+ * once simulation and center composition were included. */
+enum { kTriplePanelWidth = 512, kTriplePanelHeight = 288,
        kTripleSpanWidth = 7680, kTripleSpanHeight = 1440 };
 static const FzeroTripleRig kTripleRig = {
     708.4166, 398.4843, 660.0, 0.0, 70.0, 70.0, 8.0,
