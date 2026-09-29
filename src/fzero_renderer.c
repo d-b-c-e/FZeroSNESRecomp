@@ -911,7 +911,10 @@ static bool draw_triple_sides(uint32_t *output, size_t capacity,
       capacity < (size_t)2 * rig->panel_width_px * rig->panel_height_px)
     return false;
   const FzeroSourceFrame *f = &frames[current];
-  if (!f->valid || f->ram[0x54] != 2 || f->ram[0x55] < 3 || !f->ram[0x81])
+  /* Countdown substate 2 already has the live Mode 7 track and calibrated
+   * camera. Accept it so the first racing presentation does not briefly
+   * clear both side panels while the captured WRAM trails the guest state. */
+  if (!f->valid || f->ram[0x54] != 2 || f->ram[0x55] < 2 || !f->ram[0x81])
     return false;
   /* A high-refresh presenter may show the same emulated frame more than once.
    * The two ground panels are expensive per-pixel projections and do not use

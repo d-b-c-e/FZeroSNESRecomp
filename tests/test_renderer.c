@@ -648,11 +648,14 @@ static void test_triple_sky_horizon(void) {
   memset(p.vram, 0, sizeof(p.vram));
   for (int i = 0x7800; i < 0x8000; ++i) p.vram[i] = 1;
   for (int y = 0; y < 8; ++y) p.vram[16 + y] = 255;
-  ram[0x55] = 3;
-  publish_triple_sky(101, 31);
+  ram[0x55] = 2; /* Live countdown track precedes the racing substate. */
+  publish_triple_sky(100, 31);
   enum { width = 64, height = 36, area = width * height };
   FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, width, height};
   uint32_t sides[2 * area], cold[2 * area];
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  ram[0x55] = 3;
+  publish_triple_sky(101, 31);
   uint64_t version = FzeroRendererTripleSidesVersion();
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
   CHECK(FzeroRendererTripleSidesVersion() != version);
