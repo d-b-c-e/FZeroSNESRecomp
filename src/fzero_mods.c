@@ -1,5 +1,6 @@
 #include "fzero_mods.h"
 #include "fzero_hotkeys.h"
+#include "raw_hat_binding.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,10 +42,10 @@ static const WheelOption wheel_options[] = {
   {"ButtonR", "R shoulder", -1, -1, 127},
   {"ButtonSelect", "Select", -1, -1, 127},
   {"ButtonStart", "Start", -1, -1, 127},
-  {"ButtonUp", "D-pad up", -1, -1, 127},
-  {"ButtonDown", "D-pad down", -1, -1, 127},
-  {"ButtonLeft", "D-pad left", -1, -1, 127},
-  {"ButtonRight", "D-pad right", -1, -1, 127},
+  {"ButtonUp", "D-pad up", -1, -1, RECOMP_RAW_HAT_MAX},
+  {"ButtonDown", "D-pad down", -1, -1, RECOMP_RAW_HAT_MAX},
+  {"ButtonLeft", "D-pad left", -1, -1, RECOMP_RAW_HAT_MAX},
+  {"ButtonRight", "D-pad right", -1, -1, RECOMP_RAW_HAT_MAX},
   {"ButtonSaveStateMenu", "Open save-state menu", -1, -1, 127},
   {"ButtonRewind", "Open rewind", -1, -1, 127}
 };

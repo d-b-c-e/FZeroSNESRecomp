@@ -1,6 +1,7 @@
 #include "fzero_gamepad.h"
 #include "fzero_analog.h"
 #include "fzero_hotkeys.h"
+#include "raw_hat_binding.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -259,9 +260,22 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
       if (s_brake_invert) value = -value;
       if (value > s_pedal_threshold) input |= 0x0002u;
     }
-    for (int i = 0; i < 14; ++i)
-      if (s_raw_buttons[i] >= 0 && SDL_JoystickGetButton(s_raw, s_raw_buttons[i]))
+    for (int i = 0; i < 14; ++i) {
+      int binding = s_raw_buttons[i];
+      int hat = recomp_raw_hat_index(binding);
+      if (hat >= 0) {
+#if SNESRECOMP_SDL3
+        if (hat < SDL_GetNumJoystickHats(s_raw) &&
+            (SDL_GetJoystickHat(s_raw, hat) & recomp_raw_hat_value(binding)))
+#else
+        if (hat < SDL_JoystickNumHats(s_raw) &&
+            (SDL_JoystickGetHat(s_raw, hat) & recomp_raw_hat_value(binding)))
+#endif
+          input |= 1u << s_raw_input_bits[i];
+      } else if (binding >= 0 && binding <= 127 && SDL_JoystickGetButton(s_raw, binding)) {
         input |= 1u << s_raw_input_bits[i];
+      }
+    }
     return input;
   }
   uint32_t buttons = 0, input = 0;

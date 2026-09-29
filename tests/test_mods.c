@@ -105,6 +105,12 @@ int main(void) {
                               "SteeringRangePercent", "45"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
                               "ButtonRewind", "37"));
+  CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                              "ButtonUp", "128"));
+  CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 17, &option));
+  CHECK(!strcmp(option.value, "128"));
+  CHECK(!p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                               "ButtonUp", "192"));
   CHECK(!p->feature_set_option(NULL, wheel.package_id, wheel.id,
                                "ButtonRewind", "128"));
   CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
