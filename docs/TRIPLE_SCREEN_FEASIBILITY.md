@@ -59,9 +59,16 @@ observed in that recording.
 The opt-in camera trace logs the first twelve side anchors with reservations,
 including guest-screen position and slot count, to select immutable captures
 for an offline sprite experiment without changing guest memory. A reservation
-alone does **not** prove drawable pixels: the wide reference render of frame
-2777 shows no corresponding opponent. Visibility/tile decoding must be checked
-before moving these slots to a side panel.
+alone does **not** prove a complete drawable vehicle. A read-only raster probe
+now counts decoded nontransparent OBJ pixels in a 684-pixel diagnostic view
+and reports their native logical bounds. All 43 reserved side occurrences in
+this recording contained some pixels, but the first car-3 occurrence (headless
+frame 2777, capture 2778) contained only ten pixels in logical columns
+321–326, rows 47–48. The wide reference image shows no recognizable full
+opponent there. That car's world anchor projects into the right side panel
+while its guest OAM fragment remains near the center edge; blindly drawing
+both would duplicate it. Side-car visibility, scaling and center masking still
+need a verified game-state rule before this layer can be enabled.
 
 `FZeroTripleGroundCapture` is an offline renderer built from immutable capture
 files. It uses the existing course-table/VRAM lookup and colour pipeline to
