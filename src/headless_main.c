@@ -241,6 +241,49 @@ static void trace_race_luminance(const uint8_t *pixels, long frame, int width) {
   previous_mean = mean;
 }
 
+/* Opt-in offline check for side-only bright frames. This exercises the real
+ * side compositor at the runtime's 512x288 resolution without SDL, Surround,
+ * or a wheel device. A bright frame in both center and sides points upstream
+ * of presentation; a side-only spike is worth investigating separately. */
+static void trace_triple_side_luminance(const uint8_t *center, long frame,
+                                       int center_width,
+                                       const FzeroTripleRig *rig) {
+  if (!getenv("FZERO_TRIPLE_SIDE_LUMA_TRACE")) return;
+  enum { kSideWidth = 512, kSideHeight = 288, kSideArea = kSideWidth * kSideHeight };
+  if (rig->panel_width_px != kSideWidth || rig->panel_height_px != kSideHeight)
+    return;
+  static uint32_t sides[2 * kSideArea];
+  static unsigned previous[3];
+  if (g_ram[0x54] != 2 || g_ram[0x55] < 3 || !g_ram[0x81]) {
+    memset(previous, 0, sizeof(previous));
+    return;
+  }
+  if (!FzeroRendererDrawTripleSides(sides, 2 * kSideArea, rig, center_width))
+    return;
+  const uint32_t *panels[3] = {sides, (const uint32_t *)center,
+                                sides + kSideArea};
+  const int widths[3] = {kSideWidth, center_width, kSideWidth};
+  const int heights[3] = {kSideHeight, 224, kSideHeight};
+  unsigned means[3];
+  for (int panel = 0; panel < 3; ++panel) {
+    unsigned sum = 0, samples = 0;
+    for (int y = heights[panel] / 32; y < heights[panel]; y += heights[panel] / 16)
+      for (int x = widths[panel] / 64; x < widths[panel]; x += widths[panel] / 32) {
+        uint32_t color = panels[panel][(size_t)y * widths[panel] + x];
+        sum += ((color >> 16) & 255) + ((color >> 8) & 255) + (color & 255);
+        ++samples;
+      }
+    means[panel] = samples ? sum / (3 * samples) : 0;
+  }
+  if (means[0] >= 180 || means[2] >= 180 ||
+      (previous[0] && means[0] > previous[0] + 32) ||
+      (previous[2] && means[2] > previous[2] + 32))
+    fprintf(stderr, "[fzero-triple-luma] frame=%ld left=%u center=%u right=%u "
+                    "prior=%u,%u,%u\n", frame, means[0], means[1], means[2],
+            previous[0], previous[1], previous[2]);
+  memcpy(previous, means, sizeof(previous));
+}
+
 static void collect_audio(AttractStats *stats, const int16_t *audio,
                           int frames) {
   int active = 0;
@@ -631,6 +674,7 @@ int main(int argc, char **argv) {
       }
     }
     trace_race_luminance(pixels, frame, frame_width);
+    trace_triple_side_luminance(pixels, frame, frame_width, &audit_rig);
     collect_video(&stats, pixels, frame, frame_width);
 
     audio_accumulator += 32040.0 / 60.098811862;
