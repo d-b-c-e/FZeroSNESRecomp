@@ -109,9 +109,12 @@ On one captured active-race frame, both live side buffers matched the offline
 reference byte-for-byte before the sky pass. In an 11,364-frame recorded-drive
 replay with 7680×1440 Surround, the sky-enabled experimental build completed
 and suppressed two near-white impact frames. Its measured race composition
-averaged 4.48 ms and GPU draw submission 8.33 ms; 272 presentations were
+averaged 4.48 ms and the old combined side-projection/texture-upload/draw
+submission bucket averaged 8.33 ms; 272 presentations were
 missed, versus 46 in a prior ground-only replay. Runs were not simultaneous,
 so this is a performance warning rather than a controlled A/B benchmark.
+The current diagnostics split side projection and texture upload into their
+own buckets, but no 7680×1440 Surround trace using that split exists yet.
 The source-tile atlas reuses the BG1/BG2 panorama through horizontal scroll
 changes and validates the exact VRAM words it sampled. On one fixed 640×360
 capture, a controlled 200-iteration CPU comparison measured 13.07 ms with
@@ -162,6 +165,12 @@ row projection enabled or disabled. In 200-iteration isolated CPU runs, the
 normal path took 7.34/7.49 ms per side-buffer pair, versus 8.52/8.59 ms
 without the sky atlas and 7.90/7.92 ms without the row projection. These
 measure composition only, not upload, GPU draw, presentation or live pacing.
+The SDL presenter now retains the uploaded side texture when another host
+presentation reuses the same projected emulated frame. A ROM-free test confirms
+the projection version remains stable on a cache hit and advances when the
+output is rewritten; the full 11,364-frame recorded replay and 13/13 tests
+pass. This avoids redundant texture uploads at high refresh rates, but has not
+yet been measured for presentation pacing in 7680×1440 Surround.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
