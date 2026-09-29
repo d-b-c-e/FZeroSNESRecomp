@@ -1663,7 +1663,13 @@ int main(int argc, char **argv) {
       SDL_WINDOW_RESIZABLE | kHighDpiFlag |
           (use_gl_renderer ? SDL_WINDOW_OPENGL : 0));
   if (!window) Die("Unable to create the game window");
-  FzeroFfbInit(g_config_path, NULL);
+  void *native_window = NULL;
+#if SNESRECOMP_SDL3 && defined(_WIN32)
+  native_window = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
+                                         SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+                                         NULL);
+#endif
+  FzeroFfbInit(g_config_path, native_window);
   if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
   FzeroGlRenderer gl_renderer;
