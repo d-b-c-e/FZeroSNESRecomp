@@ -17,6 +17,18 @@ bool FzeroTripleGroundCalibrate(const FzeroTripleRig *rig, int logical_width,
                                FzeroTripleGround *out);
 bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
                              FzeroTripleVec3 ray, FzeroMode7Texel *texel);
+/* For a fixed physical-panel row, the flat-ground intersection is the ratio
+ * of affine numerators and an affine horizon denominator in pixel X. */
+typedef struct FzeroTripleGroundRow {
+  double camera_x, camera_y;
+  double down, down_step, x_num, x_step, y_num, y_step;
+} FzeroTripleGroundRow;
+bool FzeroTripleGroundBuildRow(const FzeroTripleGround *ground,
+                               const FzeroTripleSurface *panel,
+                               int y, int width, int height,
+                               FzeroTripleGroundRow *out);
+bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
+                                int x, FzeroMode7Texel *texel);
 /* Convert a nearby course-world anchor to the camera's unwrapped Mode 7
  * representative. F-Zero's course repeats every 8192x4096 world units. */
 bool FzeroTripleGroundWorldTexel(int world_x, int world_y,

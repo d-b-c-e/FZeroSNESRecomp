@@ -82,11 +82,17 @@ int main(void) {
     for (int ix = 0; ix < 3; ++ix)
       for (int iy = 0; iy < 2; ++iy) {
         FzeroTripleVec3 ray;
-        FzeroMode7Texel texel;
+        FzeroMode7Texel texel, row_texel;
+        FzeroTripleGroundRow row;
         double projected_x, projected_y;
+        CHECK(FzeroTripleGroundBuildRow(&ground, &panel[side],
+                                       anchor_y[iy], 2560, 1440, &row));
         CHECK(FzeroTripleRay(&panel[side], anchor_x[ix], anchor_y[iy],
                              2560, 1440, &ray));
         CHECK(FzeroTripleGroundLocate(&ground, ray, &texel));
+        CHECK(FzeroTripleGroundRowLocate(&row, anchor_x[ix], &row_texel));
+        CHECK(fabs(row_texel.x - texel.x) < 1e-8);
+        CHECK(fabs(row_texel.y - texel.y) < 1e-8);
         CHECK(FzeroTripleGroundProject(&ground, &panel[side], texel,
                                       2560, 1440, &projected_x, &projected_y));
         CHECK(fabs(projected_x - anchor_x[ix]) < 1e-7);
@@ -112,11 +118,17 @@ int main(void) {
     for (int ix = 0; ix < 3; ++ix)
       for (int iy = 0; iy < 2; ++iy) {
         FzeroTripleVec3 ray;
-        FzeroMode7Texel texel;
+        FzeroMode7Texel texel, row_texel;
+        FzeroTripleGroundRow row;
         double projected_x, projected_y;
+        CHECK(FzeroTripleGroundBuildRow(&ground, &panel[side],
+                                       anchor_y[iy], 2560, 1440, &row));
         CHECK(FzeroTripleRay(&panel[side], anchor_x[ix], anchor_y[iy],
                              2560, 1440, &ray));
         CHECK(FzeroTripleGroundLocate(&ground, ray, &texel));
+        CHECK(FzeroTripleGroundRowLocate(&row, anchor_x[ix], &row_texel));
+        CHECK(fabs(row_texel.x - texel.x) < 1e-8);
+        CHECK(fabs(row_texel.y - texel.y) < 1e-8);
         CHECK(FzeroTripleGroundProject(&ground, &panel[side], texel,
                                       2560, 1440, &projected_x, &projected_y));
         CHECK(fabs(projected_x - anchor_x[ix]) < 1e-7);

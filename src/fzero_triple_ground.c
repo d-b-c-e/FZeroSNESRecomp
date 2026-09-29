@@ -94,6 +94,51 @@ bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
          fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
 }
 
+bool FzeroTripleGroundBuildRow(const FzeroTripleGround *ground,
+                               const FzeroTripleSurface *panel,
+                               int y, int width, int height,
+                               FzeroTripleGroundRow *out) {
+  if (!ground || !panel || !out || width < 1 || height < 1 ||
+      y < 0 || y >= height) return false;
+  double u = 0.5 / width;
+  double v = 1.0 - (y + 0.5) / height;
+  double px = panel->lower_left.x + u * panel->right.x + v * panel->up.x;
+  double py = panel->lower_left.y + u * panel->right.y + v * panel->up.y;
+  double pz = panel->lower_left.z + u * panel->right.z + v * panel->up.z;
+  double sx = panel->right.x / width;
+  double sy = panel->right.y / width;
+  double sz = panel->right.z / width;
+  double forward = -pz * ground->pitch_cos + py * ground->pitch_sin;
+  double forward_step = -sz * ground->pitch_cos + sy * ground->pitch_sin;
+  *out = (FzeroTripleGroundRow){
+      ground->camera_x, ground->camera_y,
+      -pz * ground->pitch_sin - py * ground->pitch_cos,
+      -sz * ground->pitch_sin - sy * ground->pitch_cos,
+      ground->camera_height * (ground->right_x * px +
+          ground->forward_x * forward * ground->forward_scale),
+      ground->camera_height * (ground->right_x * sx +
+          ground->forward_x * forward_step * ground->forward_scale),
+      ground->camera_height * (ground->right_y * px +
+          ground->forward_y * forward * ground->forward_scale),
+      ground->camera_height * (ground->right_y * sx +
+          ground->forward_y * forward_step * ground->forward_scale)};
+  return isfinite(out->down) && isfinite(out->down_step) &&
+         isfinite(out->x_num) && isfinite(out->x_step) &&
+         isfinite(out->y_num) && isfinite(out->y_step);
+}
+
+bool FzeroTripleGroundRowLocate(const FzeroTripleGroundRow *row,
+                                int x, FzeroMode7Texel *texel) {
+  if (!row || !texel || x < 0) return false;
+  double down = row->down + x * row->down_step;
+  if (!(down > 1e-9) || !isfinite(down)) return false;
+  double reciprocal = 1.0 / down;
+  texel->x = row->camera_x + (row->x_num + x * row->x_step) * reciprocal;
+  texel->y = row->camera_y + (row->y_num + x * row->y_step) * reciprocal;
+  return isfinite(texel->x) && isfinite(texel->y) &&
+         fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
+}
+
 bool FzeroTripleGroundWorldTexel(int world_x, int world_y,
                                  int camera_world_x, int camera_world_y,
                                  FzeroMode7Texel mode7_center,

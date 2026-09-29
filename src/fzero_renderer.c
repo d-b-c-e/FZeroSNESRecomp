@@ -1038,6 +1038,9 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   } else {
     memset(output, 0, (size_t)2 * pw * ph * sizeof(*output));
   }
+  /* Flat-ground projection is rational in panel X. The direct ray path stays
+   * available for pixel-exact offline A/B checks of new camera fixtures. */
+  bool use_row_projection = !getenv("FZERO_TRIPLE_DISABLE_ROW");
   for (int y = 0; y < ph; ++y) {
     int source_y = (int)((y + 0.5) * 224 / ph);
     if (source_y > 223) source_y = 223;
@@ -1059,11 +1062,22 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
     align = align && FzeroTripleGroundBuildLineAlignment(line, align_left,
         align_right, logical_width, pw, &alignment);
     for (int side = 0; side < 2; ++side) {
+      FzeroTripleGroundRow row;
+      if (use_row_projection &&
+          !FzeroTripleGroundBuildRow(&ground, &panels[side ? 2 : 0],
+                                     y, pw, ph, &row)) return false;
       FzeroCourseCache cache = kCourseCacheEmpty;
       for (int x = 0; x < pw; ++x) {
         FzeroMode7Texel texel;
-        FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph + (size_t)y * pw + x];
-        if (!align || !FzeroTripleGroundLocate(&ground, ray, &texel) ||
+        bool located = false;
+        if (align && use_row_projection)
+          located = FzeroTripleGroundRowLocate(&row, x, &texel);
+        else if (align) {
+          FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph +
+              (size_t)y * pw + x];
+          located = FzeroTripleGroundLocate(&ground, ray, &texel);
+        }
+        if (!located ||
             !FzeroTripleGroundApplyLineAlignment(&alignment, texel,
                 &texel)) continue;
         texel.x = floor(texel.x);
