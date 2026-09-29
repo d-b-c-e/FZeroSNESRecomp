@@ -71,7 +71,16 @@ int main() {
   uint8_t received[324]{};
   CHECK(recv(receiver, (char *)received, sizeof(received), 0) == 324);
   CHECK(received[323] == 'F');
+  ram[0x55] = 3;
+  FzeroTelemetryFrame(ram, sizeof(ram), 0x0001);
+  CHECK(recv(receiver, (char *)received, sizeof(received), 0) == 324);
+  int32_t race_on = 0;
+  std::memcpy(&race_on, received, sizeof(race_on));
+  CHECK(race_on == 1);
   FzeroTelemetryShutdown();
+  CHECK(recv(receiver, (char *)received, sizeof(received), 0) == 324);
+  std::memcpy(&race_on, received, sizeof(race_on));
+  CHECK(race_on == 0 && received[244 + 71] == 0); /* idle, no throttle */
   closesocket(receiver);
   WSACleanup();
   std::remove(config_path);

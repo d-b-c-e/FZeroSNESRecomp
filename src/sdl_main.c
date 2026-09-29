@@ -2186,12 +2186,12 @@ int main(int argc, char **argv) {
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
   }
+  FzeroTelemetryShutdown();
   FzeroFfbShutdown();
   SDL_DestroyWindow(window);
   SDL_DestroyMutex(g_audio_mutex);
   g_audio_mutex = NULL;
   SDL_Quit();
-  FzeroTelemetryShutdown();
   free(rom);
   /* A self-test that printed FAIL must not exit 0: a harness that only reads
    * the exit status would otherwise record a pass. */

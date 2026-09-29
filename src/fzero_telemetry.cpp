@@ -174,6 +174,15 @@ void FzeroTelemetryFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
 }
 
 void FzeroTelemetryShutdown(void) {
+  if (s_socket != kInvalidSocket) {
+    /* Dashboards can retain the last racing packet after this process exits.
+     * Publish an explicit idle state before closing the UDP transport. */
+    uint8_t idle_ram[0x0be2]{};
+    uint8_t packet[324]{};
+    if (FzeroTelemetryBuild(&s_state, idle_ram, sizeof(idle_ram), 0, packet))
+      (void)sendto(s_socket, (const char *)packet, (int)sizeof(packet), 0,
+                   (const sockaddr *)&s_destination, s_destination_size);
+  }
   close_socket();
   std::memset(&s_state, 0, sizeof(s_state));
 #ifdef _WIN32
