@@ -74,6 +74,12 @@ direct skyline sampling and 11.70 ms with the atlas; their output files were
 byte-identical. This isolated speedup does not establish a 60 Hz rig result:
 subsequent live replays ran alongside other desktop windows and had variable
 presentation pacing. The normal install remains untouched.
+Additional private replay captures at frames 2,000, 4,000, 6,000, 8,000, and
+10,000 produced byte-identical cached/direct side panels. Five-iteration
+640×360-per-panel CPU timings were 12.6–12.8 ms with the atlas versus
+14.0–14.2 ms with direct skyline sampling. Both paths correctly rejected
+frame 11,200's non-race camera. These are offline side-buffer results, not a
+new Surround presentation test.
 
 The initial test fixture uses the locally saved rig measurements: three
 2560×1440 panels, 708.42 mm visible chord width, 398.48 mm height, 660 mm eye
