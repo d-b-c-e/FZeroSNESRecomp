@@ -31,6 +31,7 @@ static struct {
   uint32_t *output;
   FzeroTripleRig rig;
   int logical_width;
+  uint64_t version;
   bool valid;
 } triple_cache;
 /* BG1/BG2 panorama tiles are mostly static while horizontal scroll changes
@@ -1124,9 +1125,12 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
   triple_cache.output = output;
   triple_cache.rig = *rig;
   triple_cache.logical_width = logical_width;
+  if (++triple_cache.version == 0) ++triple_cache.version;
   triple_cache.valid = true;
   return true;
 }
+
+uint64_t FzeroRendererTripleSidesVersion(void) { return triple_cache.version; }
 
 bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
                                       int logical_width,

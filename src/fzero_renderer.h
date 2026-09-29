@@ -25,6 +25,9 @@ const uint32_t *FzeroRendererStockFrame(void);
  * each panel_width*panel_height pixels. False means draw the stock fallback. */
 bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
                                   const FzeroTripleRig *rig, int logical_width);
+/* Advances only when DrawTripleSides writes new pixels, not when it returns
+ * cached pixels for another host presentation of the same emulated frame. */
+uint64_t FzeroRendererTripleSidesVersion(void);
 /* Read-only capture diagnostic. OAM count is the number of non-sentinel
  * vehicle-owned slots at scanline 100. Raster sprite pixels count decoded,
  * nontransparent OBJ pixels within a 684-pixel expanded diagnostic viewport

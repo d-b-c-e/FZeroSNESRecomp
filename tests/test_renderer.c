@@ -653,7 +653,15 @@ static void test_triple_sky_horizon(void) {
   enum { width = 64, height = 36, area = width * height };
   FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, width, height};
   uint32_t sides[2 * area], cold[2 * area];
+  uint64_t version = FzeroRendererTripleSidesVersion();
   CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(FzeroRendererTripleSidesVersion() != version);
+  version = FzeroRendererTripleSidesVersion();
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(FzeroRendererTripleSidesVersion() == version);
+  CHECK(FzeroRendererDrawTripleSides(cold, 2 * area, &rig, 342));
+  CHECK(FzeroRendererTripleSidesVersion() != version);
+  CHECK(!memcmp(sides, cold, sizeof(sides)));
   CHECK(sides[0] == 0xff0000 && sides[area + width - 1] == 0xff0000);
   CHECK(sides[12 * width] == 0xff0000);
   CHECK(sides[area + 12 * width + width - 1] == 0xff0000);

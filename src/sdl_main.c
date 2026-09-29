@@ -983,6 +983,7 @@ typedef struct FzeroPresenter {
   int drawable_width, drawable_height;
   SDL_Texture *triple_texture;
   uint32_t *triple_pixels;
+  uint64_t triple_uploaded_version;
   bool triple_active;
 } FzeroPresenter;
 
@@ -1064,7 +1065,7 @@ static unsigned source_frame_mean(const uint8_t *pixels, int width, int height) 
 /* One present, with an optional panel over it. The game image is whatever is
  * already in `pixels`: while a panel is up the guest is frozen, so the frame
  * behind it is the moment the player stopped at. */
-static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
+static void present_frame(FzeroPresenter *p, const uint32_t *panel,
                           int pw, int ph, int is_menu) {
   const uint32_t *hd_frame = FzeroHdFrame();
   unsigned scale = FzeroHdScale();
@@ -1112,11 +1113,21 @@ static void present_frame(const FzeroPresenter *p, const uint32_t *panel,
         (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
         &kTripleRig, p->logical_width);
     FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_PROJECTION, diagnostic_start);
-    if (triple_ready) {
+    /* At high host refresh rates the same source frame is presented several
+     * times. Upload the immutable side panels only when projection rewrites
+     * them; keep drawing the already resident streaming texture otherwise. */
+    uint64_t version = FzeroRendererTripleSidesVersion();
+    if (triple_ready && version != p->triple_uploaded_version) {
       diagnostic_start = FzeroDiagnosticsBegin();
-      SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
-                        kTriplePanelWidth * kBytesPerPixel);
+#if SNESRECOMP_SDL3
+      bool uploaded = SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
+                                        kTriplePanelWidth * kBytesPerPixel);
+#else
+      bool uploaded = SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
+                                        kTriplePanelWidth * kBytesPerPixel) == 0;
+#endif
       FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_UPLOAD, diagnostic_start);
+      if (uploaded) p->triple_uploaded_version = version;
     }
   }
   diagnostic_start = FzeroDiagnosticsBegin();
@@ -1218,7 +1229,7 @@ static void overlay_dump(const FzeroPresenter *p, int is_menu) {
           is_menu ? "save-state browser" : "rewind filmstrip");
 }
 
-static void present_overlay(const FzeroPresenter *p, int is_menu) {
+static void present_overlay(FzeroPresenter *p, int is_menu) {
   const uint32_t *panel = NULL;
   int pw = 0, ph = 0;
   int have = is_menu ? snes_savestate_menu_overlay_image(&panel, &pw, &ph)
@@ -1452,7 +1463,7 @@ static void selftest_pump_tick(unsigned pump) {
   }
 }
 
-static void savestate_menu_loop(const FzeroPresenter *p, int *running,
+static void savestate_menu_loop(FzeroPresenter *p, int *running,
                                 SDL_GameController **pad) {
   /* The browser loads through the engine directly, so the host cannot check
    * the file first the way perform_state_action does. Arm the undo snapshot
@@ -1495,7 +1506,7 @@ static void rewind_key_down(int key, int repeat) {
  * browser's handle_key/poll_nav. Controls match the framework host — Left and
  * Right scrub (hold to keep scrubbing), Enter or Space commits, Escape
  * cancels, and the pad mirrors them. */
-static void rewind_loop(const FzeroPresenter *p, int *running,
+static void rewind_loop(FzeroPresenter *p, int *running,
                         SDL_GameController **pad) {
   uint32_t prev_pad = 0, held_dir = 0, held_since = 0, last_repeat = 0;
   unsigned pump = 0;
