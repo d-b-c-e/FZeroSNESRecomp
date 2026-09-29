@@ -32,6 +32,15 @@ int main(void) {
   CHECK(left.x < 0 && right.x > 0 && center.z < 0);
   CHECK(fabs(left.x + right.x) < 1e-12);
   CHECK(fabs(left.z - right.z) < 1e-12);
+  for (int side = 0; side < 3; ++side) {
+    FzeroTripleVec3 ray;
+    double projected_x, projected_y;
+    CHECK(FzeroTripleRay(&panel[side], 640, 900, 2560, 1440, &ray));
+    CHECK(FzeroTripleProjectDirection(&panel[side], ray, 2560, 1440,
+                                      &projected_x, &projected_y));
+    CHECK(fabs(projected_x - 640) < 1e-9);
+    CHECK(fabs(projected_y - 900) < 1e-9);
+  }
   CHECK(fabs(left.x - center.x) > 0.25); /* three distinct sightlines */
   CHECK(fabs(panel[0].lower_left.x + panel[0].right.x +
              rig.bezel_gap_mm - panel[1].lower_left.x) < 1e-9);

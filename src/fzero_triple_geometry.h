@@ -18,3 +18,9 @@ typedef struct FzeroTripleRig {
 bool FzeroTripleBuild(const FzeroTripleRig *rig, FzeroTripleSurface panels[3]);
 bool FzeroTripleRay(const FzeroTripleSurface *panel, int x, int y,
                     int width, int height, FzeroTripleVec3 *ray);
+/* Project a camera-space direction onto one physical panel. Coordinates may
+ * lie beyond panel bounds; the caller clips them if needed. */
+bool FzeroTripleProjectDirection(const FzeroTripleSurface *panel,
+                                  FzeroTripleVec3 direction,
+                                  int width, int height,
+                                  double *pixel_x, double *pixel_y);

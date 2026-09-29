@@ -8,6 +8,9 @@ static FzeroTripleVec3 add(FzeroTripleVec3 a, FzeroTripleVec3 b) {
 static FzeroTripleVec3 scale(FzeroTripleVec3 a, double s) {
   return (FzeroTripleVec3){a.x * s, a.y * s, a.z * s};
 }
+static double dot3(FzeroTripleVec3 a, FzeroTripleVec3 b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
 
 bool FzeroTripleBuild(const FzeroTripleRig *rig, FzeroTripleSurface panels[3]) {
   if (!rig || !panels || !(rig->width_mm > 0 && rig->height_mm > 0 &&
@@ -55,4 +58,31 @@ bool FzeroTripleRay(const FzeroTripleSurface *panel, int x, int y,
   if (!(length > 0) || !isfinite(length)) return false;
   *ray = scale(point, 1.0 / length);
   return true;
+}
+
+bool FzeroTripleProjectDirection(const FzeroTripleSurface *panel,
+                                  FzeroTripleVec3 direction,
+                                  int width, int height,
+                                  double *pixel_x, double *pixel_y) {
+  if (!panel || !pixel_x || !pixel_y || width < 1 || height < 1) return false;
+  FzeroTripleVec3 normal = {
+      panel->right.y * panel->up.z - panel->right.z * panel->up.y,
+      panel->right.z * panel->up.x - panel->right.x * panel->up.z,
+      panel->right.x * panel->up.y - panel->right.y * panel->up.x};
+  double denominator = dot3(normal, direction);
+  double right_length = dot3(panel->right, panel->right);
+  double up_length = dot3(panel->up, panel->up);
+  if (!(fabs(denominator) > 1e-9 && right_length > 0 && up_length > 0))
+    return false;
+  double distance = dot3(normal, panel->lower_left) / denominator;
+  if (!(distance > 0) || !isfinite(distance)) return false;
+  FzeroTripleVec3 relative = {
+      distance * direction.x - panel->lower_left.x,
+      distance * direction.y - panel->lower_left.y,
+      distance * direction.z - panel->lower_left.z};
+  double u = dot3(relative, panel->right) / right_length;
+  double v = dot3(relative, panel->up) / up_length;
+  *pixel_x = u * width - 0.5;
+  *pixel_y = (1.0 - v) * height - 0.5;
+  return isfinite(*pixel_x) && isfinite(*pixel_y);
 }

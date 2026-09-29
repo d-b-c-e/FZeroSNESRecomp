@@ -170,10 +170,6 @@ bool FzeroTripleGroundWorldTexel(int world_x, int world_y,
   return isfinite(texel->x) && isfinite(texel->y);
 }
 
-static double dot3(FzeroTripleVec3 a, FzeroTripleVec3 b) {
-  return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
 bool FzeroTripleGroundProject(const FzeroTripleGround *ground,
                               const FzeroTripleSurface *panel,
                               FzeroMode7Texel texel, int panel_width,
@@ -190,26 +186,8 @@ bool FzeroTripleGroundProject(const FzeroTripleGround *ground,
       lateral,
       -ground->camera_height * ground->pitch_cos + forward * ground->pitch_sin,
       -ground->camera_height * ground->pitch_sin - forward * ground->pitch_cos};
-  FzeroTripleVec3 normal = {
-      panel->right.y * panel->up.z - panel->right.z * panel->up.y,
-      panel->right.z * panel->up.x - panel->right.x * panel->up.z,
-      panel->right.x * panel->up.y - panel->right.y * panel->up.x};
-  double denominator = dot3(normal, direction);
-  double right_length = dot3(panel->right, panel->right);
-  double up_length = dot3(panel->up, panel->up);
-  if (!(fabs(denominator) > 1e-9 && right_length > 0 && up_length > 0))
-    return false;
-  double distance = dot3(normal, panel->lower_left) / denominator;
-  if (!(distance > 0) || !isfinite(distance)) return false;
-  FzeroTripleVec3 relative = {
-      distance * direction.x - panel->lower_left.x,
-      distance * direction.y - panel->lower_left.y,
-      distance * direction.z - panel->lower_left.z};
-  double u = dot3(relative, panel->right) / right_length;
-  double v = dot3(relative, panel->up) / up_length;
-  *pixel_x = u * panel_width - 0.5;
-  *pixel_y = (1.0 - v) * panel_height - 0.5;
-  return isfinite(*pixel_x) && isfinite(*pixel_y);
+  return FzeroTripleProjectDirection(panel, direction, panel_width,
+                                     panel_height, pixel_x, pixel_y);
 }
 
 bool FzeroTripleGroundAlignLine(FzeroMode7Line line,
