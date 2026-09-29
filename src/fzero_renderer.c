@@ -1286,16 +1286,17 @@ bool FzeroRendererProbeTripleVehicles(const FzeroTripleRig *rig,
   return true;
 }
 
-bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
-                                        const FzeroTripleRig *rig,
-                                        int logical_width,
-                                        unsigned *written_pixels) {
+static bool preview_triple_vehicles(uint32_t *output, size_t capacity,
+                                    const FzeroTripleRig *rig,
+                                    int logical_width, bool center_only,
+                                    unsigned *written_pixels) {
   if (written_pixels) *written_pixels = 0;
-  if (!sides || !rig || !written_pixels || logical_width < 256 ||
+  if (!output || !rig || !written_pixels || logical_width < 256 ||
       logical_width > FZERO_MAX_WIDTH || rig->panel_width_px < 2 ||
       rig->panel_height_px < 2 ||
       rig->panel_width_px > 4096 || rig->panel_height_px > 2160 ||
-      capacity < (size_t)2 * rig->panel_width_px * rig->panel_height_px)
+      capacity < (size_t)(center_only ? 1 : 2) *
+                     rig->panel_width_px * rig->panel_height_px)
     return false;
   FzeroTripleVehicleProbe probes[6];
   if (!FzeroRendererProbeTripleVehicles(rig, logical_width, probes)) return false;
@@ -1332,7 +1333,8 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
                                  raster[index], 0x500, false);
       }
     }
-    for (int side = 0; side < 3; side += 2) {
+    for (int side = 0; side < 3; ++side) {
+      if (center_only ? side != 1 : side == 1) continue;
       if (!probe->billboard_projected[side] ||
           probe->billboard_right[side] < 0 ||
           probe->billboard_left[side] >= pw ||
@@ -1367,7 +1369,8 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
           if (sx < 0 || sx >= FZERO_MAX_WIDTH) continue;
           size_t source = (size_t)sy * FZERO_MAX_WIDTH + sx;
           if (raster[source] <= 0x5000) continue;
-          sides[(size_t)(side ? 1 : 0) * area + (size_t)y * pw + x] = colors[source];
+          output[(size_t)(center_only ? 0 : side == 2) * area +
+                 (size_t)y * pw + x] = colors[source];
           ++*written_pixels;
         }
     }
@@ -1375,4 +1378,20 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
   free(raster);
   free(colors);
   return true;
+}
+
+bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
+                                        const FzeroTripleRig *rig,
+                                        int logical_width,
+                                        unsigned *written_pixels) {
+  return preview_triple_vehicles(sides, capacity, rig, logical_width,
+                                 false, written_pixels);
+}
+
+bool FzeroRendererPreviewTripleVehicleCenter(uint32_t *center, size_t capacity,
+                                             const FzeroTripleRig *rig,
+                                             int logical_width,
+                                             unsigned *written_pixels) {
+  return preview_triple_vehicles(center, capacity, rig, logical_width,
+                                 true, written_pixels);
 }

@@ -7,15 +7,35 @@
 #include <string.h>
 #include <time.h>
 
+static int write_panels(const char *path, const uint32_t *pixels,
+                        int width, int height, int count) {
+  FILE *out = fopen(path, "wb");
+  if (!out) return 0;
+  int good = fprintf(out, "P6\n%d %d\n255\n", width * count, height) > 0;
+  for (int y = 0; good && y < height; ++y)
+    for (int panel = 0; good && panel < count; ++panel)
+      for (int x = 0; x < width; ++x) {
+        uint32_t pixel = pixels[(size_t)panel * width * height +
+                                (size_t)y * width + x];
+        unsigned char rgb[3] = {(unsigned char)(pixel >> 16),
+                                (unsigned char)(pixel >> 8),
+                                (unsigned char)pixel};
+        if (fwrite(rgb, sizeof(rgb), 1, out) != 1) { good = 0; break; }
+      }
+  if (fclose(out)) good = 0;
+  return good;
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations] [--runtime] [--vehicles] [--vehicle-preview]\n"
+    fprintf(stderr, "usage: FZeroTripleRuntimeCapture capture.bin sides.ppm [iterations] [--runtime] [--vehicles] [--vehicle-preview] [--vehicle-center-overlay center.ppm]\n"
                     "   or: FZeroTripleRuntimeCapture capture.bin --vehicles [--runtime]\n");
     return 2;
   }
   bool vehicles_only = !strcmp(argv[2], "--vehicles");
   bool show_vehicles = vehicles_only, runtime_size = false;
   bool vehicle_preview = false;
+  const char *center_overlay_path = NULL;
   int iterations = 1;
   bool have_iterations = false;
   for (int i = 3; i < argc; ++i) {
@@ -28,6 +48,10 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[i], "--vehicle-preview") && !vehicles_only) {
       if (vehicle_preview) return 2;
       vehicle_preview = true;
+    } else if (!strcmp(argv[i], "--vehicle-center-overlay") &&
+               !vehicles_only && i + 1 < argc) {
+      if (center_overlay_path) return 2;
+      center_overlay_path = argv[++i];
     } else if (!vehicles_only && !have_iterations) {
       char *end;
       long value = strtol(argv[i], &end, 10);
@@ -38,6 +62,8 @@ int main(int argc, char **argv) {
       return 2;
     }
   }
+  if (center_overlay_path &&
+      (!vehicle_preview || !strcmp(center_overlay_path, argv[2]))) return 2;
   if (!FzeroRendererLoadCapture(argv[1])) {
     fprintf(stderr, "invalid capture\n");
     return 2;
@@ -111,23 +137,18 @@ int main(int argc, char **argv) {
     }
     fprintf(stderr, "vehicle_preview_pixels=%u (offline only)\n", written);
   }
-  FILE *out = fopen(argv[2], "wb");
-  if (!out) { free(buffers[0]); free(buffers[1]); return 3; }
-  fprintf(out, "P6\n%d %d\n255\n", span, ph);
-  for (int y = 0; y < ph; ++y) {
-    for (int side = 0; side < 2; ++side) {
-      for (int x = 0; x < pw; ++x) {
-        uint32_t pixel = pixels[(size_t)side * pw * ph + (size_t)y * pw + x];
-        unsigned char rgb[3] = {(unsigned char)(pixel >> 16),
-                                (unsigned char)(pixel >> 8),
-                                (unsigned char)pixel};
-        if (fwrite(rgb, sizeof(rgb), 1, out) != 1) {
-          fclose(out); free(buffers[0]); free(buffers[1]); return 3;
-        }
-      }
-    }
+  int result = write_panels(argv[2], pixels, pw, ph, 2) ? 0 : 3;
+  if (!result && center_overlay_path) {
+    uint32_t *center = calloc((size_t)pw * ph, sizeof(*center));
+    unsigned written = 0;
+    if (!center || !FzeroRendererPreviewTripleVehicleCenter(
+                       center, (size_t)pw * ph, &rig,
+                       logical_width, &written) ||
+        !write_panels(center_overlay_path, center, pw, ph, 1)) result = 3;
+    else fprintf(stderr, "vehicle_center_overlay_pixels=%u (offline only)\n",
+                 written);
+    free(center);
   }
-  int result = fclose(out);
   free(buffers[0]); free(buffers[1]);
-  return result ? 3 : 0;
+  return result;
 }

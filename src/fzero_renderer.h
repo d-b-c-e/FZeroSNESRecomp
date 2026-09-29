@@ -62,3 +62,9 @@ bool FzeroRendererPreviewTripleVehicles(uint32_t *sides, size_t capacity,
                                         const FzeroTripleRig *rig,
                                         int logical_width,
                                         unsigned *written_pixels);
+/* Companion offline-only overlay for center-panel seam pixels. Caller owns
+ * its background; this does not replace the live center compositor. */
+bool FzeroRendererPreviewTripleVehicleCenter(uint32_t *center, size_t capacity,
+                                             const FzeroTripleRig *rig,
+                                             int logical_width,
+                                             unsigned *written_pixels);
