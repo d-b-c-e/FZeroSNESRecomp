@@ -170,6 +170,32 @@ int main(void) {
               race_left.y - center_ground.y) > 20);
   CHECK(hypot(race_right.x - center_ground.x,
               race_right.y - center_ground.y) > 20);
+  /* Captured race frame 1800: the two visible opponents' WRAM world anchors
+   * should invert near the guest's projected $0C50/$0C60 screen anchors.
+   * Sprite top-left and ground contact are deliberately not equated. */
+  FzeroMode7Line car_far = {126080, 43008, 0, 352, 0};
+  FzeroMode7Line car_near = {92032, 73984, 0, 110, 0};
+  CHECK(FzeroTripleGroundCalibrate(&rig, 342, car_far, 80,
+                                   car_near, 180, &ground));
+  double car_x, car_y;
+  FzeroMode7Texel car_texel;
+  CHECK(FzeroTripleGroundWorldTexel(3503, 384, 3434, 344,
+      (FzeroMode7Texel){362, 344}, &car_texel));
+  CHECK(FzeroTripleGroundProject(&ground, &panel[1],
+      car_texel, 2560, 1440, &car_x, &car_y));
+  CHECK(fabs(128 + (car_x + 0.5 - 1280) * 342 / 2560 - 172) < 3);
+  CHECK(fabs((car_y + 0.5) * 224 / 1440 - 105) < 5);
+  CHECK(FzeroTripleGroundWorldTexel(3729, 397, 3434, 344,
+      (FzeroMode7Texel){362, 344}, &car_texel));
+  CHECK(FzeroTripleGroundProject(&ground, &panel[1],
+      car_texel, 2560, 1440, &car_x, &car_y));
+  CHECK(fabs(128 + (car_x + 0.5 - 1280) * 342 / 2560 - 149) < 3);
+  CHECK(fabs((car_y + 0.5) * 224 / 1440 - 61) < 5);
+  CHECK(FzeroTripleGroundWorldTexel(10, 4088, 8180, 12,
+      (FzeroMode7Texel){500, 500}, &car_texel));
+  CHECK(car_texel.x == 522 && car_texel.y == 480);
+  CHECK(!FzeroTripleGroundWorldTexel(1, 1, 0, 0,
+      (FzeroMode7Texel){NAN, 0}, &car_texel));
   /* Frame 1300 is a transition with a two-line pitch near 79 degrees. */
   FzeroMode7Line transition_far = {298624, 72704, 0, 120, 0};
   FzeroMode7Line transition_near = {286592, 73472, 0, 114, 0};

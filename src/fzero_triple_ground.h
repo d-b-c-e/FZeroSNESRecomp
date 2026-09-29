@@ -17,6 +17,12 @@ bool FzeroTripleGroundCalibrate(const FzeroTripleRig *rig, int logical_width,
                                FzeroTripleGround *out);
 bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
                              FzeroTripleVec3 ray, FzeroMode7Texel *texel);
+/* Convert a nearby course-world anchor to the camera's unwrapped Mode 7
+ * representative. F-Zero's course repeats every 8192x4096 world units. */
+bool FzeroTripleGroundWorldTexel(int world_x, int world_y,
+                                 int camera_world_x, int camera_world_y,
+                                 FzeroMode7Texel mode7_center,
+                                 FzeroMode7Texel *texel);
 /* Inverse of Locate for a flat-ground point in the same unwrapped texture
  * coordinate representative as the calibrated camera. Returns subpixel panel
  * coordinates, including points outside a panel for caller-side clipping. */

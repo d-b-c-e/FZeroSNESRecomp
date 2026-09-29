@@ -94,6 +94,19 @@ bool FzeroTripleGroundLocate(const FzeroTripleGround *ground,
          fabs(texel->x) < 1e6 && fabs(texel->y) < 1e6;
 }
 
+bool FzeroTripleGroundWorldTexel(int world_x, int world_y,
+                                 int camera_world_x, int camera_world_y,
+                                 FzeroMode7Texel mode7_center,
+                                 FzeroMode7Texel *texel) {
+  if (!texel || !isfinite(mode7_center.x) || !isfinite(mode7_center.y))
+    return false;
+  texel->x = mode7_center.x + remainder((double)world_x - camera_world_x,
+                                        8192.0);
+  texel->y = mode7_center.y + remainder((double)world_y - camera_world_y,
+                                        4096.0);
+  return isfinite(texel->x) && isfinite(texel->y);
+}
+
 static double dot3(FzeroTripleVec3 a, FzeroTripleVec3 b) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
