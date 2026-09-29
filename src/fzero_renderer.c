@@ -828,15 +828,92 @@ bool FzeroRendererDrawTripleSides(uint32_t *output, size_t capacity,
     return false;
 
   FzeroCourse course = course_open(f, true);
-  /* Dark sky is intentional until the side BG/OBJ compositor exists. This
-   * framebuffer never includes SNES UI, so it cannot be stretched to a side. */
-  memset(output, 0, (size_t)2 * pw * ph * sizeof(*output));
+  /* The race switches to BG mode 1 for the skyline, then Mode 7 for the
+   * track. Map a panel's horizontal eye ray onto the existing panoramic BG1/
+   * BG2 strips. Calibrate the angular scale at the center-panel edges so the
+   * side seams meet the same columns as the normal widened compositor; the
+   * physical bezel gap then naturally skips a small wedge of panorama.
+   * Horizontal ray angle does not vary with pixel Y, so compute it once. */
+  int sky_columns[2 * 4096];
+  double half_angle = atan(rig->width_mm / (2.0 * rig->eye_distance_mm));
+  if (!(half_angle > 0.0) || !isfinite(half_angle)) return false;
+  double pixels_per_radian = (logical_width * 0.5) / half_angle;
+  for (int side = 0; side < 2; ++side)
+    for (int x = 0; x < pw; ++x) {
+      FzeroTripleVec3 ray = cached_rays[(size_t)side * pw * ph + x];
+      double column = 128.0 + atan2(ray.x, -ray.z) * pixels_per_radian;
+      if (!isfinite(column) || fabs(column) > 100000.0) return false;
+      sky_columns[side * pw + x] = (int)lround(column);
+    }
+  /* Mode 1 occupies the skyline band above the Mode 7 IRQ split. Its stock
+   * rows alone leave a triangular black gap on the turned panels, because a
+   * physical side ray can remain above the ground horizon after that split.
+   * Cache each BG1/BG2 panorama row by panel angle, then lower its skyline to
+   * the ground-plane horizon per column. The topmost blue sky fills any area
+   * outside the guest panorama's vertical range. BG3/OBJ/HUD remain center-only. */
+  int sky_count = 0;
+  while (sky_count < 80) {
+    memcpy(&scanout, f->lines[sky_count].registers, PPU_SAVESTATE_REGS_SIZE);
+    if ((scanout.bgmode & 7) != 1 || (scanout.inidisp & 128)) break;
+    ++sky_count;
+  }
+  uint32_t *sky_pixels = sky_count ? malloc((size_t)sky_count * 2 * pw * sizeof(*sky_pixels)) : NULL;
+  if (sky_count && !sky_pixels) return false;
+  for (int source_y = 0; source_y < sky_count; ++source_y) {
+    const FzeroRasterLine *raster = &f->lines[source_y];
+    memcpy(&scanout, raster->registers, PPU_SAVESTATE_REGS_SIZE);
+    for (int side = 0; side < 2; ++side)
+      for (int x = 0; x < pw; ++x) {
+        int column = sky_columns[side * pw + x];
+        uint16_t screens[2] = {0x500, 0x500};
+        for (int sub = 0; sub < 2; ++sub)
+          for (int layer = 0; layer < 2; ++layer) {
+            if (!(scanout.screenEnabled[sub] & (1u << layer)) ||
+                ((scanout.screenWindowed[sub] & (1u << layer)) &&
+                 in_window(&scanout, layer, column, 0))) continue;
+            uint16_t pixel = background_pixel(&scanout, f->vram, layer,
+                                              column, source_y + 1, true);
+            if (pixel > screens[sub]) screens[sub] = pixel;
+          }
+        sky_pixels[(size_t)source_y * 2 * pw + side * pw + x] =
+            colour(&scanout, raster->palette, screens[0], screens[1], false);
+      }
+  }
+  if (sky_count) {
+    int sky_shift[2 * 4096];
+    for (int side = 0; side < 2; ++side)
+      for (int x = 0; x < pw; ++x) {
+        const FzeroTripleVec3 top = cached_rays[(size_t)side * pw * ph + x];
+        const FzeroTripleVec3 bottom = cached_rays[(size_t)side * pw * ph + (size_t)(ph - 1) * pw + x];
+        double d0 = -top.z * ground.pitch_sin - top.y * ground.pitch_cos;
+        double d1 = -bottom.z * ground.pitch_sin - bottom.y * ground.pitch_cos;
+        double horizon = fabs(d1 - d0) > 1e-9 ? -d0 * (ph - 1) / (d1 - d0) :
+                         d0 > 0 ? 0.0 : (double)ph;
+        if (!isfinite(horizon)) { free(sky_pixels); return false; }
+        sky_shift[side * pw + x] = (int)lround(sky_count - 1 - horizon * 224.0 / ph);
+      }
+    for (int y = 0; y < ph; ++y) {
+      int native_y = (int)((y + 0.5) * 224 / ph);
+      for (int side = 0; side < 2; ++side)
+        for (int x = 0; x < pw; ++x) {
+          int sky_y = native_y + sky_shift[side * pw + x];
+          if (sky_y < 0) sky_y = 0;
+          if (sky_y >= sky_count) sky_y = sky_count - 1;
+          output[(size_t)side * pw * ph + (size_t)y * pw + x] =
+              sky_pixels[(size_t)sky_y * 2 * pw + side * pw + x];
+        }
+    }
+    free(sky_pixels);
+  } else {
+    memset(output, 0, (size_t)2 * pw * ph * sizeof(*output));
+  }
   for (int y = 0; y < ph; ++y) {
     int source_y = (int)((y + 0.5) * 224 / ph);
     if (source_y > 223) source_y = 223;
     const FzeroRasterLine *raster = &f->lines[source_y];
     memcpy(&scanout, raster->registers, PPU_SAVESTATE_REGS_SIZE);
-    if ((scanout.bgmode & 7) != 7 || (scanout.inidisp & 128)) continue;
+    if (scanout.inidisp & 128) continue;
+    if ((scanout.bgmode & 7) != 7) continue;
     FzeroMode7Line line = FzeroMode7Transform(scanout.m7matrix, scanout.m7sel,
                                                (unsigned)source_y + 1);
     FzeroCourseLine reference = course_line(course.camera_x, course.camera_y,

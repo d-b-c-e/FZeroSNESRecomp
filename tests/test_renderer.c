@@ -613,6 +613,45 @@ static void test_triple_fallback(void) {
   for (size_t i = 1; i <= 2 * 16 * 9; ++i) CHECK(sides[i] == 0xdeadbeef);
 }
 
+static void test_triple_sky_horizon(void) {
+  /* ROM-free race-shaped frame: red Mode 1 panorama above the IRQ split,
+   * green Mode 7 below. A turned side ray remains above the ground plane well
+   * after the stock split; it must show sky there, not a black triangle. */
+  setup();
+  memset(p.vram, 0, sizeof(p.vram));
+  for (int i = 0x7800; i < 0x8000; ++i) p.vram[i] = 1;
+  for (int y = 0; y < 8; ++y) p.vram[16 + y] = 255;
+  ram[0x55] = 3;
+  FzeroRendererBeginFrame(ram, 101);
+  for (int line = 1; line <= 224; ++line) {
+    p.bgmode = line <= 47 ? 1 : 7;
+    p.screenEnabled[0] = 1;
+    if (line <= 47) {
+      p.bgXsc[0] = 0x79;
+      p.hScroll[0] = 0;
+      p.vScroll[0] = 36;
+      p.cgram[1] = 31;
+    } else {
+      int magnitude = 352 - (line - 81) * 242 / 100;
+      p.m7matrix[0] = p.m7matrix[3] = 0;
+      p.m7matrix[1] = -magnitude;
+      p.m7matrix[2] = magnitude;
+      p.m7matrix[4] = 264; p.m7matrix[5] = 344;
+      p.m7matrix[6] = 136; p.m7matrix[7] = 168;
+      p.cgram[1] = 0x03e0;
+    }
+    FzeroRendererCaptureLine(&p, (unsigned)line);
+  }
+  FzeroRendererEndFrame(&p, stock);
+  enum { width = 64, height = 36, area = width * height };
+  FzeroTripleRig rig = {708.4166, 398.4843, 660, 0, 70, 70, 8, width, height};
+  uint32_t sides[2 * area];
+  CHECK(FzeroRendererDrawTripleSides(sides, 2 * area, &rig, 342));
+  CHECK(sides[0] == 0xff0000 && sides[area + width - 1] == 0xff0000);
+  CHECK(sides[12 * width] == 0xff0000);
+  CHECK(sides[area + 12 * width + width - 1] == 0xff0000);
+}
+
 int main(void) {
   FzeroVideoSettings s; FzeroVideoStock(&s); /* tests build an explicit viewport, not the shipped defaults */ s.enhanced = true; s.aspect = FZERO_ASPECT_32_9;
   FzeroViewport v = FzeroCalculateViewport(&s, 5120, 1440);
@@ -669,6 +708,7 @@ int main(void) {
   test_hd_mode7();
   test_hd_composition_cache();
   test_triple_fallback();
+  test_triple_sky_horizon();
   puts("F-Zero renderer: bounds, immutable frames, scene fallback, car identity, signed X, panorama wrap and HUD transitions passed");
   return 0;
 }
