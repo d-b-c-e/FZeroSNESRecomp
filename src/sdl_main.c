@@ -1815,7 +1815,6 @@ int main(int argc, char **argv) {
                                          SDL_PROP_WINDOW_WIN32_HWND_POINTER,
                                          NULL);
 #endif
-  if (g_playthrough.mode != 2) FzeroFfbInit(g_config_path, native_window);
   if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
   FzeroGlRenderer gl_renderer;
@@ -1920,6 +1919,16 @@ int main(int argc, char **argv) {
   FzeroGamepadConfigure(g_config_path, g_selftest_pad ? g_selftest_guid : launcher_settings.player_gamepad_guid[0],
                          launcher_settings.deadzone[0]);
   if (g_playthrough.mode != 2) FzeroGamepadRefresh(&pad);
+
+  /* The fullscreen transition and renderer creation can make DirectInput
+   * re-acquire the wheel. Starting effects before either step leaves some
+   * drivers accepting updates to effects that are no longer playing until a
+   * menu calls ZeroForces. Start after the window settles, then clear the
+   * initial effect state so the first nonzero update explicitly starts it. */
+  if (g_playthrough.mode != 2) {
+    FzeroFfbInit(g_config_path, native_window);
+    FzeroFfbSilence();
+  }
 
   int running = 1;
   int paused = 0;
