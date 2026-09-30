@@ -18,13 +18,24 @@ extern "C" {
 namespace {
 FzeroFfbState s_state{};
 int s_strength = 40;
+int s_impact_strength = 20;
+constexpr int kConstantImpactMs = 120;
+constexpr int kSineImpactMs = 140;
 
 #ifdef _WIN32
+using CreateConstantBurstFn = int (__cdecl *)(int);
+using PlayConstantBurstFn = int (__cdecl *)(int, int);
+using ReleaseConstantBurstsFn = void (__cdecl *)();
 WheelFfbApi s_ffb{};
 int s_damper = -1;
 int s_spring = -1;
 int s_road = -1;
-int s_collision = -1;
+int s_collision_sine = -1;
+int s_collision_constant = -1;
+bool s_use_constant_impact = false;
+CreateConstantBurstFn s_create_constant_burst = nullptr;
+PlayConstantBurstFn s_play_constant_burst = nullptr;
+ReleaseConstantBurstsFn s_release_constant_bursts = nullptr;
 bool s_active = false;
 unsigned s_trace_frames = 0;
 bool s_trace_enabled = false;
@@ -121,10 +132,18 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
   int enabled = 0;
   if (!FzeroIniReadInt(config_path, "ForceFeedback", "Enabled", &enabled) ||
       !enabled) return;
+  s_strength = 40;
+  s_impact_strength = 20;
   FzeroIniReadInt(config_path, "ForceFeedback", "Strength", &s_strength);
+  FzeroIniReadInt(config_path, "ForceFeedback", "ImpactStrength", &s_impact_strength);
   s_strength = std::max(0, std::min(s_strength, 100));
+  s_impact_strength = std::max(0, std::min(s_impact_strength, 100));
 
 #ifdef _WIN32
+  char impact_type[32] = "Constant";
+  FzeroIniReadString(config_path, "ForceFeedback", "ImpactType", impact_type,
+                     sizeof(impact_type));
+  const bool request_constant = std::strcmp(impact_type, "Sine") != 0;
   char requested[256] = "";
   if (!FzeroIniReadString(config_path, "ForceFeedback", "Device", requested,
                           sizeof(requested)) || !requested[0]) {
@@ -162,7 +181,8 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
     return;
   }
   s_ffb.InstallExitGuards();
-  s_ffb.SetAutoCenter(0);
+  if (!s_ffb.SetAutoCenter(0))
+    std::fprintf(stderr, "[fzero-ffb] hardware autocenter disable refused; see WheelFfb log\n");
   if (!s_ffb.StartEffect()) {
     std::fprintf(stderr, "[fzero-ffb] constant effect failed (HRESULT %08x); disabled\n",
                  (unsigned)s_ffb.GetLastHResult());
@@ -182,12 +202,29 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
   s_spring = s_ffb.CreateConditionEffect(0);
   s_damper = s_ffb.CreateConditionEffect(1);
   s_road = s_ffb.CreatePeriodicEffect(25);
-  s_collision = s_ffb.CreatePeriodicBurst(32, 140);
+  if (request_constant) {
+    s_create_constant_burst = reinterpret_cast<CreateConstantBurstFn>(
+        GetProcAddress(s_ffb.module, "CreateConstantBurst"));
+    s_play_constant_burst = reinterpret_cast<PlayConstantBurstFn>(
+        GetProcAddress(s_ffb.module, "PlayConstantBurst"));
+    s_release_constant_bursts = reinterpret_cast<ReleaseConstantBurstsFn>(
+        GetProcAddress(s_ffb.module, "ReleaseConstantBursts"));
+    if (s_create_constant_burst && s_play_constant_burst && s_release_constant_bursts)
+      s_collision_constant = s_create_constant_burst(kConstantImpactMs);
+    if (s_collision_constant >= 0) s_use_constant_impact = true;
+    else std::fprintf(stderr,
+        "[fzero-ffb] constant crash cue unavailable; falling back to sine burst\n");
+  }
+  if (!s_use_constant_impact)
+    s_collision_sine = s_ffb.CreatePeriodicBurst(32, kSineImpactMs);
   s_active = true;
   s_trace_frames = 0;
   s_trace_enabled = std::getenv("FZERO_FFB_TRACE") != nullptr;
-  std::fprintf(stderr, "[fzero-ffb] active on %s at %d%% (spring=%d damper=%d road=%d)\n",
-               requested, s_strength, s_spring, s_damper, s_road);
+  std::fprintf(stderr, "[fzero-ffb] active on %s at %d%% (spring=%d damper=%d road=%d impact=%s/%d/%d%%)\n",
+               requested, s_strength, s_spring, s_damper, s_road,
+               s_use_constant_impact ? "constant" : "sine",
+               s_use_constant_impact ? s_collision_constant : s_collision_sine,
+               s_impact_strength);
 #else
   (void)native_window;
   std::fprintf(stderr, "[fzero-ffb] unavailable on this platform\n");
@@ -222,13 +259,20 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
                  output.road_magnitude, road_ok,
                  (unsigned)s_ffb.GetLastHResult());
   if (output.collision_pulse) {
-    int accepted = s_collision >= 0 ? s_ffb.PlayPeriodicBurst(
-        s_collision, std::min(3500, s_strength * 100), 32000) : 0;
+    const int magnitude = s_impact_strength * 100;
+    const int accepted = s_use_constant_impact ?
+        (s_collision_constant >= 0 && s_play_constant_burst ?
+            s_play_constant_burst(s_collision_constant, magnitude) : 0) :
+        (s_collision_sine >= 0 ?
+            s_ffb.PlayPeriodicBurst(s_collision_sine, magnitude, 32000) : 0);
     if (s_trace_enabled)
-      std::fprintf(stderr, "[fzero-ffb-impact] frame=%u energy=%u accepted=%d "
-                   "slot=%d hr=%08x\n", s_trace_frames,
+      std::fprintf(stderr, "[fzero-ffb-impact] frame=%u energy=%u type=%s "
+                   "magnitude=%d duration_ms=%d accepted=%d slot=%d hr=%08x\n", s_trace_frames,
                    (unsigned)(ram[0xc9] | ((unsigned)ram[0xca] << 8)),
-                   accepted, s_collision, (unsigned)s_ffb.GetLastHResult());
+                   s_use_constant_impact ? "constant" : "sine", magnitude,
+                   s_use_constant_impact ? kConstantImpactMs : kSineImpactMs,
+                   accepted, s_use_constant_impact ? s_collision_constant : s_collision_sine,
+                   (unsigned)s_ffb.GetLastHResult());
   }
 #else
   (void)ram; (void)ram_size; (void)input;
@@ -245,12 +289,17 @@ void FzeroFfbShutdown(void) {
 #ifdef _WIN32
   if (s_ffb.module) {
     s_ffb.PanicStop();
+    if (s_release_constant_bursts) s_release_constant_bursts();
     s_ffb.ReleasePeriodicEffects();
     s_ffb.ReleaseConditionEffects();
     s_ffb.FreeDirectInput();
     WheelFfb_Unload(&s_ffb);
   }
-  s_spring = s_damper = s_road = s_collision = -1;
+  s_spring = s_damper = s_road = s_collision_sine = s_collision_constant = -1;
+  s_use_constant_impact = false;
+  s_create_constant_burst = nullptr;
+  s_play_constant_burst = nullptr;
+  s_release_constant_bursts = nullptr;
   s_active = false;
   s_trace_enabled = false;
 #endif

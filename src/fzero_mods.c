@@ -53,7 +53,8 @@ static const WheelOption wheel_options[] = {
 };
 #define WHEEL_OPTIONS ((int)(sizeof(wheel_options) / sizeof(wheel_options[0])))
 static int wheel_values[WHEEL_OPTIONS], wheel_enabled, ffb_enabled, ffb_strength;
-static char ffb_device[256], wheel_section[64];
+static int ffb_impact_strength;
+static char ffb_device[256], ffb_impact_type[32], wheel_section[64];
 static char ffb_devices[16][256];
 static int ffb_device_count;
 static const char *wheel_config;
@@ -96,7 +97,7 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
         "Try 2x and 60 FPS if performance drops.", descriptions[index], video->hd_scale);
     COPY(out->status, "Warning: high CPU and memory use above 4x");
   }
-  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 2 : index == 2 || index == 4 || index == 7 || index == 8 ? 0 : 1;
+  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 2 || index == 4 || index == 7 || index == 8 ? 0 : 1;
   return 1;
 }
 static int option_get(void *ctx, const char *package, const char *feature, int index,
@@ -128,15 +129,26 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
     }
     return 1;
   }
-  if (kind == 7 && index >= 0 && index < 2) {
+  if (kind == 7 && index >= 0 && index < 4) {
     memset(out, 0, sizeof(*out));
-    COPY(out->id, index ? "Device" : "Strength");
-    COPY(out->label, index ? "FFB device" : "Strength (%)");
-    out->type = index ? RECOMP_MOD_OPTION_CHOICE : RECOMP_MOD_OPTION_INTEGER;
-    out->choice_count = index ? ffb_device_count + 1 : 0;
+    COPY(out->id, index == 0 ? "Strength" : index == 1 ? "Device" :
+        index == 2 ? "ImpactStrength" : "ImpactType");
+    COPY(out->label, index == 0 ? "Centering / road strength (%)" :
+        index == 1 ? "FFB device" : index == 2 ? "Crash impact strength (%)" :
+        "Crash impact effect");
+    out->type = index == 1 || index == 3 ? RECOMP_MOD_OPTION_CHOICE : RECOMP_MOD_OPTION_INTEGER;
+    out->choice_count = index == 1 ? ffb_device_count + 1 : index == 3 ? 2 : 0;
     out->min_value = 0; out->max_value = 100; out->step = 1;
-    if (index) { COPY(out->value, ffb_device); COPY(out->default_value, ""); }
-    else { snprintf(out->value, sizeof(out->value), "%d", ffb_strength); COPY(out->default_value, "35"); }
+    if (index == 2)
+      COPY(out->description, "Independent of centering. Start at 20% on a direct-drive wheel and raise cautiously.");
+    if (index == 3)
+      COPY(out->description, "Compare a short constant push against the previous sine burst at the same impact strength.");
+    if (index == 1) { COPY(out->value, ffb_device); COPY(out->default_value, ""); }
+    else if (index == 3) { COPY(out->value, ffb_impact_type); COPY(out->default_value, "Constant"); }
+    else {
+      snprintf(out->value, sizeof(out->value), "%d", index == 2 ? ffb_impact_strength : ffb_strength);
+      COPY(out->default_value, index == 2 ? "20" : "35");
+    }
     return 1;
   }
   if (index != 0) return 0;
@@ -180,6 +192,12 @@ static int choice_get(void *ctx, const char *package, const char *feature,
     }
     return 1;
   }
+  if (identity(package, feature) == 7 && !strcmp(option, "ImpactType") && index < 2) {
+    memset(out, 0, sizeof(*out));
+    COPY(out->value, index ? "Sine" : "Constant");
+    COPY(out->label, index ? "Sine burst (comparison)" : "Constant push (120 ms)");
+    return 1;
+  }
   if (identity(package, feature) == 1 && !strcmp(option, "aspect") && index < 4) value = aspects[index];
   if (identity(package, feature) == 2 && !strcmp(option, "fps") && index < 8) value = rates[index];
   if (!value) return 0;
@@ -217,6 +235,10 @@ static int set_option(void *ctx, const char *package, const char *feature,
       if (!found) return 0;
       COPY(ffb_device, value); return 1;
     }
+    if (identity(package, feature) == 7 && !strcmp(option, "ImpactType")) {
+      if (strcmp(value, "Constant") && strcmp(value, "Sine")) return 0;
+      COPY(ffb_impact_type, value); return 1;
+    }
     if (identity(package, feature) == 6 &&
         (!strcmp(option, "AcceleratorInvert") ||
          !strcmp(option, "BrakeInvert"))) {
@@ -229,8 +251,11 @@ static int set_option(void *ctx, const char *package, const char *feature,
     long parsed = strtol(value, &end, 10);
     if (!value[0] || *end) return 0;
     if (identity(package, feature) == 7) {
-      if (strcmp(option, "Strength") || parsed < 0 || parsed > 100) return 0;
-      ffb_strength = (int)parsed; return 1;
+      if (parsed < 0 || parsed > 100) return 0;
+      if (!strcmp(option, "Strength")) ffb_strength = (int)parsed;
+      else if (!strcmp(option, "ImpactStrength")) ffb_impact_strength = (int)parsed;
+      else return 0;
+      return 1;
     }
     for (int i = 0; i < WHEEL_OPTIONS; ++i) {
       const WheelOption *spec = &wheel_options[i];
@@ -269,6 +294,9 @@ static int commit(void *ctx, const char *image) {
       wheel_write(wheel_config, "ForceFeedback", "Enabled", value);
       snprintf(value, sizeof(value), "%d", ffb_strength);
       wheel_write(wheel_config, "ForceFeedback", "Strength", value);
+      snprintf(value, sizeof(value), "%d", ffb_impact_strength);
+      wheel_write(wheel_config, "ForceFeedback", "ImpactStrength", value);
+      wheel_write(wheel_config, "ForceFeedback", "ImpactType", ffb_impact_type);
       wheel_write(wheel_config, "ForceFeedback", "Device", ffb_device);
     }
     return 1;
@@ -306,6 +334,8 @@ const RecompLauncherCModProvider *FzeroModsProviderWheel(
   }
   snprintf(wheel_section, sizeof(wheel_section), "Controller.%s", wheel_guid);
   wheel_enabled = 1; ffb_enabled = 0; ffb_strength = 35;
+  ffb_impact_strength = 20;
+  COPY(ffb_impact_type, "Constant");
   ffb_device[0] = 0;
   FzeroIniReadInt(control_path, wheel_section, "AnalogSteering", &wheel_enabled);
   for (int i = 0; i < WHEEL_OPTIONS; ++i) {
@@ -315,6 +345,12 @@ const RecompLauncherCModProvider *FzeroModsProviderWheel(
   }
   FzeroIniReadInt(control_path, "ForceFeedback", "Enabled", &ffb_enabled);
   FzeroIniReadInt(control_path, "ForceFeedback", "Strength", &ffb_strength);
+  FzeroIniReadInt(control_path, "ForceFeedback", "ImpactStrength", &ffb_impact_strength);
+  FzeroIniReadString(control_path, "ForceFeedback", "ImpactType", ffb_impact_type,
+                     sizeof(ffb_impact_type));
+  if (ffb_impact_strength < 0 || ffb_impact_strength > 100) ffb_impact_strength = 20;
+  if (strcmp(ffb_impact_type, "Constant") && strcmp(ffb_impact_type, "Sine"))
+    COPY(ffb_impact_type, "Constant");
   FzeroIniReadString(control_path, "ForceFeedback", "Device", ffb_device,
                      sizeof(ffb_device));
   return provider;

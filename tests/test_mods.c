@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(1); } } while (0)
-static int wrote_wheel_range, wrote_rewind, wrote_ffb, wrote_brake_invert;
-static char wrote_device[256];
+static int wrote_wheel_range, wrote_rewind, wrote_ffb, wrote_impact, wrote_brake_invert;
+static char wrote_device[256], wrote_impact_type[32];
 static int list_ffb(char names[][256], int max_devices) {
   CHECK(max_devices >= 2);
   strcpy(names[0], "MOZA R12 Base");
@@ -20,6 +20,10 @@ static void note_ini(const char *path, const char *section,
       !strcmp(key, "ButtonRewind")) wrote_rewind = atoi(value);
   if (!strcmp(section, "ForceFeedback") &&
       !strcmp(key, "Strength")) wrote_ffb = atoi(value);
+  if (!strcmp(section, "ForceFeedback") &&
+      !strcmp(key, "ImpactStrength")) wrote_impact = atoi(value);
+  if (!strcmp(section, "ForceFeedback") &&
+      !strcmp(key, "ImpactType")) strcpy(wrote_impact_type, value);
   if (!strcmp(section, "ForceFeedback") &&
       !strcmp(key, "Device")) strcpy(wrote_device, value);
   if (!strcmp(section, "Controller.test-guid") &&
@@ -94,7 +98,7 @@ int main(void) {
   CHECK(p->feature_count(NULL) == 9);
   RecompLauncherCModFeature wheel, ffb, triple_with_wheel;
   CHECK(p->feature_get(NULL, 5, &wheel) && wheel.option_count == 23);
-  CHECK(p->feature_get(NULL, 6, &ffb) && ffb.option_count == 2);
+  CHECK(p->feature_get(NULL, 6, &ffb) && ffb.option_count == 4);
   CHECK(p->feature_get(NULL, 7, &triple_with_wheel) &&
         !strcmp(triple_with_wheel.package_id, triple.package_id) &&
         triple_with_wheel.enabled && triple_with_wheel.option_count == 0);
@@ -112,9 +116,16 @@ int main(void) {
   CHECK(option.type == RECOMP_MOD_OPTION_BOOLEAN && !strcmp(option.value, "false"));
   CHECK(p->feature_option_get(NULL, ffb.package_id, ffb.id, 1, &option));
   CHECK(option.type == RECOMP_MOD_OPTION_CHOICE && option.choice_count == 3);
+  CHECK(p->feature_option_get(NULL, ffb.package_id, ffb.id, 2, &option));
+  CHECK(!strcmp(option.id, "ImpactStrength") && !strcmp(option.value, "20"));
+  CHECK(p->feature_option_get(NULL, ffb.package_id, ffb.id, 3, &option));
+  CHECK(!strcmp(option.id, "ImpactType") && !strcmp(option.value, "Constant") &&
+        option.type == RECOMP_MOD_OPTION_CHOICE && option.choice_count == 2);
   RecompLauncherCModChoice choice;
   CHECK(p->feature_choice_get(NULL, ffb.package_id, ffb.id, "Device", 1, &choice));
   CHECK(!strcmp(choice.value, "MOZA R12 Base"));
+  CHECK(p->feature_choice_get(NULL, ffb.package_id, ffb.id, "ImpactType", 1, &choice));
+  CHECK(!strcmp(choice.value, "Sine"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
                               "SteeringRangePercent", "45"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
@@ -130,13 +141,22 @@ int main(void) {
   CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
                               "Strength", "40"));
   CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                              "ImpactStrength", "25"));
+  CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                              "ImpactType", "Sine"));
+  CHECK(!p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                               "ImpactStrength", "101"));
+  CHECK(!p->feature_set_option(NULL, ffb.package_id, ffb.id,
+                               "ImpactType", "Square"));
+  CHECK(p->feature_set_option(NULL, ffb.package_id, ffb.id,
                               "Device", "MOZA R12 Base"));
   CHECK(!p->feature_set_option(NULL, ffb.package_id, ffb.id,
                                "Device", "unknown"));
   CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
                               "BrakeInvert", "true"));
   CHECK(p->commit(NULL, NULL));
-  CHECK(wrote_wheel_range == 45 && wrote_rewind == 37 && wrote_ffb == 40);
+  CHECK(wrote_wheel_range == 45 && wrote_rewind == 37 && wrote_ffb == 40 &&
+        wrote_impact == 25 && !strcmp(wrote_impact_type, "Sine"));
   CHECK(wrote_brake_invert == 1 && !strcmp(wrote_device, "MOZA R12 Base"));
   remove("test-mods.ini");
   puts("Independent widescreen and presentation FPS plugins passed");
