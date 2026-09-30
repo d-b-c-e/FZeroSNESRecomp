@@ -82,7 +82,7 @@ int main(void) {
   CHECK(cfg);
   fprintf(cfg, "[Controller.%s]\nAnalogSteering=1\nDeadzone=3\n"
                "SteeringAxis=0\nAcceleratorAxis=2\nBrakeAxis=3\n"
-               "ButtonStart=36\nButtonUp=128\nButtonRight=129\n"
+               "ButtonB=1\nButtonStart=36\nButtonUp=128\nButtonRight=129\n"
                "ButtonDown=130\nButtonLeft=131\n", guid);
   fclose(cfg);
   FzeroGamepadConfigure("gamepad-test.ini", guid, 25);
@@ -93,6 +93,16 @@ int main(void) {
   CHECK(SDL_SetJoystickVirtualButton(wheel, 36, true));
   SDL_UpdateJoysticks();
   CHECK(FzeroGamepadRead(pad) == (0x0080u | 0x0001u | 0x0008u));
+  CHECK(FzeroGamepadReadOverlay(pad) == (0x0080u | 0x0008u));
+  CHECK(SDL_SetJoystickVirtualAxis(wheel, 3, 32767));
+  SDL_UpdateJoysticks();
+  CHECK(FzeroGamepadRead(pad) == (0x0080u | 0x0001u | 0x0002u | 0x0008u));
+  CHECK(FzeroGamepadReadOverlay(pad) == (0x0080u | 0x0008u));
+  CHECK(SDL_SetJoystickVirtualButton(wheel, 1, true));
+  SDL_UpdateJoysticks();
+  CHECK(FzeroGamepadReadOverlay(pad) == (0x0080u | 0x0001u | 0x0008u));
+  CHECK(SDL_SetJoystickVirtualButton(wheel, 1, false));
+  CHECK(SDL_SetJoystickVirtualAxis(wheel, 3, 0));
   CHECK(SDL_SetJoystickVirtualAxis(wheel, 0, 0));
   CHECK(SDL_SetJoystickVirtualHat(wheel, 0, SDL_HAT_UP));
   SDL_UpdateJoysticks();

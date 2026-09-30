@@ -237,7 +237,7 @@ void FzeroGamepadEvent(SDL_GameController **pad, const SDL_Event *event) {
   }
 }
 
-uint32_t FzeroGamepadRead(SDL_GameController *pad) {
+static uint32_t gamepad_read(SDL_GameController *pad, bool include_pedals) {
   if ((!pad || !SDL_GameControllerGetAttached(pad)) &&
       (!s_raw || !SDL_JoystickGetAttached(s_raw))) return 0;
   if (!pad) {
@@ -250,12 +250,12 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
       if (x < -s_deadzone) input |= 0x0040u;
       if (x > s_deadzone) input |= 0x0080u;
     }
-    if (s_gas_axis >= 0) {
+    if (include_pedals && s_gas_axis >= 0) {
       int value = SDL_JoystickGetAxis(s_raw, s_gas_axis);
       if (s_gas_invert) value = -value;
       if (value > s_pedal_threshold) input |= 0x0001u;
     }
-    if (s_brake_axis >= 0) {
+    if (include_pedals && s_brake_axis >= 0) {
       int value = SDL_JoystickGetAxis(s_raw, s_brake_axis);
       if (s_brake_invert) value = -value;
       if (value > s_pedal_threshold) input |= 0x0002u;
@@ -299,6 +299,14 @@ uint32_t FzeroGamepadRead(SDL_GameController *pad) {
   if (y < -s_deadzone) input |= 0x0010u;
   if (y > s_deadzone) input |= 0x0020u;
   return input;
+}
+
+uint32_t FzeroGamepadRead(SDL_GameController *pad) {
+  return gamepad_read(pad, true);
+}
+
+uint32_t FzeroGamepadReadOverlay(SDL_GameController *pad) {
+  return gamepad_read(pad, false);
 }
 
 void FzeroGamepadShutdown(SDL_GameController **pad) {

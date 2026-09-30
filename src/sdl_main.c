@@ -1250,7 +1250,7 @@ static uint32_t overlay_filter_guest_input(uint32_t inputs) {
 }
 
 static uint32_t overlay_nav_inputs(SDL_GameController *pad) {
-  return keyboard_input() | controller_input(pad);
+  return keyboard_input() | FzeroGamepadReadOverlay(pad);
 }
 
 /* Pad gestures, for a player who never touches the keyboard. Select + R opens
@@ -1508,7 +1508,9 @@ static void rewind_key_down(int key, int repeat) {
  * cancels, and the pad mirrors them. */
 static void rewind_loop(FzeroPresenter *p, int *running,
                         SDL_GameController **pad) {
-  uint32_t prev_pad = 0, held_dir = 0, held_since = 0, last_repeat = 0;
+  /* The button held when opening the strip is not a new overlay press. */
+  uint32_t prev_pad = overlay_nav_inputs(*pad);
+  uint32_t held_dir = 0, held_since = 0, last_repeat = 0;
   unsigned pump = 0;
   fprintf(stderr, "[fzero-overlay] rewind filmstrip OPEN - guest frozen until "
                   "it closes (pad B, or Escape; Left/Right scrub, A or Enter "
