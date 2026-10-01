@@ -21,6 +21,7 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 - Optional [HD Mode 7](docs/HD_MODE7.md): 2x through 10x track rendering, independent of widescreen and presentation FPS.
 - High refresh presentation: 60, 90, 120, 144, 165, 240, or 360 FPS.
 - Display shaders: CRT Soft, LCD Grid, Sharp, Warm Composite, or your own GLSL shader.
+- Experimental configurable triple-screen projection on equal-panel fullscreen Surround/span displays; shaders apply separately to each panel. Side vehicles and effects remain incomplete.
 - Save states with a slot browser and thumbnails, opened with **F7** or **Select + R**.
 - Rewind: step back through the last few seconds and drop back in.
 - Gamepad support through SDL.

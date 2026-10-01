@@ -19,9 +19,9 @@ physical panels, including the bezel gap. `src/fzero_triple_ground.*` is an
 experimental flat-ground calibration from two captured Mode 7 scanlines. A
 deterministic test checks panel symmetry, independent sightlines, and that
 center-panel ground rays reproduce synthetic source scanlines. The separate
-integration branch now has an opt-in three-panel ground compositor, but the
-normal installed game still uses one wide view. Side-panel sprite reprojection
-is not active yet.
+integration branch has an opt-in three-panel ground compositor. Since that
+initial prototype, the normal installed game has also received the experimental
+three-panel mode; side-panel sprite reprojection is not active yet.
 
 The ground adapter also has an inverse projection from an unwrapped Mode 7
 ground coordinate to subpixel coordinates on any physical panel. Synthetic
@@ -122,18 +122,19 @@ telemetry mods and adds Triple Screen as a separate experimental toggle. A
 and right ground panels; the regular Stream Deck launcher was not replaced.
 
 The launcher now exposes an opt-in **Triple Screen (experimental)** mod. Its
-SDL presenter accepts only a 7680×1440 fullscreen Surround surface with no
-shader selected, draws the normal game compositor in the center 2560×1440
-panel, and evaluates separate 512×288 ground rays for each side panel. Menus,
+presenter accepts a fullscreen equal-panel Surround/span surface with panel
+aspect between 1.2:1 and 2.5:1, draws the normal game compositor in the center
+panel, and evaluates separate 512×288 ground rays for each side panel. Panel
+width, eye distance, left/right yaw, bezel gap, and eye height are configurable
+in the mod UI and saved in `fzero-video.ini`. Menus,
 save-state and rewind overlays stay centered. A rejected camera calibration,
 wrong display mode, or non-race scene falls back to the centered game view.
 The runtime side compositor now samples the captured Mode 1 BG1/BG2 panorama
 at each panel's horizontal eye angle and carries its skyline down to the
 ground-plane horizon. This removes the black sky/gap seen in the first rig
 preview, but side vehicles and effects are still missing. This is **not** complete
-triple-screen support and must not replace a working install without a rig
-test. The physical values are currently a pinned copy of the saved rig profile;
-the versioned toolkit layout/status adapter has not yet been connected.
+triple-screen support. The versioned toolkit layout/status adapter has not yet
+been connected, and separate display windows are not implemented.
 On one captured active-race frame, both live side buffers matched the offline
 reference byte-for-byte before the sky pass. In an 11,364-frame recorded-drive
 replay with 7680×1440 Surround, the sky-enabled experimental build completed
@@ -142,15 +143,31 @@ averaged 4.48 ms and the old combined side-projection/texture-upload/draw
 submission bucket averaged 8.33 ms; 272 presentations were
 missed, versus 46 in a prior ground-only replay. Runs were not simultaneous,
 so this is a performance warning rather than a controlled A/B benchmark.
-The current diagnostics split side projection and texture upload into their
-own buckets, but no 7680×1440 Surround trace using that split exists yet.
+Diagnostics now split side projection and texture upload into their own
+buckets. The earlier comparison predates that split.
+
+### Per-panel CRT shader (2026-10-01)
+
+The OpenGL presenter can now draw the two projected side buffers and the stock
+center compositor with three independent instances of the selected GLSL
+shader. Independent instances keep any shader frame history panel-local; the
+side textures are refreshed even when the CPU projection reuses a cached
+buffer. CRT Soft was visually verified across all three panels on a 7680×1440
+Surround desktop. The private 11,364-frame recorded race completed with no
+shader-load failure or replay mismatch, including its impact-flash interval.
+At the display's 180 Hz Auto presentation target it missed 18,716
+presentations because the CPU side projection could not keep up. Repeating the
+same replay at a fixed 60 FPS target missed 109 presentations. These are
+separate desktop runs, not a controlled GPU benchmark; 60 FPS is the current
+starting recommendation for triple-screen CRT on this rig. The saved user
+presentation setting is not changed automatically.
 The source-tile atlas reuses the BG1/BG2 panorama through horizontal scroll
 changes and validates the exact VRAM words it sampled. On one fixed 640×360
 capture, a controlled 200-iteration CPU comparison measured 13.07 ms with
 direct skyline sampling and 11.70 ms with the atlas; their output files were
 byte-identical. This isolated speedup does not establish a 60 Hz rig result:
 subsequent live replays ran alongside other desktop windows and had variable
-presentation pacing. The normal install remains untouched.
+presentation pacing. The normal install was untouched during those tests.
 Additional private replay captures at frames 2,000, 4,000, 6,000, 8,000, and
 10,000 produced byte-identical cached/direct side panels. Five-iteration
 640×360-per-panel CPU timings were 12.6–12.8 ms with the atlas versus

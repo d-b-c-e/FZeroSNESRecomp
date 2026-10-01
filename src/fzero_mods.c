@@ -22,7 +22,7 @@ static const char *const descriptions[] = {
   "Record hardware, active video settings and frame timings in the diagnostics folder beside the game (beside the AppImage on Linux). Off by default. Enable, play through a slowdown, then attach the newest performance JSONL file to your report. Logs stay on your machine; no ROM or save data is included.",
   "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. Button indices are zero-based SDL joystick buttons.",
   "Speed-dependent centering, damping, road texture and collision impulses on the chosen wheel.",
-  "Experimental three-panel Mode 7 view on an equal-panel Surround/span display. Set your physical rig measurements below. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen and no shader.",
+  "Experimental three-panel Mode 7 view on an equal-panel Surround/span display. Set your physical rig measurements below. CRT shaders are applied per panel. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen.",
   "Hold the previous image through the brief near-white frames that follow hard impacts. Game simulation and force feedback continue; only the flash is hidden."
 };
 typedef struct WheelOption { const char *key, *label; int fallback, min, max; } WheelOption;

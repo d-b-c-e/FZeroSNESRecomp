@@ -121,6 +121,9 @@ void NORETURN Die(const char *error) {
 
 #define GLSL_CODE(...) #__VA_ARGS__
 
+/* Fixed internal projection resolution; panel geometry uses physical size. */
+enum { kTriplePanelWidth = 512, kTriplePanelHeight = 288 };
+
 typedef struct FzeroGlRenderer {
   SDL_Window *window;
   SDL_GLContext context;
@@ -131,7 +134,9 @@ typedef struct FzeroGlRenderer {
   uint overlay_vbo;
   GlTextureWithSize texture;
   GlTextureWithSize overlay;
+  GlTextureWithSize triple_side[2];
   GlslShader *shader;
+  GlslShader *triple_shader[2];
 } FzeroGlRenderer;
 
 static void fzero_gl_prepare_window(void) {
@@ -237,7 +242,7 @@ static bool fzero_gl_create_passthrough(FzeroGlRenderer *glr) {
 }
 
 static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
-                          const char *shader_path) {
+                          const char *shader_path, bool triple_requested) {
   memset(glr, 0, sizeof(*glr));
   glr->window = window;
   glr->context = SDL_GL_CreateContext(window);
@@ -254,14 +259,69 @@ static bool fzero_gl_init(FzeroGlRenderer *glr, SDL_Window *window,
     glr->shader = GlslShader_CreateFromFile(shader_path);
     if (!glr->shader) {
       fprintf(stderr, "[fzero-gl] Unable to load shader preset: %s; using unfiltered output\n", shader_path);
+    } else if (triple_requested) {
+      for (int side = 0; side < 2; ++side) {
+        glr->triple_shader[side] = GlslShader_CreateFromFile(shader_path);
+        if (!glr->triple_shader[side])
+          fprintf(stderr, "[fzero-gl] Unable to load shader for side %d; that panel will be unfiltered\n", side);
+      }
     }
   }
   return true;
 }
 
+static void fzero_gl_draw_image(FzeroGlRenderer *glr,
+                                GlTextureWithSize *texture,
+                                GlslShader *shader, FzeroRect rect,
+                                int drawable_height) {
+  int viewport_y = drawable_height - rect.y - rect.h;
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture->gl_texture);
+  if (shader) {
+    glBindVertexArray(glr->vao);
+    GlslShader_Render(shader, texture, rect.x, viewport_y, rect.w, rect.h);
+    glBindVertexArray(0);
+  } else {
+    int filter = g_config.linear_filtering ? GL_LINEAR : GL_NEAREST;
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glViewport(rect.x, viewport_y, rect.w, rect.h);
+    glUseProgram(glr->program);
+    glUniform1i(glGetUniformLocation(glr->program, "texture1"), 0);
+    glBindVertexArray(glr->vao);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+    glUseProgram(0);
+  }
+}
+
+static void fzero_gl_upload_triple_sides(FzeroGlRenderer *glr,
+                                         const uint32_t *pixels) {
+  const int width = kTriplePanelWidth, height = kTriplePanelHeight;
+  for (int side = 0; side < 2; ++side) {
+    GlTextureWithSize *tex = &glr->triple_side[side];
+    if (!tex->gl_texture) glGenTextures(1, &tex->gl_texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex->gl_texture);
+    const uint32_t *source = pixels + (size_t)side * width * height;
+    if (tex->width == width && tex->height == height)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height,
+                      GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, source);
+    else {
+      tex->width = width;
+      tex->height = height;
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                   GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, source);
+    }
+  }
+}
+
 static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
                             int logical_width, int logical_height, FzeroViewport viewport,
-                            int drawable_width, int drawable_height) {
+                            int drawable_width, int drawable_height,
+                            bool triple_active, bool triple_ready) {
   uint64_t diagnostic_start = FzeroDiagnosticsBegin();
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, glr->texture.gl_texture);
@@ -279,27 +339,19 @@ static void fzero_gl_render(FzeroGlRenderer *glr, const uint8_t *pixels,
   diagnostic_start = FzeroDiagnosticsBegin();
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
-  FzeroRect rect = FzeroDestination(viewport, drawable_width, drawable_height);
-  int viewport_y = drawable_height - rect.y - rect.h;
-  if (glr->shader) {
-    glBindVertexArray(glr->vao);
-    GlslShader_Render(glr->shader, &glr->texture, rect.x, viewport_y, rect.w,
-                      rect.h);
-    glBindVertexArray(0);
-  } else {
-    int filter = g_config.linear_filtering ? GL_LINEAR : GL_NEAREST;
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glViewport(rect.x, viewport_y, rect.w, rect.h);
-    glUseProgram(glr->program);
-    glUniform1i(glGetUniformLocation(glr->program, "texture1"), 0);
-    glBindVertexArray(glr->vao);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glBindVertexArray(0);
-    glUseProgram(0);
+  if (triple_active && triple_ready) {
+    int panel_width = drawable_width / 3;
+    FzeroRect left = {0, 0, panel_width, drawable_height};
+    FzeroRect right = {2 * panel_width, 0, panel_width, drawable_height};
+    fzero_gl_draw_image(glr, &glr->triple_side[0], glr->triple_shader[0],
+                        left, drawable_height);
+    fzero_gl_draw_image(glr, &glr->triple_side[1], glr->triple_shader[1],
+                        right, drawable_height);
   }
+  FzeroRect rect = FzeroDestination(viewport,
+      triple_active ? drawable_width / 3 : drawable_width, drawable_height);
+  if (triple_active) rect.x += drawable_width / 3;
+  fzero_gl_draw_image(glr, &glr->texture, glr->shader, rect, drawable_height);
   FzeroDiagnosticsEnd(FZERO_DIAG_DRAW, diagnostic_start);
 }
 
@@ -342,7 +394,12 @@ static void fzero_gl_draw_overlay(FzeroGlRenderer *glr, const uint32_t *panel,
 
 static void fzero_gl_destroy(FzeroGlRenderer *glr) {
   if (glr->shader) GlslShader_Destroy(glr->shader);
+  for (int side = 0; side < 2; ++side)
+    if (glr->triple_shader[side]) GlslShader_Destroy(glr->triple_shader[side]);
   if (glr->overlay.gl_texture) glDeleteTextures(1, &glr->overlay.gl_texture);
+  for (int side = 0; side < 2; ++side)
+    if (glr->triple_side[side].gl_texture)
+      glDeleteTextures(1, &glr->triple_side[side].gl_texture);
   glDeleteTextures(1, &glr->texture.gl_texture);
   glDeleteProgram(glr->program);
   glDeleteBuffers(1, &glr->vbo);
@@ -991,7 +1048,6 @@ typedef struct FzeroPresenter {
 /* A fixed internal side resolution bounds CPU projection cost independently
  * of the physical display resolution. The output stretch is physical-panel
  * correct because rays use normalized panel coordinates and millimetres. */
-enum { kTriplePanelWidth = 512, kTriplePanelHeight = 288 };
 static FzeroTripleRig triple_rig_for_span(const FzeroVideoSettings *video,
                                          int span_width, int span_height) {
   double panel_width = (double)video->triple_panel_width_mm;
@@ -1096,8 +1152,25 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
     previous_hd = hd;
   }
   if (p->gl) {
+    bool triple_ready = false;
+    if (p->triple_active && p->triple_pixels) {
+      uint64_t projection_start = FzeroDiagnosticsBegin();
+      triple_ready = FzeroRendererDrawTripleSides(p->triple_pixels,
+          (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
+          &p->triple_rig, p->logical_width);
+      FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_PROJECTION, projection_start);
+      if (triple_ready) {
+        /* Shader presets with Prev-frame history rotate their input texture
+         * handles inside GlslShader_Render. Refresh each presentation even
+         * when the CPU side projection itself was cached. */
+        uint64_t upload_start = FzeroDiagnosticsBegin();
+        fzero_gl_upload_triple_sides(p->gl, p->triple_pixels);
+        FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_UPLOAD, upload_start);
+      }
+    }
     fzero_gl_render(p->gl, pixels, width, height, p->viewport,
-                    p->drawable_width, p->drawable_height);
+                    p->drawable_width, p->drawable_height,
+                    p->triple_active, triple_ready);
     if (panel) {
       fzero_gl_draw_overlay(p->gl, panel, pw, ph, overlay_rect(p, is_menu),
                             p->drawable_height);
@@ -1801,9 +1874,9 @@ int main(int argc, char **argv) {
 #endif
   bool use_gl_renderer = launcher_settings.shader_path[0] != 0;
   bool triple_requested = g_video.triple_screen && FzeroTripleValidLayout(&g_video) &&
-                          launcher_settings.fullscreen && !use_gl_renderer;
+                          launcher_settings.fullscreen;
   if (g_video.triple_screen && !triple_requested)
-    fprintf(stderr, "[fzero-triple] experimental mode needs a valid rig, fullscreen and Shader=None; using stock view\n");
+    fprintf(stderr, "[fzero-triple] experimental mode needs a valid rig and fullscreen; using stock view\n");
   if (use_gl_renderer) fzero_gl_prepare_window();
   /* Window scale is a real row on the Settings page, so it has to size the
    * window: it was drawn, saved and then ignored in favour of a hardcoded
@@ -1829,7 +1902,8 @@ int main(int argc, char **argv) {
   unsigned texture_scale = g_video.hd_mode7 ? g_video.hd_scale : 1;
   const unsigned requested_texture_scale = texture_scale;
   if (use_gl_renderer) {
-    if (!fzero_gl_init(&gl_renderer, window, launcher_settings.shader_path))
+    if (!fzero_gl_init(&gl_renderer, window, launcher_settings.shader_path,
+                       triple_requested))
       Die("Unable to initialize the OpenGL shader renderer");
     GLint max_texture_size = 0;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
@@ -2007,16 +2081,17 @@ int main(int argc, char **argv) {
   if (triple_requested) {
     presenter.triple_pixels = calloc((size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
                                      sizeof(*presenter.triple_pixels));
-    presenter.triple_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-        SDL_TEXTUREACCESS_STREAMING, kTriplePanelWidth, 2 * kTriplePanelHeight);
-    if (!presenter.triple_pixels || !presenter.triple_texture) {
+    if (!use_gl_renderer)
+      presenter.triple_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+          SDL_TEXTUREACCESS_STREAMING, kTriplePanelWidth, 2 * kTriplePanelHeight);
+    if (!presenter.triple_pixels || (!use_gl_renderer && !presenter.triple_texture)) {
       fprintf(stderr, "[fzero-triple] unable to allocate side panels; using stock view\n");
       triple_requested = triple_active = false;
       viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
       FzeroSetViewport(viewport);
       logical_width = viewport.width;
       FzeroBeginDrawing(pixels, (size_t)logical_width * kBytesPerPixel);
-    } else {
+    } else if (presenter.triple_texture) {
       snesrecomp_sdl_set_texture_opaque(presenter.triple_texture);
       snesrecomp_sdl_set_texture_linear(presenter.triple_texture, true);
     }
