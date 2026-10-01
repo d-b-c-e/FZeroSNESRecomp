@@ -1,0 +1,2 @@
+# Preserve exact pinned upstream license bytes across Windows checkouts.
+licenses/fonts/*-OFL.txt text eol=lf

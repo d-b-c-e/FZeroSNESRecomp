@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -13,6 +14,10 @@ import zipfile
 SPEC = importlib.util.spec_from_file_location("package_unified", Path(__file__).resolve().parents[1] / "tools/package_unified.py")
 pack = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(pack)
+sys.modules["package_unified"] = pack
+STAGE_SPEC = importlib.util.spec_from_file_location("stage_unified", pack.ROOT / "tools/stage_unified.py")
+stage = importlib.util.module_from_spec(STAGE_SPEC)
+STAGE_SPEC.loader.exec_module(stage)
 
 
 def pe(imports=()):
@@ -53,6 +58,9 @@ class PackageTests(unittest.TestCase):
             self.files[name] = b"Fixture runtime asset"
             if name.endswith(".ttf"):
                 self.files["licenses/" + Path(name).stem + ".txt"] = b"Fixture font notice"
+                if Path(name).name in pack.OFL_FILES:
+                    license_path, _ = pack.OFL_FILES[Path(name).name]
+                    self.files["licenses/" + Path(name).stem + ".txt"] += pack.OFL_SEPARATOR + (pack.ROOT / license_path).read_bytes()
         for name in ("snesrecomp", "recomp-ui", "imgui", "wheel-toolkit"):
             self.files[f"licenses/{name}.txt"] = b"Fixture notice"
         self.wheel_hash = pack.digest(self.files["WheelFfb.dll"])
@@ -157,6 +165,36 @@ class PackageTests(unittest.TestCase):
         del self.receipt["files"]["licenses/wheel-toolkit.txt"]
         with self.assertRaisesRegex(ValueError, "Missing required"):
             self.read()
+
+    def test_abbreviated_or_mutated_ofl_is_rejected(self):
+        for font in pack.OFL_FILES:
+            name = "licenses/" + Path(font).stem + ".txt"
+            original = self.files[name]
+            for invalid in (b"SIL OPEN FONT LICENSE 1.1 https://scripts.sil.org/OFL",
+                            original[:-1], pack.OFL_SEPARATOR + original.split(pack.OFL_SEPARATOR)[1]):
+                with self.subTest(font=font, notice=invalid[:30]):
+                    self.files[name] = invalid
+                    self.write_payload()
+                    with self.assertRaisesRegex(ValueError, "Complete upstream OFL"):
+                        self.read()
+            self.files[name] = original
+            self.write_payload()
+
+    def test_staging_preserves_embedded_notice_and_full_ofl(self):
+        embedded = 'Copyright fixture author with Reserved Font Name "Fixture"'
+        raw = embedded.encode("utf-16-be")
+        font = bytearray(46 + len(raw))
+        struct.pack_into(">H", font, 4, 1)
+        struct.pack_into(">4sIII", font, 12, b"name", 0, 28, 18 + len(raw))
+        struct.pack_into(">HHH", font, 28, 0, 1, 18)
+        struct.pack_into(">6H", font, 34, 3, 1, 0x409, 0, len(raw), 0)
+        font[46:] = raw
+        for name, (path, expected) in pack.OFL_FILES.items():
+            notice = stage.font_notice(font, name)
+            prefix, _, full_license = notice.partition(pack.OFL_SEPARATOR)
+            self.assertIn(embedded.encode(), prefix)
+            self.assertEqual(full_license, (pack.ROOT / path).read_bytes())
+            self.assertEqual(pack.digest(full_license), expected)
 
     def test_missing_launcher_asset(self):
         del self.receipt["files"]["assets/fonts/LatoLatin-Regular.ttf"]

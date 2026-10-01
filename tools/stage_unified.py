@@ -11,7 +11,7 @@ import re
 import struct
 import subprocess
 
-from package_unified import ROOT, UI_ASSETS, SYSTEM_DLLS, digest, pe_imports
+from package_unified import ROOT, UI_ASSETS, SYSTEM_DLLS, OFL_FILES, OFL_SEPARATOR, digest, pe_imports
 
 
 def git(root, *args):
@@ -19,7 +19,7 @@ def git(root, *args):
                                    "-C", str(root), *args], text=True).strip()
 
 
-def font_notice(data):
+def font_notice(data, name):
     records = []
     for i in range(struct.unpack_from(">H", data, 4)[0]):
         tag, _, offset, _ = struct.unpack_from(">4sIII", data, 12 + 16 * i)
@@ -36,7 +36,14 @@ def font_notice(data):
                 records.append(text)
     if not records:
         raise ValueError("Font has no embedded copyright/license records")
-    return ("\n\n".join(records) + "\n").encode()
+    notice = ("\n\n".join(records) + "\n").encode()
+    if name in OFL_FILES:
+        path, expected = OFL_FILES[name]
+        license_text = (ROOT / path).read_bytes()
+        if digest(license_text) != expected:
+            raise ValueError("Upstream full font license has changed; review and repin")
+        notice += OFL_SEPARATOR + license_text
+    return notice
 
 
 def stage(build, output):
@@ -78,7 +85,7 @@ def stage(build, output):
             source = dependencies["recomp-ui"] / "assets/common/fonts" / Path(name).name
             if files[name] != source.read_bytes():
                 raise ValueError("Unpinned launcher font")
-            files["licenses/" + Path(name).stem + ".txt"] = font_notice(files[name])
+            files["licenses/" + Path(name).stem + ".txt"] = font_notice(files[name], Path(name).name)
         elif name != "assets/img/boxart.tga":
             relative = "assets/consoles/snes/img/pad.tga" if name.endswith("/pad.tga") else "assets/common/img/" + Path(name).name
             if files[name] != (dependencies["recomp-ui"] / relative).read_bytes():

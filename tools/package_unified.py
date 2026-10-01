@@ -20,6 +20,12 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+OFL_SEPARATOR = b"\n--- Complete upstream font license ---\n"
+OFL_FILES = {
+    "LatoLatin-Bold.ttf": ("licenses/fonts/Lato-OFL.txt", "74ba064d03f1f1c4a952da936c3eb71866c34404916734de3cae73b34357e59e"),
+    "LatoLatin-Regular.ttf": ("licenses/fonts/Lato-OFL.txt", "74ba064d03f1f1c4a952da936c3eb71866c34404916734de3cae73b34357e59e"),
+    "NotoSansSymbols2-Regular.ttf": ("licenses/fonts/Noto-OFL.txt", "b118dd41337806a5d4797052c77caf3bd096aed783e5eb21b4d11154351e1ac0"),
+}
 DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
         "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md",
         "ADAPTIVE_RENDERER.md", "BS_DELUXE_EXPLORATION.md", "HD_MODE7.md",
@@ -161,6 +167,11 @@ def read_payload(payload, receipt, product_version, toolkit_hash):
     required |= {"licenses/" + Path(n).stem + ".txt" for n in UI_ASSETS if n.endswith(".ttf")}
     if not required.issubset(result):
         raise ValueError(f"Missing required payload: {sorted(required - result.keys())}")
+    for font, (_, expected) in OFL_FILES.items():
+        notice = result["licenses/" + Path(font).stem + ".txt"]
+        embedded, separator, full_license = notice.partition(OFL_SEPARATOR)
+        if not embedded.strip() or not separator or digest(full_license) != expected:
+            raise ValueError(f"Complete upstream OFL and embedded notices required: {font}")
     if digest(result["WheelFfb.dll"]) != toolkit_hash.lower():
         raise ValueError("WheelFfb override needs explicit source repin")
     binaries = {name.lower(): data for name, data in result.items() if name.lower().endswith((".exe", ".dll"))}
