@@ -99,8 +99,14 @@ int main(void) {
   CHECK(option.type == RECOMP_MOD_OPTION_INTEGER && option.min_value == 2 && option.max_value == 10);
   RecompLauncherCModFeature deluxe;
   CHECK(p->feature_get(NULL, 2, &deluxe) && deluxe.option_count == 0);
+#ifdef FZERO_HAS_DELUXE
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 1));
   CHECK(s.bs_deluxe && !s.fps_enabled && !s.enhanced);
+#else
+  CHECK(!deluxe.enabled && strstr(deluxe.status, "Unavailable"));
+  CHECK(!p->feature_enable(NULL, deluxe.package_id, deluxe.id, 1));
+  CHECK(!s.bs_deluxe && strstr(p->last_error(NULL), "unavailable"));
+#endif
   CHECK(!p->feature_option_get(NULL, deluxe.package_id, deluxe.id, 0, &option));
   CHECK(p->feature_get(NULL, 0, &w) && p->feature_get(NULL, 1, &f));
   CHECK(strcmp(w.package_id, f.package_id) && w.option_count == 1 && f.option_count == 1);
@@ -114,7 +120,12 @@ int main(void) {
   CHECK(p->feature_option_get(NULL, w.package_id, w.id, 0, &option) && !strcmp(option.id, "aspect"));
   CHECK(p->feature_option_get(NULL, f.package_id, f.id, 0, &option) && !strcmp(option.id, "fps"));
   CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini"));
-  CHECK(loaded.enhanced && !loaded.fps_enabled && loaded.fps == 144 && loaded.bs_deluxe);
+  CHECK(loaded.enhanced && !loaded.fps_enabled && loaded.fps == 144);
+#ifdef FZERO_HAS_DELUXE
+  CHECK(loaded.bs_deluxe);
+#else
+  CHECK(!loaded.bs_deluxe);
+#endif
   CHECK(loaded.hd_mode7 && loaded.hd_scale == 10 && loaded.diagnostics &&
         loaded.triple_screen && loaded.reduce_crash_flash);
   CHECK(loaded.triple_panel_width_mm == 620 && loaded.triple_eye_distance_mm == 780 &&

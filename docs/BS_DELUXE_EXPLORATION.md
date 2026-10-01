@@ -260,3 +260,11 @@ continues to ship `BS-Deluxe-credits.txt` and `bs-deluxe-import.json` for
 credits and provenance, and `tools/make_release.py` refuses to package a build
 whose executable does not contain the payload magic and the expected target
 digest.
+
+The launcher now reports **Unavailable** and rejects enabling BS Deluxe when
+the native module was not compiled in; it no longer presents a toggle that
+silently launches the stock game. Both module-equipped and stock-only launcher
+providers have tests. On the integration build, the embedded-payload test
+passed with a verified stock ROM, and a separate 3,600-frame device-free boot
+reported `BS F-ZERO DELUXE V1.1` with active video and audio. This verifies
+the cartridge path, not every BS course or an attended playthrough.

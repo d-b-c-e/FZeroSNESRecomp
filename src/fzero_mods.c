@@ -126,6 +126,9 @@ static int package_get(void *ctx, int index, RecompLauncherCModPackage *out) {
   COPY(out->name, names[index]); COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
   out->enabled = index == 8 ? video->reduce_crash_flash : index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+#ifndef FZERO_HAS_DELUXE
+  if (index == 2) out->enabled = 0;
+#endif
   return 1;
 }
 static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
@@ -139,7 +142,13 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
   COPY(out->author, index == 2 ? "GuyPerfect, PowerPanda, Porthor, Catador" : "FZeroSNESRecomp contributors");
   COPY(out->description, descriptions[index]);
   out->enabled = index == 8 ? video->reduce_crash_flash : index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
+#ifndef FZERO_HAS_DELUXE
+  if (index == 2) out->enabled = 0;
+#endif
   COPY(out->status, index == 7 && out->enabled ? "Experimental: side sprites missing" : out->enabled ? "Enabled" : "Disabled");
+#ifndef FZERO_HAS_DELUXE
+  if (index == 2) COPY(out->status, "Unavailable: BS Deluxe content was not included in this build");
+#endif
   if (index == 5) wheel_preview_status(out);
   if (index == 3 && video->hd_scale > 4) {
     snprintf(out->description, sizeof(out->description),
@@ -290,7 +299,15 @@ static int enable(void *ctx, const char *package, const char *feature, int enabl
   else if (identity(package, feature) == 6) wheel_enabled = enabled != 0;
   else if (identity(package, feature) == 5) video->diagnostics = enabled != 0;
   else if (identity(package, feature) == 4) video->hd_mode7 = enabled != 0;
-  else if (identity(package, feature) == 3) video->bs_deluxe = enabled != 0;
+  else if (identity(package, feature) == 3) {
+#ifndef FZERO_HAS_DELUXE
+    if (enabled) {
+      COPY(error_text, "BS Deluxe is unavailable in this build.");
+      return 0;
+    }
+#endif
+    video->bs_deluxe = enabled != 0;
+  }
   else if (identity(package, feature) == 2) video->fps_enabled = enabled != 0;
   else {
     video->enhanced = enabled != 0;
