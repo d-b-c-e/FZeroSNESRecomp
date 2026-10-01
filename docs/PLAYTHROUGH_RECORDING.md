@@ -125,7 +125,8 @@ recorded center viewport (`16:9` for triple-screen `Fit`). It runs the
 the complete raw output before creating a toolkit observation stream. The
 stream records actual emulated master-cycle ticks and ordered software
 requests, with `physicalOutput=false`. Spring, damper and road are normalized
-from DirectInput's 0–10000 request range; impact is a 140 ms, 32 Hz event edge.
+from DirectInput's 0-10000 request range. Historical v1 observations represented
+impact as a 140 ms, 32 Hz event edge; v2 uses the configured cue described below.
 The profile assumes supported spring/damper/road slots, so the fallback
 constant-force request is zero. This is not a measurement of wheel torque.
 BS Deluxe cases are explicitly refused for now because their separate Deluxe
@@ -155,3 +156,22 @@ remained at frames 3417, 5526, 6139 and 6169. The toolkit comparison found
 29,083 changed requests with the same case identity. These software
 comparisons do not prove FFB delivery or
 physical feel; that still requires an attended wheel test.
+
+## Independent crash trials (software model v2)
+
+The older v1 adapter tied impact magnitude to centering and capped it at 35%,
+always describing a 140 ms sine cue. The current launcher instead has independent
+ImpactStrength and a Constant/Sine choice. New observations use model v2 and
+read those settings from the pinned config, with the current native defaults
+of 20% and Constant when absent. Override only the trial with
+`--strength 12 --impact-strength 50 --impact-type Constant`; compare it with
+an 80% impact trial using a new output filename. The recording and centering
+requests stay identical. Constant requests are 120 ms; sine comparison requests
+are 32 Hz for 140 ms. The trial/config and profile hashes identify these choices;
+old observations remain historical and are never rewritten.
+
+This adapter emits configured software intent. It does not inspect or load the
+actuator DLL, establish constant-burst support, model a hardware fallback, or
+prove delivered wheel torque. Run only the device-free headless runner for these
+trials. Stronger requested collisions do not establish wall-hit classification
+or severity scaling; those require additional evidence.

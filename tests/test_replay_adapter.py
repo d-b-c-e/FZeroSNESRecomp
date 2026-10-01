@@ -111,10 +111,32 @@ class ReplayAdapterTests(unittest.TestCase):
             self.assertEqual(events[3]["frequencyHz"], 42)
             self.assertEqual(events[8]["effect"], "impact")
             self.assertEqual(events[8]["operation"], "start")
-            self.assertEqual(events[8]["magnitude"], 0.12)
-            self.assertEqual(events[8]["durationMs"], 140)
+            self.assertEqual(events[8]["magnitude"], 0.20)
+            self.assertEqual(events[8]["family"], "constant")
+            self.assertEqual(events[8]["frequencyHz"], 0)
+            self.assertEqual(events[8]["durationMs"], 120)
             self.assertEqual(events[-2]["frequencyHz"], 1)  # consumer clamps idle sine
             self.assertEqual(events[-1]["operation"], "stop_all")
+
+    def test_crash_strength_is_independent_of_centering(self):
+        rows = [(0, 357366, 1, 660, 1200, 480, 480, 42000, 1)]
+        low = list(requests(rows, 12, 50, "Constant"))
+        high = list(requests(rows, 12, 80, "Constant"))
+        self.assertEqual(low[4]["magnitude"], 0.5)
+        self.assertEqual(high[4]["magnitude"], 0.8)
+        self.assertEqual(low[:4], high[:4])
+        self.assertEqual(low[-1], high[-1])
+        self.assertEqual([e["tick"] for e in low], [e["tick"] for e in high])
+        sine = list(requests(rows, 12, 50, "Sine"))
+        self.assertEqual(sine[4]["family"], "sine")
+        self.assertEqual(sine[4]["frequencyHz"], 32)
+        self.assertEqual(sine[4]["durationMs"], 140)
+        self.assertEqual(sine[4]["magnitude"], 0.5)
+
+    def test_invalid_crash_trial_is_refused(self):
+        for strength, kind in ((-1, "Constant"), (101, "Sine"), (50, "Unknown")):
+            with self.subTest(strength=strength, kind=kind), self.assertRaises(ValueError):
+                list(requests([], 12, strength, kind))
 
     def test_incomplete_or_misaligned_model_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

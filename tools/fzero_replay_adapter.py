@@ -19,7 +19,7 @@ import sys
 import tempfile
 
 
-MODEL_PROFILE = b"fzero-ffb@1:spring=present;damper=present;road=present;constant=fallback-only"
+MODEL_PROFILE = b"fzero-ffb@2:spring=present;damper=present;road=present;constant=fallback-only"
 MASTER_HZ = 21477272  # SNES NTSC master clock; raw ticks are actual master cycles.
 
 
@@ -200,7 +200,10 @@ def force(sequence: int, tick: int, frame: int, effect: str, family: str,
     }
 
 
-def requests(rows, strength: int):
+def requests(rows, strength: int, impact_strength: int = 20,
+             impact_type: str = "Constant"):
+    if not 0 <= impact_strength <= 100 or impact_type not in ("Constant", "Sine"):
+        raise ValueError("invalid impact trial")
     sequence = 0
     previous_tick = 0
     previous_frame = 0
@@ -216,8 +219,13 @@ def requests(rows, strength: int):
             yield force(sequence, tick, frame, effect, family, "set", magnitude, hz)
             sequence += 1
         if impact:
-            yield force(sequence, tick, frame, "impact", "sine", "start",
-                        min(3500, strength * 100) / 10000, 32.0, 140)
+            # Independent crash tuning, matching the current consumer. This
+            # is software intent, not proof of runtime support or delivered torque.
+            yield force(sequence, tick, frame, "impact",
+                        "constant" if impact_type == "Constant" else "sine", "start",
+                        impact_strength / 100,
+                        0.0 if impact_type == "Constant" else 32.0,
+                        120 if impact_type == "Constant" else 140)
             sequence += 1
         previous_tick, previous_frame = tick, frame
     yield force(sequence, previous_tick, previous_frame, "all", "all", "stop_all", 0.0)
@@ -255,18 +263,27 @@ def observe(args: argparse.Namespace) -> None:
     strength = args.strength if args.strength is not None else config.getint("ForceFeedback", "Strength")
     if not 0 <= strength <= 100:
         raise ValueError("strength out of range")
+    impact_strength = getattr(args, "impact_strength", None)
+    if impact_strength is None:
+        impact_strength = config.getint("ForceFeedback", "ImpactStrength", fallback=20)
+    impact_type = getattr(args, "impact_type", None) or config.get(
+        "ForceFeedback", "ImpactType", fallback="Constant")
+    if not 0 <= impact_strength <= 100 or impact_type not in ("Constant", "Sine"):
+        raise ValueError("impact strength/type out of range")
     # The original case identity never changes for tuning trials. The trial
     # configuration digest does, and the runner hash identifies its model code.
     runner_sha = sha256(args.runner)
-    trial = json.dumps({"strength": strength, "runnerSha256": runner_sha,
-                        "profile": MODEL_PROFILE.decode("ascii")}, sort_keys=True,
+    profile = MODEL_PROFILE + (":impact=" + impact_type + ":software-intent").encode("ascii")
+    trial = json.dumps({"strength": strength, "impactStrength": impact_strength,
+                        "impactType": impact_type, "runnerSha256": runner_sha,
+                        "profile": profile.decode("ascii")}, sort_keys=True,
                        separators=(",", ":")).encode("ascii")
     header = {
         "kind": "header", "schema": "dbce.wheel.force-observation", "version": 1,
         "caseId": case["caseId"], "caseSha256": identity["caseSha256"],
-        "clock": case["clock"], "model": "fzero-ffb@" + runner_sha[:16],
+        "clock": case["clock"], "model": "fzero-ffb@2:" + runner_sha[:16],
         "configSha256": hashlib.sha256(trial).hexdigest(),
-        "profileSha256": hashlib.sha256(MODEL_PROFILE).hexdigest(),
+        "profileSha256": hashlib.sha256(profile).hexdigest(),
         "output": "observe", "physicalOutput": False,
     }
     with tempfile.TemporaryDirectory(prefix="fzero-ffb-observe-") as temporary:
@@ -290,7 +307,8 @@ def observe(args: argparse.Namespace) -> None:
         for _ in raw_rows(raw, frame_count, strength):
             pass
         with toolkit.ObservationSink(args.output, header) as sink:
-            for request in requests(raw_rows(raw, frame_count, strength), strength):
+            for request in requests(raw_rows(raw, frame_count, strength), strength,
+                                    impact_strength, impact_type):
                 sink.emit(request)
     print(f"verified frames={frame_count} caseSha256={identity['caseSha256']} output={args.output}")
 
@@ -309,6 +327,10 @@ def main() -> int:
     for name in ("case", "toolkit", "runner", "rom", "output"):
         run.add_argument("--" + name, type=Path, required=True)
     run.add_argument("--strength", type=int)
+    run.add_argument("--impact-strength", type=int,
+                     help="independent software crash strength, 0-100; no torque is applied")
+    run.add_argument("--impact-type", choices=("Constant", "Sine"),
+                     help="requested cue model; hardware support is not inferred")
     args = parser.parse_args()
     try:
         (create_case if args.command == "create" else observe)(args)
