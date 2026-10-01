@@ -1344,11 +1344,14 @@ static bool present_separate_gl_sides(FzeroPresenter *p, bool ready) {
   if (!windows || !windows->use_gl) return false;
   for (int side = 0; side < 2; ++side) {
     FzeroGlRenderer *glr = &windows->gl[side];
+    uint64_t context_start = FzeroDiagnosticsBegin();
 #if SNESRECOMP_SDL3
     bool current = SDL_GL_MakeCurrent(glr->window, glr->context);
 #else
     bool current = SDL_GL_MakeCurrent(glr->window, glr->context) == 0;
 #endif
+    FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_CONTEXT : FZERO_DIAG_LEFT_CONTEXT,
+                        context_start);
     if (!current) return false;
     int output_width = 0, output_height = 0;
     snesrecomp_sdl_get_drawable_size(glr->window, &output_width, &output_height);
@@ -1372,8 +1375,10 @@ static bool present_separate_gl_sides(FzeroPresenter *p, bool ready) {
                      kTriplePanelWidth, kTriplePanelHeight, 0,
                      GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, source);
       }
-      FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_UPLOAD, diagnostic_start);
+      FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_UPLOAD : FZERO_DIAG_LEFT_UPLOAD,
+                          diagnostic_start);
     }
+    uint64_t draw_start = FzeroDiagnosticsBegin();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     if (ready) {
@@ -1381,7 +1386,12 @@ static bool present_separate_gl_sides(FzeroPresenter *p, bool ready) {
       fzero_gl_draw_image(glr, &glr->texture, glr->shader, full,
                           output_height);
     }
+    FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_DRAW : FZERO_DIAG_LEFT_DRAW,
+                        draw_start);
+    uint64_t swap_start = FzeroDiagnosticsBegin();
     SDL_GL_SwapWindow(glr->window);
+    FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_SWAP : FZERO_DIAG_LEFT_SWAP,
+                        swap_start);
   }
   return true;
 }
@@ -1437,6 +1447,7 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
         warned = true;
       }
     }
+    uint64_t restore_start = p->triple_separate ? FzeroDiagnosticsBegin() : 0;
 #if SNESRECOMP_SDL3
     if (p->triple_separate && !SDL_GL_MakeCurrent(p->gl->window, p->gl->context))
       Die("Unable to restore center OpenGL context");
@@ -1444,6 +1455,7 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
     if (p->triple_separate && SDL_GL_MakeCurrent(p->gl->window, p->gl->context) != 0)
       Die("Unable to restore center OpenGL context");
 #endif
+    FzeroDiagnosticsEnd(FZERO_DIAG_CENTER_RESTORE, restore_start);
     fzero_gl_render(p->gl, pixels, width, height, p->viewport,
                     p->drawable_width, p->drawable_height,
                     p->triple_active && !p->triple_separate, triple_ready);

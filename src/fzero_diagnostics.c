@@ -32,7 +32,10 @@ static Timing timings[FZERO_DIAG_STAGE_COUNT];
 static const char *const stage_names[] = {
   "simulation", "ppu", "composition", "triple_projection", "triple_upload",
   "upload", "draw_submit", "present",
-  "pacing_wait", "paused"
+  "pacing_wait", "paused",
+  "left_context", "right_context", "left_upload", "right_upload",
+  "left_draw_submit", "right_draw_submit", "left_swap", "right_swap",
+  "center_restore"
 };
 _Static_assert(sizeof(stage_names) / sizeof(stage_names[0]) ==
                FZERO_DIAG_STAGE_COUNT, "diagnostic stage names must match enum");
