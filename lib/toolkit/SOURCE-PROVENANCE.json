@@ -1,0 +1,43 @@
+{
+  "schema": "dbce.fzero-toolkit-candidate",
+  "schemaVersion": 1,
+  "repository": "d-b-c-e/dbce-wheel-mod-toolkit",
+  "sourceCommit": "f8f0619b5588f2d11b44f4becd4198775d4a8bcf",
+  "sourceTree": "d9f59422cff93383f9cf27f3cd641fd2adf00a35",
+  "baseline": "v0.13.0/native 0.6.0/41 exports",
+  "nativeVersion": 600,
+  "architecture": "x64",
+  "exportCount": 41,
+  "dllSha256": "0b8848e1cb66cfb02c21926bbc1ca7e2fb0312e80ad1d6d1c828253759c396ac",
+  "sourceToBinaryManifestSha256": "1f62a7f6269da488076a67c1b1b62050db49dde45517a50cc47b131f25b15b37",
+  "compatibleHeaders": {
+    "dinput_proxy.h": {
+      "sourcePath": "native/dinput-proxy/dinput_proxy.h",
+      "sourceSha256": "07a030fc3c44a3de0ea50c5d542e738116cf6d348356a39d4f7532288467dbe7",
+      "normalizedSha256": "07a030fc3c44a3de0ea50c5d542e738116cf6d348356a39d4f7532288467dbe7"
+    },
+    "force_model.h": {
+      "sourcePath": "native/forcemodel/force_model.h",
+      "sourceSha256": "ec2818ed64b85d50c0a447262cd3ce318f1594f49bf4d98d807e079a5d5f7653",
+      "normalizedSha256": "ec2818ed64b85d50c0a447262cd3ce318f1594f49bf4d98d807e079a5d5f7653"
+    },
+    "force_profile.h": {
+      "sourcePath": "native/forcemodel/force_profile.h",
+      "sourceSha256": "fec9bdc952a27b4353e1b98ae87395c424f0b076c8cbb148e3619ce5977865e4",
+      "normalizedSha256": "fec9bdc952a27b4353e1b98ae87395c424f0b076c8cbb148e3619ce5977865e4"
+    },
+    "forza_packet.h": {
+      "sourcePath": "native/forza/forza_packet.h",
+      "sourceSha256": "f921d64422f943f13adefe41a4201249c32a19425933f8a64a3f4b5d46de12b8",
+      "normalizedSha256": "f921d64422f943f13adefe41a4201249c32a19425933f8a64a3f4b5d46de12b8"
+    },
+    "wheelffb.h": {
+      "sourcePath": "native/wheelffb/include/wheelffb.h",
+      "sourceSha256": "a37194c4e4b1e2605323df9184af2cd4ffd82961ae3a425873da05b217da6fa7",
+      "normalizedSha256": "a37194c4e4b1e2605323df9184af2cd4ffd82961ae3a425873da05b217da6fa7"
+    }
+  },
+  "installed": false,
+  "physicalAcceptance": false,
+  "scope": "Isolated stock candidate; independent source/binary review approved import. No installed replacement or device operation."
+}

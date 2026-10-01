@@ -33,6 +33,7 @@ DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
         "WHEELFFB_EXPERIMENTAL_RECEIPT.md", "DISTRIBUTION-AUDIT.md", "PRODUCT-IDENTITY.md")
 SOURCE_FILES = ("README.md", "LICENSE", "VERSION", "game-product.json",
                 "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt",
+                "lib/toolkit/SOURCE-PROVENANCE.json", "lib/toolkit/source-to-binary-manifest.json",
                 "tools/fzero_replay_adapter.py", "assets/README.md")
 UI_ASSETS = tuple("assets/img/" + n for n in (
     "brand_mark.tga", "flags.png", "pad.tga", "verdict_bad.tga",

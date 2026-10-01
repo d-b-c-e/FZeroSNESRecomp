@@ -1,0 +1,409 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Private offline review artifacts; no installation or release",
+  "repository": "d-b-c-e/dbce-wheel-mod-toolkit",
+  "sourceCommit": "f8f0619b5588f2d11b44f4becd4198775d4a8bcf",
+  "sourceTree": "d9f59422cff93383f9cf27f3cd641fd2adf00a35",
+  "sourceFilesVerified": 146,
+  "baseline": "v0.13.0/native 0.6.0/41 exports",
+  "nativeVersion": 600,
+  "runtimeAdoptionHeld": true,
+  "deployed": false,
+  "devicesEnumerated": false,
+  "forcesApplied": false,
+  "compilerVersion": "19.44.35229",
+  "toolset": "14.44.35207",
+  "windowsSDK": "10.0.26100.0",
+  "compileFlags": [
+    "/LD",
+    "/O2",
+    "/W4",
+    "/EHsc",
+    "/DNDEBUG",
+    "/sourceDependencies [receipt path]"
+  ],
+  "linkFlags": [
+    "/DEF:published WheelFfb.def",
+    "/MACHINE:selected architecture",
+    "/VERBOSE:LIB"
+  ],
+  "inheritedCLAndLINKCleared": true,
+  "staticCrtSelectedFromLinkEvidence": true,
+  "generalBitReproducibilityProven": false,
+  "architectures": [
+    {
+      "dllPath": "artifacts/x64/WheelFfb.dll",
+      "exports": [
+        "Aquire",
+        "CloseAuxDevice",
+        "CloseReadDevices",
+        "CreateConditionEffect",
+        "CreatePeriodicBurst",
+        "CreatePeriodicEffect",
+        "EnumerateAllDevices",
+        "EnumerateDevices",
+        "FreeDirectInput",
+        "GetAnyDeviceGuid",
+        "GetAnyDeviceInfo",
+        "GetAnyDeviceName",
+        "GetDeviceGuid",
+        "GetDeviceInfo",
+        "GetDeviceName",
+        "GetLastHResult",
+        "GetWheelFfbVersion",
+        "InitDirectInput",
+        "InstallExitGuards",
+        "OpenAuxDevice",
+        "OpenReadDevice",
+        "PanicStop",
+        "PlayPeriodicBurst",
+        "ReadAuxButtons",
+        "ReadDeviceState",
+        "ReleaseConditionEffects",
+        "ReleasePeriodicEffects",
+        "SetAutoCenter",
+        "SetDeviceForcesXY",
+        "SetHoldTimeoutMs",
+        "SetLogPath",
+        "SetPreferredDevice",
+        "SetPreferredDeviceGuid",
+        "SetPreferredDeviceIndex",
+        "SetStrictDeviceSelection",
+        "StartEffect",
+        "StopEffect",
+        "StopPeriodicBurst",
+        "UpdateConditionEffect",
+        "UpdatePeriodicEffect",
+        "ZeroForces"
+      ],
+      "actualDllTestExecutableSha256": "7BD1255472C4C64198051A331B18E8390F1F37D5B2A4E07B962C3316A2324EA5",
+      "repeatComparison": {
+        "architecture": "x64",
+        "run1Hash": "582475074C93465C211E945E5905C739FB00EB6480C5A01421B76C241C0CC51E",
+        "run2Hash": "0B8848E1CB66CFB02C21926BBC1CA7E2FB0312E80AD1D6D1C828253759C396AC",
+        "run1PE": {
+          "machine": 34404,
+          "coffTimestampOffset": 264,
+          "coffTimestamp": 1790887753,
+          "checksumOffset": 344,
+          "exportTimestampOffset": 189940,
+          "debugDirectoryTimestampOffsets": [
+            178116
+          ]
+        },
+        "run2PE": {
+          "machine": 34404,
+          "coffTimestampOffset": 264,
+          "coffTimestamp": 1790887903,
+          "checksumOffset": 344,
+          "exportTimestampOffset": 189940,
+          "debugDirectoryTimestampOffsets": [
+            178116
+          ]
+        },
+        "sameLength": true,
+        "differentByteOffsets": [
+          264,
+          178116
+        ],
+        "equalAfterZeroingOnlyDocumentedPETimestampsAndChecksum": true,
+        "generalBitReproducibilityProven": false
+      },
+      "sourceFakeSuitePassed": true,
+      "architecture": "x64",
+      "actualDllTestPassed": true,
+      "inputHashesUnchangedAcrossRepeat": true,
+      "actualDllLoadUnloadCycles": 32,
+      "inputHashReceipt": "artifacts/x64/input-hashes.json",
+      "dllBytes": 212992,
+      "nativeObjectPath": "source/native/wheelffb/build/WheelFfb.obj",
+      "nativeObjectSha256": "471B4E624EFA66FD67FA5742A22E11D9ACA006AC39E3BE1B8CEEFD66244182AF",
+      "dllSha256": "0B8848E1CB66CFB02C21926BBC1CA7E2FB0312E80AD1D6D1C828253759C396AC",
+      "inputHashCount": 300,
+      "exportCount": 41
+    },
+    {
+      "dllPath": "artifacts/x86/WheelFfb.dll",
+      "exports": [
+        "Aquire",
+        "CloseAuxDevice",
+        "CloseReadDevices",
+        "CreateConditionEffect",
+        "CreatePeriodicBurst",
+        "CreatePeriodicEffect",
+        "EnumerateAllDevices",
+        "EnumerateDevices",
+        "FreeDirectInput",
+        "GetAnyDeviceGuid",
+        "GetAnyDeviceInfo",
+        "GetAnyDeviceName",
+        "GetDeviceGuid",
+        "GetDeviceInfo",
+        "GetDeviceName",
+        "GetLastHResult",
+        "GetWheelFfbVersion",
+        "InitDirectInput",
+        "InstallExitGuards",
+        "OpenAuxDevice",
+        "OpenReadDevice",
+        "PanicStop",
+        "PlayPeriodicBurst",
+        "ReadAuxButtons",
+        "ReadDeviceState",
+        "ReleaseConditionEffects",
+        "ReleasePeriodicEffects",
+        "SetAutoCenter",
+        "SetDeviceForcesXY",
+        "SetHoldTimeoutMs",
+        "SetLogPath",
+        "SetPreferredDevice",
+        "SetPreferredDeviceGuid",
+        "SetPreferredDeviceIndex",
+        "SetStrictDeviceSelection",
+        "StartEffect",
+        "StopEffect",
+        "StopPeriodicBurst",
+        "UpdateConditionEffect",
+        "UpdatePeriodicEffect",
+        "ZeroForces"
+      ],
+      "actualDllTestExecutableSha256": "45F29741828DA34713A435600A3C2EE52C2E6B98E8695F53AC4ABDFBBAC848D1",
+      "repeatComparison": {
+        "architecture": "x86",
+        "run1Hash": "FBDD924728D67A318A3020CE0513376E88AF799D5B2D34B6B2908611040DC852",
+        "run2Hash": "4F7FFBB590C30E2A8D33F2E7A3D7E8C770BDD2466053A2333D67C55D98BB08B4",
+        "run1PE": {
+          "machine": 332,
+          "coffTimestampOffset": 264,
+          "coffTimestamp": 1790887763,
+          "checksumOffset": 344,
+          "exportTimestampOffset": 148516,
+          "debugDirectoryTimestampOffsets": [
+            144380
+          ]
+        },
+        "run2PE": {
+          "machine": 332,
+          "coffTimestampOffset": 264,
+          "coffTimestamp": 1790887913,
+          "checksumOffset": 344,
+          "exportTimestampOffset": 148516,
+          "debugDirectoryTimestampOffsets": [
+            144380
+          ]
+        },
+        "sameLength": true,
+        "differentByteOffsets": [
+          264,
+          144380
+        ],
+        "equalAfterZeroingOnlyDocumentedPETimestampsAndChecksum": true,
+        "generalBitReproducibilityProven": false
+      },
+      "sourceFakeSuitePassed": true,
+      "architecture": "x86",
+      "actualDllTestPassed": true,
+      "inputHashesUnchangedAcrossRepeat": true,
+      "actualDllLoadUnloadCycles": 32,
+      "inputHashReceipt": "artifacts/x86/input-hashes.json",
+      "dllBytes": 166400,
+      "nativeObjectPath": "source/native/wheelffb/build/x86/WheelFfb.obj",
+      "nativeObjectSha256": "E9F2BFF35516896DE9EAAA19A486C15DFF4F399ED6C4BF6DC79192E129B50733",
+      "dllSha256": "4F7FFBB590C30E2A8D33F2E7A3D7E8C770BDD2466053A2333D67C55D98BB08B4",
+      "inputHashCount": 301,
+      "exportCount": 41
+    }
+  ],
+  "receiptHashes": [
+    {
+      "sha256": "CFB0DFF46C18239D6B4A196B56AF0ECC2EBE02B45ED385079D6A43BD28B7E87B",
+      "path": "artifacts/x64/native-build.log"
+    },
+    {
+      "sha256": "6BAA937E3F1FC8AFDA6E7770C5C9E744FCE68A89AC25F372ED0A5C0599FC909C",
+      "path": "artifacts/x64/compiler-version.txt"
+    },
+    {
+      "sha256": "7050254BD397CFFA97BFA0204DFBEBBDE83DC7F3CEAA8552B48ED345BA2714BF",
+      "path": "artifacts/x64/native-dependencies.json"
+    },
+    {
+      "sha256": "2462CFBF4B1EC74482BC7A87C9FD4E3DFB4AE26E18BFB1FB0132DF464AF703A9",
+      "path": "artifacts/x64/harness-dependencies.json"
+    },
+    {
+      "sha256": "BAC763BFDBF2D0AFAEEA2A3D09FEFA667231DDCF331FB5C41FCD8C4CDF866CC1",
+      "path": "artifacts/x64/harness-build.log"
+    },
+    {
+      "sha256": "309FDB8F7FBE7F11695A7EF88F0B92D63ACF3B0E9E69DE5E9D65864301F6B477",
+      "path": "artifacts/x64/actual-dll-test.log"
+    },
+    {
+      "sha256": "704E835AC72C461E5CA01557062BC4AE6D4566738F3C6B717F33F8BDE758AC64",
+      "path": "artifacts/x64/fake-source-suite.log"
+    },
+    {
+      "sha256": "B9798A653A5B754887BFF94A99110C881CC82B1248C20BFED56BE5FE3149FD3C",
+      "path": "artifacts/x64/exports.txt"
+    },
+    {
+      "sha256": "1CFBFAFF6E7A3A11AD6F5C1DD93381256E9F54C3B17705C1B592E0C35AA8C9F0",
+      "path": "artifacts/x64/imports.txt"
+    },
+    {
+      "sha256": "0671BDAD71A13098B4B85B0CE6FD0176C743DB81AC25E1EAC75ED523F6B9FF48",
+      "path": "artifacts/x64/pe-headers.txt"
+    },
+    {
+      "sha256": "01EE940D318C434EF13CCB883DD31CA04A1B2846541DB6D1FD8E6C8E726B0E64",
+      "path": "artifacts/x64/input-hashes.json"
+    },
+    {
+      "sha256": "01EE940D318C434EF13CCB883DD31CA04A1B2846541DB6D1FD8E6C8E726B0E64",
+      "path": "artifacts/x64/input-hashes.run1.json"
+    },
+    {
+      "sha256": "51402471872F8E033EA4C9C3A94144FD0DA62F94D39F28D2FCB5F436554FC2B1",
+      "path": "artifacts/x64/repeat-build-comparison.json"
+    },
+    {
+      "sha256": "02FFF2BCF5B75E68BC099C84848600A647700970C2B62FA5D2BF03D24A17CB58",
+      "path": "artifacts/x64/include-search-path.txt"
+    },
+    {
+      "sha256": "4A46477E0F7D1180F6D36AB2B0307DF3862C201F010D7965F698EE66BD2FEBDD",
+      "path": "artifacts/x64/library-search-path.txt"
+    },
+    {
+      "sha256": "0546AF90DE96F56913FBE2CB863610326C762C5AB4B340802E8B52468188DD50",
+      "path": "artifacts/x86/native-build.log"
+    },
+    {
+      "sha256": "4A4CDC43064041688827D5E4A75DD01456F0BA29711921F1314A7964B0F27E1A",
+      "path": "artifacts/x86/compiler-version.txt"
+    },
+    {
+      "sha256": "DEDC6BAF599ED63A82252306500B47D827AE031D481535782558AD0802A2AD3B",
+      "path": "artifacts/x86/native-dependencies.json"
+    },
+    {
+      "sha256": "14294F31FEF1C2B54549B0627D963CC9B1E4FE2D52BC8B71D523F2FE538BFCC2",
+      "path": "artifacts/x86/harness-dependencies.json"
+    },
+    {
+      "sha256": "BAC763BFDBF2D0AFAEEA2A3D09FEFA667231DDCF331FB5C41FCD8C4CDF866CC1",
+      "path": "artifacts/x86/harness-build.log"
+    },
+    {
+      "sha256": "309FDB8F7FBE7F11695A7EF88F0B92D63ACF3B0E9E69DE5E9D65864301F6B477",
+      "path": "artifacts/x86/actual-dll-test.log"
+    },
+    {
+      "sha256": "C413C77CA5A326E8D108CAFE170C539FDBB48479FC2E8571846C7DC1538343C0",
+      "path": "artifacts/x86/fake-source-suite.log"
+    },
+    {
+      "sha256": "F19570A287B876A0288B667E5CE57FAD53AA9920A57838450BB7AFCD25978105",
+      "path": "artifacts/x86/exports.txt"
+    },
+    {
+      "sha256": "C12529165C68E3D2055BB5437CF39DAD5A846009B55C356397FAFCE815623AB5",
+      "path": "artifacts/x86/imports.txt"
+    },
+    {
+      "sha256": "368B2D03405C2D8714FA2C76B326E8124A5DE0C78A8D984615114BDADB9B2E64",
+      "path": "artifacts/x86/pe-headers.txt"
+    },
+    {
+      "sha256": "47AB091ABEBA8A68B5F9BD545686FE9D5160C7E047D777E4413694BFBCAFE07D",
+      "path": "artifacts/x86/input-hashes.json"
+    },
+    {
+      "sha256": "47AB091ABEBA8A68B5F9BD545686FE9D5160C7E047D777E4413694BFBCAFE07D",
+      "path": "artifacts/x86/input-hashes.run1.json"
+    },
+    {
+      "sha256": "B275D4A9FA256356D37BDFED1D4DC5A44DE7EFF72CE81CA398CFBA3757B9B071",
+      "path": "artifacts/x86/repeat-build-comparison.json"
+    },
+    {
+      "sha256": "02FFF2BCF5B75E68BC099C84848600A647700970C2B62FA5D2BF03D24A17CB58",
+      "path": "artifacts/x86/include-search-path.txt"
+    },
+    {
+      "sha256": "47E2E3354EAA7EC53144C94BF9B534D15FCFF4F76900185BA3298649BE1C7D37",
+      "path": "artifacts/x86/library-search-path.txt"
+    },
+    {
+      "sha256": "F8B9F5E16CD9E66C8AB44089709C2DB7BB79FBEE390A4FE25B6668964FC83FCA",
+      "path": "expected-source-tree.json"
+    },
+    {
+      "sha256": "1096EADE682EA79AA52FFC1DBC3317DB59E8D919F31D051EA9F69DB27D186C63",
+      "path": "source-verification.json"
+    },
+    {
+      "sha256": "58C50A3564FEDD3D975C392F7065497378557592C4F46762445C83789FFAA661",
+      "path": "retained-consumer-contracts.json"
+    },
+    {
+      "sha256": "C2A331BFC380771028C9008EE542A8ACF8FB9F233119632A49E3187AE2DF4063",
+      "path": "README.md"
+    }
+  ],
+  "scriptHashes": [
+    {
+      "sha256": "A01D92CF477F50DEC6E7B48A30E4F965D9D362BEDC463E933934FE076578C132",
+      "path": "tools/actual_dll_lifecycle.cpp"
+    },
+    {
+      "sha256": "C80804AE8B24A87CD467CE3CA77685FDE0CD08F7A0B51359D7A147FB963BB546",
+      "path": "tools/build_and_test.cmd"
+    },
+    {
+      "sha256": "D56F1E8EBF25C5CEEAE21BC538C9CCC3FC2ADD26FC7A50F37F8665E441476C61",
+      "path": "tools/Capture-Inputs.ps1"
+    },
+    {
+      "sha256": "715235D61F474155DB8031DA10B8365FB1C42B0273E7F5EA72321FB713AF26F5",
+      "path": "tools/Compare-Builds.ps1"
+    },
+    {
+      "sha256": "BF4529B08CBE3DA2FB4D36F880ADEEE71EC1DE761D4010798956EFB303458F6C",
+      "path": "tools/Verify-Source.ps1"
+    }
+  ],
+  "discoveryAndEnvironmentInitializationInventory": [
+    {
+      "role": "VC environment initialization script inventory, conservative superset",
+      "sha256": "E0F12BA374968F55CE898EE0384EB9C9B989CC3B499E3C0D553368AD223E28C8",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars32.bat"
+    },
+    {
+      "role": "VC environment initialization script inventory, conservative superset",
+      "sha256": "6B516D8FCF543C14B2D861E1F45661E0029230FE0DC48E86CE78522801822209",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat"
+    },
+    {
+      "role": "VC environment initialization script inventory, conservative superset",
+      "sha256": "EE67E4181AE2578B7842F9F1549A7F66E2166638FA544CE6838D9E9033A02275",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat"
+    },
+    {
+      "role": "VC environment initialization script inventory, conservative superset",
+      "sha256": "4C618B293D9E6F2913521A3CF0C49F926610699FFC580E36F862175F2950A447",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsamd64_x86.bat"
+    },
+    {
+      "role": "VC environment initialization script inventory, conservative superset",
+      "sha256": "B7790487BC1FC458C234D0A2BAEE291A4816D89EF32D3DA4E4B77DA82BEB9B4D",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsx86_amd64.bat"
+    },
+    {
+      "role": "Build-tool discovery executable",
+      "sha256": "C54F3B7C9164EA9A0DB8641E81ECDDA80C2664EF5A47C4191406F848CC07C662",
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe"
+    }
+  ]
+}

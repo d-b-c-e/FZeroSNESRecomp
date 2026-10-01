@@ -50,11 +50,25 @@ Only that return permits final module unload. The consumer's void ABI cannot
 detect a backend that returns prematurely. Version numbers/export counts do
 not prove that a corrected implementation is loaded.
 
-The retained v0.13/native 0.6 DLL is unchanged; its historical 500 ms unchecked
-wait does not establish completed shutdown. Binary adoption therefore remains
-held until the shared owner supplies the exact corrected source/build hash and
-the integration review verifies that contract. No toolkit binary, manifest,
-header or dependency pin is replaced by this consumer candidate.
+The isolated stock candidate now pins the independently reviewed corrected
+v0.13/native 0.6 x64 binary, SHA-256
+`0b8848e1cb66cfb02c21926bbc1ca7e2fb0312e80ad1d6d1c828253759c396ac`,
+from toolkit source `f8f0619b5588f2d11b44f4becd4198775d4a8bcf`.
+`lib/toolkit/SOURCE-PROVENANCE.json` identifies the source, compatible headers,
+41-export ABI and exact original `source-to-binary-manifest.json`. Both are
+included in the stock candidate package. Native version remains 600; this is
+not a fix for the separate native 0.8/46-export branch.
+
+The reviewed actual DLL passed 32 empty-device load/unload cycles. Those calls
+do not enumerate or initialize DirectInput and do not create active effects.
+Delayed-worker and active-effect ordering are covered separately by source
+fake tests. Neither result proves driver/device behavior. Installation,
+deployment, game execution and physical force acceptance remain separate gates.
+
+Same-thread shutdown from inside an in-flight export or a future reentrant
+consumer callback is unsupported: defer it until the outer call returns.
+The recursive gate does not make such unloading safe. Current host topology
+registers no consumer callback and performs shutdown after the frame loop.
 
 ## Device-free regression
 
