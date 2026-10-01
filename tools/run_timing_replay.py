@@ -10,11 +10,14 @@ parser.add_argument('--output',type=Path,required=True)
 parser.add_argument('--executable',type=Path)
 parser.add_argument('--output-probes', action='store_true')
 parser.add_argument('--physical-displays', action='store_true')
+parser.add_argument('--exclude-output-driver', action='store_true')
 args=parser.parse_args()
 if (args.output_probes or args.physical_displays) and args.mode != 'separate-crt':
     parser.error('Output probes require separate-crt')
 if args.physical_displays and not args.output_probes:
     parser.error('Physical topology verification requires output probes')
+if args.physical_displays and not args.exclude_output_driver:
+    parser.error('Physical test requires the staged output DLL to be excluded')
 workspace=Path(__file__).resolve().parents[2]
 candidate=workspace/'fzero-unified-candidate'
 source=Path('E:/Source/fzero-triple-wheel-integration/build-integration/rig-preview')
@@ -35,6 +38,8 @@ with zipfile.ZipFile(archive) as z:
     z.extractall(folder)
 if args.executable:
     (folder/'FZeroSNESRecomp.exe').write_bytes(args.executable.read_bytes())
+if args.exclude_output_driver:
+    (folder/'WheelFfb.dll').unlink()  # Disposable verified extraction only.
 pack=source/'music/F-Zero DX Expanded (JUD6MENT)'
 (folder/'config.ini').write_text('[Graphics]\nFullscreen=1\nLinearFiltering=0\nShader='+('assets/shaders/crt-soft.glslp' if args.mode.endswith('crt') else '')+'\n[Sound]\nAudioFreq=32040\nVolume=0\nMsu1Enabled=1\nMsu1Dir='+pack.as_posix()+'\n[ForceFeedback]\nEnabled=0\n[Telemetry]\nEnabled=0\n[Rewind]\nEnabled=0\n')
 video=(source/'diagnostics/wheel-drive-20260928-235320.original-video.ini').read_text().replace('PresentationFPS=0','PresentationFPS=60').replace('Diagnostics=0','Diagnostics=1')
@@ -59,6 +64,7 @@ result.pop('complete', None)
 result['displayMode']='three independent physical displays' if args.physical_displays else 'one 7680x1440 Surround display'
 result['separateModeIsDiagnostic']=args.mode.startswith('separate') and not args.physical_displays
 result['outputProbesRequested']=args.output_probes
+result['outputDriverFilePresent']=(folder/'WheelFfb.dll').exists()
 try:
     result.update(postprocess(folder,text,returncode))
 except Exception as error:
