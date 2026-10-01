@@ -146,6 +146,36 @@ class PackageTests(unittest.TestCase):
         self.assertTrue(product['release']['preserveUserSettings'])
         self.assertEqual((pack.ROOT/'VERSION').read_text().strip(),product['upstreamBaseVersion'])
 
+    def test_repository_rename_preserves_stable_identity_and_rejects_old_current_url(self):
+        product=json.loads((pack.ROOT/'game-product.json').read_text())
+        self.assertEqual(product['fork'],'https://github.com/d-b-c-e/dbce-mods-fzero-snes')
+        self.assertEqual(product['repositoryId'],1380896600)
+        self.assertEqual(product['upstream'],'https://github.com/mstan/FZeroSNESRecomp')
+        for field,value in (('fork','https://github.com/d-b-c-e/FZeroSNESRecomp'),
+                            ('fork','https://github.com/example/dbce-mods-fzero-snes'),
+                            ('repositoryId',1380896601),('repositoryId','1380896600'),
+                            ('repositoryId',1380896600.0),('repositoryId',True),
+                            ('repositoryId',None)):
+            changed=copy.deepcopy(product); changed[field]=value
+            with self.subTest(field=field,value=value), self.assertRaises(ValueError):
+                pack.preview_identity(changed,'1.8.3','1'*40)
+
+    def test_rehashed_archive_cannot_change_repository_identity(self):
+        self.source()
+        original=pack.package(self.payload,self.receipt,self.base/'out',self.root)
+        with zipfile.ZipFile(original) as archive:
+            original_files={n:archive.read(n) for n in archive.namelist()}
+        for field,value in (('fork','https://github.com/d-b-c-e/FZeroSNESRecomp'),
+                            ('repositoryId',1380896601)):
+            files=dict(original_files)
+            product=json.loads(files['game-product.json']); product[field]=value
+            files['game-product.json']=json.dumps(product).encode()
+            manifest=json.loads(files['manifest.json'])
+            manifest['files']['game-product.json']=pack.digest(files['game-product.json'])
+            files['manifest.json']=json.dumps(manifest).encode()
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError,'Canonical unified product identity'):
+                pack.verify(io.BytesIO(pack.zip_bytes(files)))
+
     def test_rehashed_manifest_cannot_relabel_preview_as_upstream(self):
         self.source()
         original=pack.package(self.payload,self.receipt,self.base/'out',self.root)

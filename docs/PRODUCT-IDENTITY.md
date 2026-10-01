@@ -11,8 +11,8 @@ owned game products. F-Zero X remains a different game target.
 Canonical metadata: [game-product.json](../game-product.json).
 Canonical product/setup documents: [UNIFIED-PRODUCT](UNIFIED-PRODUCT.md) and
 [SETUP](SETUP.md); rights/assets gates: [DISTRIBUTION-AUDIT](DISTRIBUTION-AUDIT.md).
-The approved source lane is
-[`codex/unified-product-20261001`](https://github.com/d-b-c-e/FZeroSNESRecomp/tree/codex/unified-product-20261001).
+The approved source lane at the canonical target after the pending rename is
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001).
 The one package tool is `tools/package_unified.py` and one `Setup.cmd` opens
 `FZeroSNESRecomp.exe --launcher`. The headless companion is the replay runner,
 not a second product/install flow. No new installer or game binary is made
@@ -44,16 +44,29 @@ fzero-video.ini, keybinds.ini, rom.cfg remain stable. Saves, user shaders,
 music, bindings and FFB settings are not moved or rewritten. Human/package
 branding is separate from installation compatibility names.
 
-## Repository-name exception
+## Reviewed repository-name migration
 
-Retain [`d-b-c-e/FZeroSNESRecomp`](https://github.com/d-b-c-e/FZeroSNESRecomp)
-as the recognizable fork of [`mstan/FZeroSNESRecomp`](https://github.com/mstan/FZeroSNESRecomp).
-This is a justified naming exception: one existing owned upstream fork,
-established URLs/consumers and pinned references, with an unambiguous DBCE
-product/preview identity. A repository rename supplies no additional feature
-consolidation. It may be considered later only with a reviewed plan for
-remotes, redirects, upstream relationship, docs/automation and consumers;
-do not rename upstream or alter old releases as housekeeping.
+Canonical target: `d-b-c-e/dbce-mods-fzero-snes`. This source candidate prepares
+the current metadata, package verifier and documentation for that rename;
+the remote still has its historical name until the separately reviewed
+migration is executed. Canonical target links and clone commands become usable
+only after that operation. Do not publish this candidate as a current setup
+route before coordinating the rename.
+
+Rename the existing public repository, preserving GitHub repository ID
+`1380896600`, its fork relationship to
+[`mstan/FZeroSNESRecomp`](https://github.com/mstan/FZeroSNESRecomp), upstream
+credits and all refs. Fork status does not require a permanent naming exception.
+The old owned slug `d-b-c-e/FZeroSNESRecomp` is a historical identifier;
+verify its redirect after migration rather than assuming it works.
+
+No replacement repository, upstream rename, source-history rewrite, binary
+rename or settings migration is part of this change. Historical artifacts and
+their recorded URLs retain their original identity and verifier. The numeric
+repository ID is an offline metadata consistency check, not proof of remote
+ownership; the migration must verify the live ID, public visibility and fork
+parent before and after rename. Main/default promotion requires a separate
+complete main-to-unified scope review.
 
 ## Observed state and exact remaining organization actions
 

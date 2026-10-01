@@ -41,8 +41,8 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 
 ## Download And Play
 
-The unified preview's canonical source branch is
-[`codex/unified-product-20261001`](https://github.com/d-b-c-e/FZeroSNESRecomp/tree/codex/unified-product-20261001).
+After the pending repository rename, the unified preview's canonical source branch is
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001).
 The default branch and historical Releases page are not evidence of a unified
 binary promotion. No DBCE unified binary release is currently published.
 Use the reviewed source/receipt, the DBCE preview ZIP identity and
@@ -354,12 +354,12 @@ Send these files from the game folder:
 
 ## Build From Source
 
-Clone this fork with submodules (the upstream project remains
+After the reviewed repository rename, clone this fork with submodules (the upstream project remains
 [mstan/FZeroSNESRecomp](https://github.com/mstan/FZeroSNESRecomp)):
 
 ```bash
-git clone --recurse-submodules https://github.com/d-b-c-e/FZeroSNESRecomp.git
-cd FZeroSNESRecomp
+git clone --recurse-submodules https://github.com/d-b-c-e/dbce-mods-fzero-snes.git
+cd dbce-mods-fzero-snes
 ```
 
 For a unified candidate, use its reviewed source commit/branch and initialize

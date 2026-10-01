@@ -63,11 +63,14 @@ def preview_identity(product, version, revision):
     required = {'id': 'fzero-snes-recomp',
                 'name': 'DBCE F-Zero SNES Unified Preview',
                 'upstream': 'https://github.com/mstan/FZeroSNESRecomp',
-                'fork': 'https://github.com/d-b-c-e/FZeroSNESRecomp',
+                'fork': 'https://github.com/d-b-c-e/dbce-mods-fzero-snes',
+                'repositoryId': 1380896600,
                 'sourceBranch': 'codex/unified-product-20261001',
                 'entrypoint': 'FZeroSNESRecomp.exe', 'setupArgument': '--launcher'}
     if any(product.get(k) != v for k, v in required.items()):
         raise ValueError('Canonical unified product identity differs')
+    if type(product.get('repositoryId')) is not int:
+        raise ValueError('Numeric stable repository ID required')
     release = product.get('release', {})
     if not isinstance(release, dict):
         raise ValueError('Release metadata must be an object')
