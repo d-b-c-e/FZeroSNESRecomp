@@ -33,11 +33,22 @@ def validate(folder, physical=False):
                 raise ValueError('Window assigned to an unexpected actual display')
             if physical and row['display_primary'] != (row['role']=='center'):
                 raise ValueError('Center-primary assignment differs')
+            if physical:
+                for key in ('keyboard_focus','input_focus','mouse_focus','native_foreground'):
+                    if row[key] is not (row['role']=='center'):
+                        raise ValueError('Expected center-only '+key)
+            if type(row['window_id']) is not int or row['window_id'] <= 0:
+                raise ValueError('Invalid SDL window identity')
         for frame in FRAMES:
             frame_rows = [row for row in rows if row['frame']==frame]
             ids = {row['display_id'] for row in frame_rows}
             if len(ids) != (3 if physical else 1):
                 raise ValueError('Actual SDL monitor identities differ from requested topology')
+            if len({row['window_id'] for row in frame_rows}) != 3:
+                raise ValueError('Panel window identities are not distinct')
+        for role in ROLES:
+            if len({row['window_id'] for row in rows if row['role']==role}) != 1:
+                raise ValueError('Panel window identity changed between checkpoints')
         result['records'] = rows
         result['validated'] = True
     except Exception as error:
