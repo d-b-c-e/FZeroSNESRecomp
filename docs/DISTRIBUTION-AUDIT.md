@@ -57,6 +57,8 @@ It entered this source history in commit `56c99f21edc342bd644dbbdc877d8d6ba69b18
 ("Bundle BS F-Zero Deluxe v1.1 as the default mod").
 `BS_DELUXE_EXPLORATION.md` records a user-supplied upstream v1.1 archive,
 readme dated March29,2025, and official BS Grand Prix2-derived content.
+The historical README asserts inclusion with the authors' permission; that
+is existing permission evidence, but its scope and terms are not supplied.
 No patch-specific redistribution license was located in the tracked source.
 Origin evidence and hashes are NOT permission. This audit does not conclude
 that an IPS file is infringing; inclusion remains unresolved pending patch
@@ -88,8 +90,8 @@ upstream1.8.3 release identity. Any eventual tag should use a distinct fork
 preview namespace and immutable source/package hashes, after review. No tag
 or release is created by this work.
 
-Remaining gates: independent packaging/loader/export review; actual clean
-stock build/package receipt; exact-hosted source archive audit if published;
+Remaining gates: independent packaging/loader/export review, including the
+actual clean stock build/package receipt; exact-hosted source archive audit if published;
 uncertain UI imagery/provenance, OpenMoji/flag/shader notice review; intended
 use review for PolyForm plus added engine restriction; patch terms if ever
 distributed; tester-facing limitations and attended physical acceptance.

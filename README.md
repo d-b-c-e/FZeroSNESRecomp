@@ -383,6 +383,17 @@ It requires `zenity` and `xdotool`; use a fresh output directory for each run.
 
 ## License
 
-MIT License, Copyright (c) 2026 Matthew Stanley. See `LICENSE`. Bundled dependencies keep their own licenses under `licenses/` in each release; BS F-Zero Deluxe content is included with its authors' permission and is not covered by this license.
+The top-level game source uses the MIT License, Copyright (c) 2026 Matthew
+Stanley; see `LICENSE`. The assembled product is not MIT-only: the pinned
+snesrecomp engine uses PolyForm Noncommercial 1.0.0 with an additional
+profit-derived-use restriction, and UI/fonts/runtime components retain their
+own terms and notices. See [distribution audit](docs/DISTRIBUTION-AUDIT.md).
+
+The stock-only preview ZIP omits the original cover, gameplay screenshots and
+BS payload/patches. Historical source still contains those assets. The earlier
+README asserted BS authors' permission, but no patch-specific redistribution
+terms were located in the tracked source during this audit; that permission
+claim and actual distribution scope need review before including the patch.
+No blanket asset clearance or whole-product MIT license is implied.
 
 *F-Zero* belongs to Nintendo. The game ROM is not included.
