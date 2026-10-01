@@ -55,7 +55,8 @@ def stage(build, output):
     if f'#define FZERO_SOURCE_REVISION "{description}"' not in header:
         raise ValueError("Build source stamp is stale or dirty; reconfigure/rebuild")
     version = (ROOT / "VERSION").read_text().strip()
-    files = {"FZeroSNESRecomp.exe": (build / "FZeroSNESRecomp.exe").read_bytes()}
+    files = {name: (build / name).read_bytes() for name in
+             ("FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe")}
     if version.encode() not in files["FZeroSNESRecomp.exe"]:
         raise ValueError("Build does not contain product version")
     if b"BSDELX1" in files["FZeroSNESRecomp.exe"]:
@@ -86,7 +87,7 @@ def stage(build, output):
             raise ValueError("Unpinned box art")
     for name in git(ROOT, "ls-files", "assets/shaders").splitlines():
         files[name] = (ROOT / name).read_bytes()
-    pending = ["FZeroSNESRecomp.exe", "WheelFfb.dll"]
+    pending = ["FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe", "WheelFfb.dll"]
     while pending:
         name = pending.pop()
         for imported in pe_imports(files[name]):

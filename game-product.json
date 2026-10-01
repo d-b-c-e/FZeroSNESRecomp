@@ -13,7 +13,7 @@
     "wheel": {"availability": "integrated", "setup": "Mods > Controls > Racing wheel controls"},
     "ffb": {"availability": "opt-in", "setup": "Mods > Controls > Force feedback", "physicalAcceptance": "pending"},
     "telemetry": {"availability": "opt-in", "setup": "config.ini [Telemetry]", "protocol": "Forza Horizon 324-byte UDP"},
-    "recordingReplay": {"availability": "experimental", "setup": "docs/PLAYTHROUGH_RECORDING.md", "physicalOutput": false, "bsDeluxeReplay": "unsupported"},
+    "recordingReplay": {"availability": "experimental", "setup": "docs/PLAYTHROUGH_RECORDING.md", "runner": "FZeroSNESRecompHeadless.exe", "adapter": "tools/fzero_replay_adapter.py", "physicalOutput": false, "bsDeluxeReplay": "unsupported", "normalizedObservations": "optional externally pinned toolkit replay tools"},
     "tripleScreen": {"availability": "experimental", "setup": "Mods > Triple-screen projection", "outputs": ["span", "separate-displays"], "limitations": ["side sprites/effects incomplete", "physical separate-display validation pending", "CRT pacing pending"]},
     "bsDeluxe": {"availability": "build-dependent", "distribution": "excluded from unified candidate", "setup": "Mods > BS Deluxe"}
   },

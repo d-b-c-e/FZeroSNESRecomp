@@ -56,10 +56,14 @@ runtime build must stage every imported non-system DLL with reviewed notices.
 The tooling refuses to assume that a runtime installed on the build machine
 will also exist on another user's computer.
 
-Required payload: FZeroSNESRecomp.exe, WheelFfb.dll, approved build runtime DLLs,
+Required payload: FZeroSNESRecomp.exe, its FZeroSNESRecompHeadless.exe replay
+companion, WheelFfb.dll, approved build runtime DLLs,
 checked-in assets/shaders, the pinned launcher fonts/images, licenses and
 dependency/font notices. The staging tool reads CMake's exact dependency roots,
 verifies clean gitlinks and the build's source stamp, and pins those assets.
+The included replay adapter uses externally supplied pinned toolkit tools only
+for optional normalized force observations; game recording and headless replay
+do not require private toolkit access. No toolkit implementation is copied.
 Receipt example and fields are documented in tools/package_unified.py.
 The version comes from VERSION; the package channel is candidate, with no new
 published release implied. Submodule pins and toolkit file hashes remain

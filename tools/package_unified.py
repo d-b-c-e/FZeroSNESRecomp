@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
         "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md")
 SOURCE_FILES = ("README.md", "LICENSE", "VERSION", "game-product.json",
-                "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt")
+                "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt",
+                "tools/fzero_replay_adapter.py")
 UI_ASSETS = tuple("assets/img/" + n for n in (
     "boxart.tga", "brand_mark.tga", "flags.png", "pad.tga", "verdict_bad.tga",
     "verdict_none.tga", "verdict_ok.tga", "verdict_warn.tga")) + tuple(
@@ -55,7 +56,7 @@ def relative(name):
 def approved(name):
     path = relative(name)
     low = name.lower()
-    if low == "fzerosnesrecomp.exe" or (len(path.parts) == 1 and low.endswith(".dll")):
+    if low in ("fzerosnesrecomp.exe", "fzerosnesrecompheadless.exe") or (len(path.parts) == 1 and low.endswith(".dll")):
         return True
     if path.parts[0] == "licenses" and path.suffix.lower() in (".txt", ".md"):
         return True
@@ -148,7 +149,7 @@ def read_payload(payload, receipt, product_version, toolkit_hash):
         if b"BSDELX1" in data:
             raise ValueError("Embedded private BS payload excluded")
         result[name] = data
-    required = {"FZeroSNESRecomp.exe", "WheelFfb.dll", "assets/img/boxart.tga",
+    required = {"FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe", "WheelFfb.dll", "assets/img/boxart.tga",
                 "licenses/snesrecomp.txt", "licenses/recomp-ui.txt", "licenses/imgui.txt",
                 "licenses/wheel-toolkit.txt"} | set(UI_ASSETS)
     required |= {"licenses/" + Path(n).stem + ".txt" for n in UI_ASSETS if n.endswith(".ttf")}

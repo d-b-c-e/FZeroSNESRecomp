@@ -45,6 +45,7 @@ class PackageTests(unittest.TestCase):
         self.root = self.base / "source"
         self.root.mkdir()
         self.files = {"FZeroSNESRecomp.exe": pe(["KERNEL32.dll", "SDL3.dll"]),
+                      "FZeroSNESRecompHeadless.exe": pe(),
                       "WheelFfb.dll": pe(["dinput8.dll"]), "SDL3.dll": pe(),
                       "assets/img/boxart.tga": b"fixture artwork",
                       "assets/shaders/basic.glsl": b"fixture shader"}
@@ -108,6 +109,11 @@ class PackageTests(unittest.TestCase):
 
     def test_missing_dynamic_wheel(self):
         del self.receipt["files"]["WheelFfb.dll"]
+        with self.assertRaisesRegex(ValueError, "Missing required"):
+            self.read()
+
+    def test_missing_replay_runner(self):
+        del self.receipt["files"]["FZeroSNESRecompHeadless.exe"]
         with self.assertRaisesRegex(ValueError, "Missing required"):
             self.read()
 
