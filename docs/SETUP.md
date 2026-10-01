@@ -1,0 +1,35 @@
+# F-Zero SNES setup
+
+Run Setup.cmd, or FZeroSNESRecomp.exe --launcher, to open the existing launcher
+even when Skip launcher on boot was saved. Select your own F-Zero USA ROM.
+
+1. On Controls, select the steering device. In Mods > Controls > Racing wheel
+   controls, bind axes and SNES buttons, including save-state and rewind.
+   Use Live wheel input and Steering preview to check direction and pulse
+   response before driving. Start with dead zone 0%, travel 100%, response 50%.
+   Rewind must also be enabled under Settings.
+2. FFB is optional. Select the explicit device in Force feedback; preserve
+   saved overrides. Start modestly and test feel while seated. A missing or
+   ambiguous device disables output rather than choosing another wheel.
+3. Telemetry is optional: set [Telemetry] Enabled=1, Host=127.0.0.1, Port=8000
+   in config.ini and choose Forza Horizon UDP with that port in the dashboard.
+   See README.md for which signals are measured and which are compatibility
+   values. There is currently no launcher telemetry settings page.
+4. Triple-screen projection is experimental. Select Span for a Surround/span
+   surface or Separate for three equal landscape displays in one aligned row.
+   Enter visible panel width, eye distance/height, side angles and gap in the
+   mod. The user's 70-degree rig is a test profile, not a universal default.
+   CRT shaders apply per panel; start with Shader None when diagnosing pacing.
+   Side sprites/effects and physical separate-monitor validation are pending.
+5. BS Deluxe is build-dependent. A stock-only candidate reports Unavailable.
+   Keep separate stock/Deluxe saves and bring private imported data only to a
+   separately reviewed local build. A saved toggle cannot add a missing module.
+6. Under Settings > Sound choose original music or your own supported MSU-1
+   pack. Under Settings > Display choose None for unfiltered pixels or a bundled
+   shader. CRT-Geom remains a user import; it is not included in the candidate.
+
+If a device or display layout changes, reopen the launcher and reselect the
+saved device/layout. Use a single screen and Shader None to isolate rendering
+problems. Retain all config files and saves when updating; open the launcher
+with --launcher instead of deleting settings. Recorded replay instructions and
+their software-only force boundaries are in PLAYTHROUGH_RECORDING.md.

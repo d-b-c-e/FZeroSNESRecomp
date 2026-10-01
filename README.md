@@ -2,6 +2,11 @@
 
 A native PC build of *F-Zero* for SNES.
 
+This fork keeps wheel, force feedback, telemetry, recording/replay and
+experimental triples inside this one native app and launcher. See
+[unified product candidate](docs/UNIFIED-PRODUCT.md) and [setup](docs/SETUP.md)
+for the stock-only candidate package contract and current validation limits.
+
 You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 
 <p align="center">
@@ -310,10 +315,12 @@ the title bar says so and nothing is disturbed.
 BS F-Zero Deluxe is included with permission from its authors:
 GuyPerfect, Porthor, and PowerPanda.
 
-The release includes two BS Deluxe files:
-
-- `mods/bs-deluxe.dat` is used by this app.
-- `patches/bs-deluxe-usa.ips` is the upstream v1.1 USA SNES patch for your own ROM.
+Historical BS-equipped releases embed the imported payload and retain credits
+and provenance under `mods/`; a loose `bs-deluxe.dat` is a development override.
+The upstream v1.1 USA patch is `patches/bs-deluxe-usa.ips` for your own ROM.
+The unified stock-only candidate excludes the private module and payload;
+its launcher reports BS Deluxe as unavailable. Do not copy an old payload
+beside a candidate to bypass its build identity.
 
 No patched ROM is included.
 
