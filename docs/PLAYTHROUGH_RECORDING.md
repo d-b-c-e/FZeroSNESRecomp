@@ -137,7 +137,7 @@ For the existing drive, from this repository root:
 ```powershell
 py -3 tools/fzero_replay_adapter.py observe `
   --case 'build-integration\rig-preview\wheel-drive-20260928-235320.case.json' `
-  --toolkit 'C:\Users\antho\.codex\worktrees\recorded-playback\dbce-wheel-mod-toolkit' `
+  --toolkit 'C:\Source\dbce-wheel-mod-toolkit' `
   --runner 'build-integration\FZeroSNESRecompHeadless.exe' `
   --rom 'build-integration\rig-preview\fzero.sfc' `
   --output 'build-integration\rig-preview\diagnostics\next-observation.jsonl' `

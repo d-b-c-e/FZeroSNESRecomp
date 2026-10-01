@@ -1,5 +1,7 @@
 # Preserve exact pinned upstream license bytes across Windows checkouts.
 licenses/fonts/*-OFL.txt text eol=lf
+# Preserve the reviewed original provenance manifest byte-for-byte.
+/lib/toolkit/source-to-binary-manifest.json -text
 # Future archive exports only; tracked files and repository history stay intact.
 /assets/img/boxart.tga export-ignore
 /docs/screenshots export-ignore
