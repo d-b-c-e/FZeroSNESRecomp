@@ -8,13 +8,17 @@ engine data. `currentEngineRpm` is a speed-derived dashboard approximation.
 
 ## Verified crash signal
 
-The same energy-loss detector used for FFB finds four impact edges in the
-September 28 recorded drive, at replay frames 3417, 5526, 6139, and 6169.
-Its current threshold is a 32-unit drop in `$00C9`, an eight-frame cooldown,
-and a boost-input exclusion. The recorded drops are 86, 40, 240, and 96 units.
-These are repeatable game events; physical impact direction and wheel torque
-are not encoded in the recording. The current FFB pulse uses a fixed magnitude
-for all four, so severity scaling is a separate experiment.
+The energy-loss detector used for FFB originally found four impact edges in
+the September 28 recorded drive, at frames 3417, 5526, 6139, and 6169
+(losses of 86, 40, 240, and 96 units). A closer replay trace found three
+isolated 24-unit losses at 3068, 3502, and 10222 with no boost input; the old
+32-unit threshold missed them. The threshold is now 16 units, with the same
+eight-frame cooldown and boost-input exclusion. A full device-free replay
+confirmed all seven pulses and no replay divergence. Repeated five-unit drains
+remain below threshold. These three lighter events are plausible contacts, not
+visually classified wall hits; physical impact direction and delivered wheel
+torque are not encoded in the recording. The current FFB pulse uses a fixed
+magnitude for all seven, so severity scaling is a separate experiment.
 
 For richer telemetry, an explicit event record containing frame, energy loss,
 and a source/confidence tag is the least ambiguous route. The standard Forza

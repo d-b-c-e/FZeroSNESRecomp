@@ -21,6 +21,7 @@ int s_strength = 40;
 int s_impact_strength = 20;
 constexpr int kConstantImpactMs = 120;
 constexpr int kSineImpactMs = 140;
+constexpr int kCollisionMinEnergyLoss = 16;
 
 #ifdef _WIN32
 using CreateConstantBurstFn = int (__cdecl *)(int);
@@ -94,17 +95,17 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
   state->previous_y = y;
   state->have_position = racing ? 1 : 0;
 
-  /* $00C9 is the power/energy meter. In a captured wall contact it fell by
-   * 96 on the actual impact frame; the former $E0/$E8/$E9/$F5 candidates
-   * changed several frames earlier and exhausted the short FFB pulse before
-   * the hit. Small five-unit drains are not impacts. A/boost can spend power
-   * too, so it must not become a false collision cue. */
+  /* $00C9 is the power/energy meter. The verified drive contains isolated
+   * 24-unit losses that the former 32-unit threshold missed, alongside four
+   * larger contacts (40–240). A 16-unit threshold includes those lighter
+   * contacts while excluding the repeated five-unit drain. Boost can spend
+   * power too, so it must not become a false collision cue. */
   const uint16_t energy = read16(ram + 0x00c9);
   const int lost_energy = state->have_energy && state->previous_energy > energy ?
       state->previous_energy - energy : 0;
   if (state->collision_cooldown > 0) --state->collision_cooldown;
   out->collision_pulse = racing && state->collision_cooldown == 0 &&
-      lost_energy >= 32 && !(input & 0x0100u);
+      lost_energy >= kCollisionMinEnergyLoss && !(input & 0x0100u);
   if (out->collision_pulse) state->collision_cooldown = 8;
   state->previous_energy = energy;
   state->have_energy = racing ? 1 : 0;

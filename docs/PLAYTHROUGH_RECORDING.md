@@ -77,10 +77,12 @@ side-compositor white flash in this recording, not a later SDL/GPU/Surround
 presentation artifact or a different playthrough.
 One smaller luminance rise at 3025 was a track surface turning light grey and
 persisting in following frames; it should not be suppressed as a flash.
-Device-free FFB model tracing requested collision pulses at frames 3417, 5526,
-6139, and 6169 at strength 35. This verifies model decisions, not that the
-wheel received or reproduced the periodic effects; physical validation remains
-attended work.
+With the original 32-unit impact threshold, device-free FFB model tracing
+requested collision pulses at frames 3417, 5526, 6139, and 6169. A later
+16-unit threshold also catches three isolated 24-unit losses at 3068, 3502,
+and 10222. The full 11,364-frame headless replay passed with all seven model
+pulses. This verifies model decisions, not that the wheel received or
+reproduced the effects; physical validation remains attended work.
 
 ## Shared toolkit force-observation adapter
 
@@ -147,8 +149,9 @@ the original case SHA-256 stays fixed. Validate a case with the toolkit's
 `compare` command (exit 1 means expected differences, not a replay failure).
 The September 28 case has SHA-256
 `aaec60f5e370734536820accc262c0a9c7a268fdc19d594f90e63db8332720ce`.
-At strengths 12 and 20, both 11,364-frame replays passed, each emitted 45,461
-ordered requests, and the four impact edges remained at frames 3417, 5526,
-6139 and 6169. The toolkit comparison found 29,083 changed requests with the
-same case identity. These software comparisons do not prove FFB delivery or
+Before the threshold adjustment, strengths 12 and 20 both passed 11,364-frame
+replays, each emitted 45,461 ordered requests, and the four impact edges
+remained at frames 3417, 5526, 6139 and 6169. The toolkit comparison found
+29,083 changed requests with the same case identity. These software
+comparisons do not prove FFB delivery or
 physical feel; that still requires an attended wheel test.
