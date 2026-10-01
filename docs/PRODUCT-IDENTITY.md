@@ -11,7 +11,7 @@ owned game products. F-Zero X remains a different game target.
 Canonical metadata: [game-product.json](../game-product.json).
 Canonical product/setup documents: [UNIFIED-PRODUCT](UNIFIED-PRODUCT.md) and
 [SETUP](SETUP.md); rights/assets gates: [DISTRIBUTION-AUDIT](DISTRIBUTION-AUDIT.md).
-The approved source lane at the canonical target after the pending rename is
+The approved source lane is
 [`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001).
 The one package tool is `tools/package_unified.py` and one `Setup.cmd` opens
 `FZeroSNESRecomp.exe --launcher`. The headless companion is the replay runner,
@@ -44,29 +44,35 @@ fzero-video.ini, keybinds.ini, rom.cfg remain stable. Saves, user shaders,
 music, bindings and FFB settings are not moved or rewritten. Human/package
 branding is separate from installation compatibility names.
 
-## Reviewed repository-name migration
+## Completed repository-name migration
 
-Canonical target: `d-b-c-e/dbce-mods-fzero-snes`. This source candidate prepares
-the current metadata, package verifier and documentation for that rename;
-the remote still has its historical name until the separately reviewed
-migration is executed. Canonical target links and clone commands become usable
-only after that operation. Do not publish this candidate as a current setup
-route before coordinating the rename.
+Canonical repository: `d-b-c-e/dbce-mods-fzero-snes`. The reviewed in-place
+rename completed on 2026-10-01 after exact source commit
+`2374f26d0437f6fd6875aafac24246ed5fc60659` was published by normal fast-forward
+to `codex/unified-product-20261001`. Current metadata, package verifier,
+documentation links and clone commands use the canonical name.
 
-Rename the existing public repository, preserving GitHub repository ID
-`1380896600`, its fork relationship to
-[`mstan/FZeroSNESRecomp`](https://github.com/mstan/FZeroSNESRecomp), upstream
-credits and all refs. Fork status does not require a permanent naming exception.
+Verification confirmed the existing public GitHub repository ID
+`1380896600` and its fork relationship to
+[`mstan/FZeroSNESRecomp`](https://github.com/mstan/FZeroSNESRecomp). Upstream
+credits were preserved. All 43 refs matched the pre-rename state after the
+approved unified fast-forward; no releases existed before or after the rename.
+Fork status does not require a permanent naming exception.
 The old owned slug `d-b-c-e/FZeroSNESRecomp` is a historical identifier;
-verify its redirect after migration rather than assuming it works.
+its repository and unified-branch web URLs were verified to redirect with
+HTTP 301 to the canonical URLs, which returned HTTP 200. Old and canonical
+Git URLs returned identical refs; the old API URL resolved to the same ID.
 
 No replacement repository, upstream rename, source-history rewrite, binary
-rename or settings migration is part of this change. Historical artifacts and
+rename or settings migration occurred. Historical artifacts and
 their recorded URLs retain their original identity and verifier. The numeric
 repository ID is an offline metadata consistency check, not proof of remote
-ownership; the migration must verify the live ID, public visibility and fork
-parent before and after rename. Main/default promotion requires a separate
-complete main-to-unified scope review.
+ownership; live ID, public visibility and fork parent were checked before and
+after rename. Exact hosted ZIP/tar exports at `2374f26` matched the canonical
+committed file contents and retained artwork/patch/private-data exclusions.
+Default `main` stayed at `1686df46d4fc7c22b5dc8fdfaa5282ca4bd78562`.
+Main promotion remains separate from this completed rename and requires the
+complete main-to-unified scope review. No binary release was published.
 
 ## Observed state and exact remaining organization actions
 

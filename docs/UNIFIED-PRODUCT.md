@@ -10,7 +10,7 @@ upstream attribution/history and atomic feature commits.
 Canonical metadata is [game-product.json](../game-product.json). The
 [identity policy](PRODUCT-IDENTITY.md) defines the numeric upstream base,
 source-qualified preview label, reviewed repository-name migration and remaining
-consolidation actions. The canonical source lane after the pending rename is
+consolidation actions. The canonical source lane is
 [`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001),
 not the retained default branch or a historical release ZIP.
 
