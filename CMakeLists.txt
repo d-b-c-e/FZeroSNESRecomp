@@ -316,11 +316,13 @@ fzero_revision("${SNESRECOMP_ROOT}" FZERO_FRAMEWORK_REVISION)
 fzero_revision("${RECOMP_UI_ROOT}" FZERO_UI_REVISION)
 configure_file(src/fzero_build.h.in generated/fzero_build.h @ONLY)
 target_include_directories(FZeroSNESRecomp PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga")
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/img/boxart.tga"
         "$<TARGET_FILE_DIR:FZeroSNESRecomp>/assets/img/boxart.tga"
     VERBATIM)
+endif()
 add_custom_command(TARGET FZeroSNESRecomp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/shaders"

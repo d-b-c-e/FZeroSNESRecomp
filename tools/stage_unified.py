@@ -77,6 +77,9 @@ def stage(build, output):
         dependencies[name] = root
         files[f"licenses/{name}.txt"] = (root / "LICENSE").read_bytes()
     files["licenses/imgui.txt"] = (dependencies["recomp-ui"] / "src/third_party/imgui/LICENSE.txt").read_bytes()
+    files['licenses/launcher-images.txt'] = (dependencies['recomp-ui'] / 'assets/common/img/NOTICE.md').read_bytes()
+    files['licenses/launcher-fonts.txt'] = (dependencies['recomp-ui'] / 'assets/common/fonts/NOTICE.md').read_bytes()
+    files['licenses/flag-font-OFL.txt'] = (ROOT / OFL_FILES['NotoSansSymbols2-Regular.ttf'][0]).read_bytes()
     files["licenses/wheel-toolkit.txt"] = (ROOT / "lib/toolkit/LICENSE.txt").read_bytes()
     files["WheelFfb.dll"] = (ROOT / "lib/toolkit/native/WheelFfb.dll").read_bytes()
     for name in UI_ASSETS:
@@ -86,12 +89,10 @@ def stage(build, output):
             if files[name] != source.read_bytes():
                 raise ValueError("Unpinned launcher font")
             files["licenses/" + Path(name).stem + ".txt"] = font_notice(files[name], Path(name).name)
-        elif name != "assets/img/boxart.tga":
+        else:
             relative = "assets/consoles/snes/img/pad.tga" if name.endswith("/pad.tga") else "assets/common/img/" + Path(name).name
             if files[name] != (dependencies["recomp-ui"] / relative).read_bytes():
                 raise ValueError("Unpinned launcher image")
-        elif files[name] != (ROOT / name).read_bytes():
-            raise ValueError("Unpinned box art")
     for name in git(ROOT, "ls-files", "assets/shaders").splitlines():
         files[name] = (ROOT / name).read_bytes()
     pending = ["FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe", "WheelFfb.dll"]

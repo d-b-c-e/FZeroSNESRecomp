@@ -30,18 +30,17 @@ DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
         "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md",
         "ADAPTIVE_RENDERER.md", "BS_DELUXE_EXPLORATION.md", "HD_MODE7.md",
         "HD_MODE7_PERFORMANCE.md", "PERFORMANCE_DIAGNOSTICS.md", "SAVE_STATES.md",
-        "WHEELFFB_EXPERIMENTAL_RECEIPT.md")
+        "WHEELFFB_EXPERIMENTAL_RECEIPT.md", "DISTRIBUTION-AUDIT.md")
 SOURCE_FILES = ("README.md", "LICENSE", "VERSION", "game-product.json",
                 "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt",
-                "tools/fzero_replay_adapter.py")
-SOURCE_FILES += tuple("docs/screenshots/" + n for n in (
-    "attract-race.png", "bs-blue-thunder.png", "bs-forest-iii-race-21x9.png",
-    "bs-forest-iii-race.png", "bs-forest-iii.png", "widescreen-title.png"))
+                "tools/fzero_replay_adapter.py", "assets/README.md")
 UI_ASSETS = tuple("assets/img/" + n for n in (
-    "boxart.tga", "brand_mark.tga", "flags.png", "pad.tga", "verdict_bad.tga",
+    "brand_mark.tga", "flags.png", "pad.tga", "verdict_bad.tga",
     "verdict_none.tga", "verdict_ok.tga", "verdict_warn.tga")) + tuple(
     "assets/fonts/" + n for n in ("LatoLatin-Bold.ttf", "LatoLatin-Regular.ttf",
     "NotoSansSymbols2-Regular.ttf", "OpenMoji-black-glyf.ttf"))
+IMAGE_NOTICES = ("licenses/launcher-images.txt", "licenses/launcher-fonts.txt",
+                 "licenses/flag-font-OFL.txt")
 SETUP = b'@echo off\r\ncd /d "%~dp0"\r\n"%~dp0FZeroSNESRecomp.exe" --launcher\r\n'
 SYSTEM_DLLS = {"kernel32.dll", "user32.dll", "gdi32.dll", "advapi32.dll",
               "shell32.dll", "ole32.dll", "oleaut32.dll", "comdlg32.dll",
@@ -161,9 +160,9 @@ def read_payload(payload, receipt, product_version, toolkit_hash):
         if b"BSDELX1" in data:
             raise ValueError("Embedded private BS payload excluded")
         result[name] = data
-    required = {"FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe", "WheelFfb.dll", "assets/img/boxart.tga",
+    required = {"FZeroSNESRecomp.exe", "FZeroSNESRecompHeadless.exe", "WheelFfb.dll",
                 "licenses/snesrecomp.txt", "licenses/recomp-ui.txt", "licenses/imgui.txt",
-                "licenses/wheel-toolkit.txt"} | set(UI_ASSETS)
+                "licenses/wheel-toolkit.txt"} | set(UI_ASSETS) | set(IMAGE_NOTICES)
     required |= {"licenses/" + Path(n).stem + ".txt" for n in UI_ASSETS if n.endswith(".ttf")}
     if not required.issubset(result):
         raise ValueError(f"Missing required payload: {sorted(required - result.keys())}")
@@ -172,6 +171,8 @@ def read_payload(payload, receipt, product_version, toolkit_hash):
         embedded, separator, full_license = notice.partition(OFL_SEPARATOR)
         if not embedded.strip() or not separator or digest(full_license) != expected:
             raise ValueError(f"Complete upstream OFL and embedded notices required: {font}")
+    if digest(result['licenses/flag-font-OFL.txt']) != OFL_FILES['NotoSansSymbols2-Regular.ttf'][1]:
+        raise ValueError('Complete pinned OFL required for flag font artwork')
     if digest(result["WheelFfb.dll"]) != toolkit_hash.lower():
         raise ValueError("WheelFfb override needs explicit source repin")
     binaries = {name.lower(): data for name, data in result.items() if name.lower().endswith((".exe", ".dll"))}
@@ -210,6 +211,9 @@ def verify(path):
             if digest(archive.read(name)) != hash_value:
                 raise ValueError(f"Package hash mismatch: {name}")
         receipt = manifest["build"]
+        identity = f"DBCE F-Zero SNES Unified Preview {manifest['version']}+g{receipt['sourceRevision'][:12]}"
+        if manifest.get('previewIdentity') != identity:
+            raise ValueError('Explicit fork preview identity required')
         payload_names = receipt["files"]
         extras = set(SOURCE_FILES) | {"Setup.cmd"} | {"docs/" + n for n in DOCS}
         if set(expected) != set(payload_names) | extras:
@@ -271,6 +275,7 @@ def package(payload, receipt, output, root=ROOT):
     files["Setup.cmd"] = SETUP
     manifest = {"schema": "dbce.fzero-package", "schemaVersion": 1,
                 "productId": product["id"], "version": version, "channel": "candidate",
+                "previewIdentity": f"DBCE F-Zero SNES Unified Preview {version}+g{receipt['sourceRevision'][:12]}",
                 "distribution": "stock-only-rom-free", "build": receipt,
                 "wheelRuntimeSha256": wheel_hash,
                 "files": {name: digest(data) for name, data in sorted(files.items())}}
@@ -278,7 +283,7 @@ def package(payload, receipt, output, root=ROOT):
     data = zip_bytes(files)
     verify(io.BytesIO(data))
     output.mkdir(parents=True, exist_ok=False)
-    archive = output / f"FZeroSNESRecomp-{version}-unified-candidate-windows-x64.zip"
+    archive = output / f"DBCE-FZeroSNES-unified-preview-{version}-g{receipt['sourceRevision'][:12]}-windows-x64.zip"
     archive.write_bytes(data)
     archive.with_suffix(".zip.sha256").write_text(f"{digest(data)}  {archive.name}\n", encoding="ascii")
     verify(archive)

@@ -1,2 +1,6 @@
 # Preserve exact pinned upstream license bytes across Windows checkouts.
 licenses/fonts/*-OFL.txt text eol=lf
+# Future archive exports only; tracked files and repository history stay intact.
+/assets/img/boxart.tga export-ignore
+/docs/screenshots export-ignore
+/patches export-ignore

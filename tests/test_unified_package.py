@@ -52,7 +52,6 @@ class PackageTests(unittest.TestCase):
         self.files = {"FZeroSNESRecomp.exe": pe(["KERNEL32.dll", "SDL3.dll"]),
                       "FZeroSNESRecompHeadless.exe": pe(),
                       "WheelFfb.dll": pe(["dinput8.dll"]), "SDL3.dll": pe(),
-                      "assets/img/boxart.tga": b"fixture artwork",
                       "assets/shaders/basic.glsl": b"fixture shader"}
         for name in pack.UI_ASSETS:
             self.files[name] = b"Fixture runtime asset"
@@ -63,6 +62,9 @@ class PackageTests(unittest.TestCase):
                     self.files["licenses/" + Path(name).stem + ".txt"] += pack.OFL_SEPARATOR + (pack.ROOT / license_path).read_bytes()
         for name in ("snesrecomp", "recomp-ui", "imgui", "wheel-toolkit"):
             self.files[f"licenses/{name}.txt"] = b"Fixture notice"
+        for name in pack.IMAGE_NOTICES:
+            self.files[name] = b'Fixture asset notice'
+        self.files['licenses/flag-font-OFL.txt'] = (pack.ROOT / pack.OFL_FILES['NotoSansSymbols2-Regular.ttf'][0]).read_bytes()
         self.wheel_hash = pack.digest(self.files["WheelFfb.dll"])
         self.receipt = {"schema": "dbce.fzero-build", "version": 1,
                         "productVersion": "1.7.0", "sourceRevision": "1" * 40,
@@ -146,6 +148,31 @@ class PackageTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 pack.approved(name)
 
+    def test_original_game_artwork_and_content_rejected(self):
+        for name in ('assets/img/boxart.tga','assets/img/F-Zero.png',
+                     'docs/screenshots/attract-race.png','patches/bs-deluxe-usa.ips',
+                     'game.sfc','game.smc','game.bs','state.bin','recording.jsonl',
+                     'fzero-video.ini','keybinds.ini','rom.cfg','mods/bs-deluxe.dat'):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError,'Unapproved'):
+                pack.approved(name)
+        self.assertNotIn('assets/img/boxart.tga',pack.UI_ASSETS)
+        self.assertFalse(any(n.startswith('docs/screenshots/') for n in pack.SOURCE_FILES))
+        self.files['assets/img/boxart.tga']=b'Original artwork supplied with a self-consistent receipt'
+        self.write_payload()
+        with self.assertRaisesRegex(ValueError,'Unapproved'):
+            self.read()
+
+    def test_missing_asset_notices_and_mutated_flag_license_rejected(self):
+        for name in pack.IMAGE_NOTICES:
+            original=self.receipt['files'].pop(name)
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError,'Missing required'):
+                self.read()
+            self.receipt['files'][name]=original
+        self.files['licenses/flag-font-OFL.txt']=b'OFL link only'
+        self.write_payload()
+        with self.assertRaisesRegex(ValueError,'Complete pinned OFL'):
+            self.read()
+
     def test_case_collision(self):
         self.receipt["files"]["WHEELFFB.dll"] = self.receipt["files"]["WheelFfb.dll"]
         with self.assertRaisesRegex(ValueError, "Case-colliding"):
@@ -215,6 +242,10 @@ class PackageTests(unittest.TestCase):
         with zipfile.ZipFile(first) as archive:
             self.assertEqual(archive.read("Setup.cmd"), pack.SETUP)
             self.assertNotIn("config.ini", archive.namelist())
+            self.assertNotIn('assets/img/boxart.tga',archive.namelist())
+            self.assertFalse(any(n.startswith('docs/screenshots/') for n in archive.namelist()))
+            self.assertTrue(result['previewIdentity'].startswith('DBCE F-Zero SNES Unified Preview '))
+            self.assertTrue(first.name.startswith('DBCE-FZeroSNES-unified-preview-'))
         with self.assertRaises(FileExistsError):
             pack.package(self.payload, self.receipt, self.base / "out1", self.root)
 
