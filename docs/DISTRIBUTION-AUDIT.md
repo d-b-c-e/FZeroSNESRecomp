@@ -1,7 +1,12 @@
 # Stock-only preview distribution audit
 
-This is a bounded packaging candidate based on reviewed source `5432eb1`.
-It has not been published, tagged, installed or approved for tester rollout.
+The bounded packaging/export changes based on reviewed source `5432eb1`
+passed independent review and were published as source `69b6aa8` on the
+existing unified preview branch. Both GitHub-generated source archive
+formats at that exact commit were inspected: cover/screenshots/patches are
+excluded and 158 regular files match the canonical commit export. The later
+identity/organization pass is a separate review candidate. No unified binary
+release/tag/installation or tester rollout is implied by source publication.
 Removing identified assets is a packaging boundary, not legal clearance.
 
 ## Identified packaging defect and candidate boundary
@@ -74,8 +79,8 @@ defines the exclusion mechanism. Candidate `.gitattributes` excludes the
 cover, screenshots directory and patches directory. Local ZIP and tar
 exports must be checked at the exact candidate commit. Before a future
 release, also download BOTH GitHub auto-generated formats at its exact
-commit and inspect their manifests; hosting verification has not happened
-for this unpublished candidate. Old references/clones/history still contain
+commit and inspect their manifests; hosting verification passed exact
+`69b6aa8` and must be repeated for any later release commit. Old references/clones/history still contain
 these assets. The current published source is NOT asset-free. No history
 rewrite, deletion of owner assets or retroactive archive claim is made.
 
@@ -86,7 +91,7 @@ Proposed manifest identity: `DBCE F-Zero SNES Unified Preview
 1.8.3+g<12-character-source-SHA>`; candidate ZIP filename starts
 `DBCE-FZeroSNES-unified-preview-1.8.3-g<SHA>-windows-x64.zip`.
 The candidate tooling records/enforces this identity, avoiding the existing
-upstream1.8.3 release identity. Any eventual tag should use a distinct fork
+upstream 1.8.3 release identity. Any eventual tag should use a distinct fork
 preview namespace and immutable source/package hashes, after review. No tag
 or release is created by this work.
 

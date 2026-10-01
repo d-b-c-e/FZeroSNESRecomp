@@ -1,10 +1,15 @@
-# FZeroSNESRecomp
+# DBCE F-Zero SNES Unified Preview
 
 A native PC build of *F-Zero* for SNES.
 
+Based on upstream [FZeroSNESRecomp](https://github.com/mstan/FZeroSNESRecomp)
+1.8.3. The public fork retains its upstream name; the DBCE preview identity
+distinguishes this combined product from upstream and historical releases.
+
 This fork keeps wheel, force feedback, telemetry, recording/replay and
 experimental triples inside this one native app and launcher. See
-[unified product candidate](docs/UNIFIED-PRODUCT.md) and [setup](docs/SETUP.md)
+[unified product](docs/UNIFIED-PRODUCT.md), [setup](docs/SETUP.md) and
+[product/version identity](docs/PRODUCT-IDENTITY.md)
 for the stock-only candidate package contract and current validation limits.
 
 You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
@@ -35,6 +40,21 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 - Optional MSU-1 music packs for stock F-Zero and BS Deluxe (bring your own patch and audio).
 
 ## Download And Play
+
+The unified preview's canonical source branch is
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/FZeroSNESRecomp/tree/codex/unified-product-20261001).
+The default branch and historical Releases page are not evidence of a unified
+binary promotion. No DBCE unified binary release is currently published.
+Use the reviewed source/receipt, the DBCE preview ZIP identity and
+[one setup flow](docs/SETUP.md); do not substitute an upstream 1.8.3 ZIP.
+`VERSION=1.8.3` is the numeric upstream base. The full preview identity adds
+its exact source revision, as described in [identity policy](docs/PRODUCT-IDENTITY.md).
+
+### Historical upstream/legacy packages
+
+The instructions below describe retained historical packages; they do not
+identify a DBCE unified preview release. Existing versions/tags/assets are
+preserved, and a working installation is not automatically migrated.
 
 On Windows:
 

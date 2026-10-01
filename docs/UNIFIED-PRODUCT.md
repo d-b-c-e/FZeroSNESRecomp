@@ -1,10 +1,17 @@
-# Unified F-Zero SNES product candidate
+# DBCE F-Zero SNES Unified Preview
 
 F-Zero SNES and optional BS Deluxe use one native host, existing launcher,
 settings set and version. Wheel, FFB, telemetry, recording/replay and experimental
 triples are internal features. F-Zero X is a different product. The source
 folders in E:/Source are attached development worktrees, not separate products
 to merge. Retain the fork name, upstream history and atomic feature commits.
+
+Canonical metadata is [game-product.json](../game-product.json). The
+[identity policy](PRODUCT-IDENTITY.md) defines the numeric upstream base,
+source-qualified preview label, repository-name exception and remaining
+consolidation actions. The canonical published source lane is
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/FZeroSNESRecomp/tree/codex/unified-product-20261001),
+not the retained default branch or a historical release ZIP.
 
 ## Install and setup
 
@@ -65,7 +72,11 @@ The included replay adapter uses externally supplied pinned toolkit tools only
 for optional normalized force observations; game recording and headless replay
 do not require private toolkit access. No toolkit implementation is copied.
 Receipt example and fields are documented in tools/package_unified.py.
-The version comes from VERSION; the package channel is candidate, with no new
+The numeric upstream base comes from VERSION. The preview name/artifact stem
+and canonical links come from game-product.json and are checked by the
+packager. The full label is `DBCE F-Zero SNES Unified Preview
+1.8.3+g<sourceRevision12>`; filenames use the DBCE preview namespace.
+The package channel is candidate, with no new
 published release implied. Submodule pins and toolkit file hashes remain
 independent of the game version. Experimental actuator DLL overrides must be
 reviewed and repinned explicitly; they are not silently treated as v0.13.0.
@@ -80,3 +91,8 @@ three physical monitors, scanout, focus or seams. Side world sprites/effects
 remain incomplete; keep experimental availability in the product manifest.
 No current installed payload, monitor profile or saved tune is changed by this
 candidate work.
+
+Separate physical-monitor placement/focus and sampled CPU/GL backbuffer
+parity have since been checked for one recorded stock case/preset. This does
+not establish scanout, comfort, complete side content, every CRT preset or
+attended full-rig acceptance. Keep those product limitations explicit.

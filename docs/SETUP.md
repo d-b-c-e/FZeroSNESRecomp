@@ -1,4 +1,10 @@
-# F-Zero SNES setup
+# DBCE F-Zero SNES Unified Preview setup
+
+One product, one launcher: wheel/FFB/telemetry/replay/triples are internal
+features. Check the provided preview's manifest/source receipt against the
+[identity policy](PRODUCT-IDENTITY.md). Historical upstream 1.8.3 packages are
+not interchangeable with the unified preview. Existing executable/settings
+names stay unchanged; this document does not authorize installing over them.
 
 Run Setup.cmd, or FZeroSNESRecomp.exe --launcher, to open the existing launcher
 even when Skip launcher on boot was saved. Select your own F-Zero USA ROM.
@@ -13,14 +19,15 @@ even when Skip launcher on boot was saved. Select your own F-Zero USA ROM.
    ambiguous device disables output rather than choosing another wheel.
 3. Telemetry is optional: set [Telemetry] Enabled=1, Host=127.0.0.1, Port=8000
    in config.ini and choose Forza Horizon UDP with that port in the dashboard.
-   See README.md for which signals are measured and which are compatibility
+   See [README](../README.md) for which signals are measured and which are compatibility
    values. There is currently no launcher telemetry settings page.
 4. Triple-screen projection is experimental. Select Span for a Surround/span
    surface or Separate for three equal landscape displays in one aligned row.
    Enter visible panel width, eye distance/height, side angles and gap in the
    mod. The user's 70-degree rig is a test profile, not a universal default.
    CRT shaders apply per panel; start with Shader None when diagnosing pacing.
-   Side sprites/effects and physical separate-monitor validation are pending.
+   Side sprites/effects and complete physical-rig acceptance remain pending;
+   existing three-monitor evidence covers sampled placement/backbuffer parity.
 5. BS Deluxe is build-dependent. A stock-only candidate reports Unavailable.
    Keep separate stock/Deluxe saves and bring private imported data only to a
    separately reviewed local build. A saved toggle cannot add a missing module.
@@ -32,4 +39,4 @@ If a device or display layout changes, reopen the launcher and reselect the
 saved device/layout. Use a single screen and Shader None to isolate rendering
 problems. Retain all config files and saves when updating; open the launcher
 with --launcher instead of deleting settings. Recorded replay instructions and
-their software-only force boundaries are in PLAYTHROUGH_RECORDING.md.
+their software-only force boundaries are in [PLAYTHROUGH_RECORDING.md](PLAYTHROUGH_RECORDING.md).

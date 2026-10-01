@@ -30,7 +30,7 @@ DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
         "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md",
         "ADAPTIVE_RENDERER.md", "BS_DELUXE_EXPLORATION.md", "HD_MODE7.md",
         "HD_MODE7_PERFORMANCE.md", "PERFORMANCE_DIAGNOSTICS.md", "SAVE_STATES.md",
-        "WHEELFFB_EXPERIMENTAL_RECEIPT.md", "DISTRIBUTION-AUDIT.md")
+        "WHEELFFB_EXPERIMENTAL_RECEIPT.md", "DISTRIBUTION-AUDIT.md", "PRODUCT-IDENTITY.md")
 SOURCE_FILES = ("README.md", "LICENSE", "VERSION", "game-product.json",
                 "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt",
                 "tools/fzero_replay_adapter.py", "assets/README.md")
@@ -54,6 +54,41 @@ SYSTEM_DLLS |= {"d2d1.dll", "dwrite.dll"}
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def preview_identity(product, version, revision):
+    """Canonical metadata identity; numeric VERSION remains the upstream base."""
+    if not isinstance(product, dict):
+        raise ValueError('Product metadata must be an object')
+    required = {'id': 'fzero-snes-recomp',
+                'name': 'DBCE F-Zero SNES Unified Preview',
+                'upstream': 'https://github.com/mstan/FZeroSNESRecomp',
+                'fork': 'https://github.com/d-b-c-e/FZeroSNESRecomp',
+                'sourceBranch': 'codex/unified-product-20261001',
+                'entrypoint': 'FZeroSNESRecomp.exe', 'setupArgument': '--launcher'}
+    if any(product.get(k) != v for k, v in required.items()):
+        raise ValueError('Canonical unified product identity differs')
+    release = product.get('release', {})
+    if not isinstance(release, dict):
+        raise ValueError('Release metadata must be an object')
+    if release.get('artifactStem') != 'DBCE-FZeroSNES-unified-preview' or release.get('versionPolicy') != 'upstream-base-with-source-revision':
+        raise ValueError('Explicit fork preview version policy required')
+    if any(release.get(k) != v for k, v in {
+            'tool': 'tools/package_unified.py', 'channel': 'candidate',
+            'platform': 'windows-x64', 'distribution': 'stock-only-rom-free'}.items()) or release.get('preserveUserSettings') is not True or product.get('versionFile') != 'VERSION':
+        raise ValueError('Canonical preview release contract differs')
+    if product.get('settings') != ['config.ini', 'fzero-video.ini', 'keybinds.ini', 'rom.cfg']:
+        raise ValueError('Existing settings identity must be preserved')
+    if not isinstance(version, str) or not re.fullmatch(r'\d+\.\d+\.\d+', version) or product.get('upstreamBaseVersion') != version:
+        raise ValueError('Numeric VERSION must match declared upstream base')
+    if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('Exact source revision required for preview identity')
+    docs = {'product': 'docs/UNIFIED-PRODUCT.md', 'setup': 'docs/SETUP.md',
+            'identity': 'docs/PRODUCT-IDENTITY.md', 'distribution': 'docs/DISTRIBUTION-AUDIT.md'}
+    if product.get('documentation') != docs:
+        raise ValueError('Canonical documentation links differ')
+    return (f"{product['name']} {version}+g{revision[:12]}",
+            f"{release['artifactStem']}-{version}-g{revision[:12]}-windows-x64.zip")
 
 
 def relative(name):
@@ -211,9 +246,6 @@ def verify(path):
             if digest(archive.read(name)) != hash_value:
                 raise ValueError(f"Package hash mismatch: {name}")
         receipt = manifest["build"]
-        identity = f"DBCE F-Zero SNES Unified Preview {manifest['version']}+g{receipt['sourceRevision'][:12]}"
-        if manifest.get('previewIdentity') != identity:
-            raise ValueError('Explicit fork preview identity required')
         payload_names = receipt["files"]
         extras = set(SOURCE_FILES) | {"Setup.cmd"} | {"docs/" + n for n in DOCS}
         if set(expected) != set(payload_names) | extras:
@@ -221,6 +253,9 @@ def verify(path):
         if manifest.get("productId") != "fzero-snes-recomp" or manifest.get("channel") != "candidate" or manifest.get("distribution") != "stock-only-rom-free":
             raise ValueError("Wrong product/distribution identity")
         product = json.loads(archive.read("game-product.json"))
+        identity, _ = preview_identity(product, manifest['version'], receipt['sourceRevision'])
+        if manifest.get('previewIdentity') != identity:
+            raise ValueError('Explicit fork preview identity required')
         if product.get("id") != manifest["productId"] or archive.read("VERSION").decode().strip() != manifest["version"]:
             raise ValueError("Product version/identity differs from manifest")
         pin = archive.read("lib/toolkit/MANIFEST.txt").decode()
@@ -247,6 +282,7 @@ def package(payload, receipt, output, root=ROOT):
     version = (root / "VERSION").read_text().strip()
     if not re.fullmatch(r"\d+\.\d+\.\d+", version):
         raise ValueError("Invalid VERSION")
+    identity, archive_name = preview_identity(product, version, receipt['sourceRevision'])
     pin = (root / "lib/toolkit/MANIFEST.txt").read_text()
     match = re.search(r"(?mi)^([0-9a-f]{64})[ \t]+native/WheelFfb\.dll[ \t]*\r?$", pin)
     if not match:
@@ -275,7 +311,7 @@ def package(payload, receipt, output, root=ROOT):
     files["Setup.cmd"] = SETUP
     manifest = {"schema": "dbce.fzero-package", "schemaVersion": 1,
                 "productId": product["id"], "version": version, "channel": "candidate",
-                "previewIdentity": f"DBCE F-Zero SNES Unified Preview {version}+g{receipt['sourceRevision'][:12]}",
+                "previewIdentity": identity,
                 "distribution": "stock-only-rom-free", "build": receipt,
                 "wheelRuntimeSha256": wheel_hash,
                 "files": {name: digest(data) for name, data in sorted(files.items())}}
@@ -283,7 +319,7 @@ def package(payload, receipt, output, root=ROOT):
     data = zip_bytes(files)
     verify(io.BytesIO(data))
     output.mkdir(parents=True, exist_ok=False)
-    archive = output / f"DBCE-FZeroSNES-unified-preview-{version}-g{receipt['sourceRevision'][:12]}-windows-x64.zip"
+    archive = output / archive_name
     archive.write_bytes(data)
     archive.with_suffix(".zip.sha256").write_text(f"{digest(data)}  {archive.name}\n", encoding="ascii")
     verify(archive)

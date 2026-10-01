@@ -2,10 +2,13 @@
   "schema": "dbce.game-product",
   "schemaVersion": 1,
   "id": "fzero-snes-recomp",
-  "name": "FZeroSNESRecomp",
+  "name": "DBCE F-Zero SNES Unified Preview",
+  "upstreamBaseVersion": "1.8.3",
   "versionFile": "VERSION",
   "upstream": "https://github.com/mstan/FZeroSNESRecomp",
   "fork": "https://github.com/d-b-c-e/FZeroSNESRecomp",
+  "sourceBranch": "codex/unified-product-20261001",
+  "documentation": {"product": "docs/UNIFIED-PRODUCT.md", "setup": "docs/SETUP.md", "identity": "docs/PRODUCT-IDENTITY.md", "distribution": "docs/DISTRIBUTION-AUDIT.md"},
   "entrypoint": "FZeroSNESRecomp.exe",
   "setupArgument": "--launcher",
   "settings": ["config.ini", "fzero-video.ini", "keybinds.ini", "rom.cfg"],
@@ -14,9 +17,9 @@
     "ffb": {"availability": "opt-in", "setup": "Mods > Controls > Force feedback", "physicalAcceptance": "pending"},
     "telemetry": {"availability": "opt-in", "setup": "config.ini [Telemetry]", "protocol": "Forza Horizon 324-byte UDP"},
     "recordingReplay": {"availability": "experimental", "setup": "docs/PLAYTHROUGH_RECORDING.md", "runner": "FZeroSNESRecompHeadless.exe", "adapter": "tools/fzero_replay_adapter.py", "physicalOutput": false, "bsDeluxeReplay": "unsupported", "normalizedObservations": "optional externally pinned toolkit replay tools"},
-    "tripleScreen": {"availability": "experimental", "setup": "Mods > Triple-screen projection", "outputs": ["span", "separate-displays"], "limitations": ["side sprites/effects incomplete", "physical separate-display validation pending", "CRT pacing pending"]},
+    "tripleScreen": {"availability": "experimental", "setup": "Mods > Triple-screen projection", "outputs": ["span", "separate-displays"], "validation": "sampled physical placement and backbuffer parity for one stock replay/preset", "limitations": ["side sprites/effects incomplete", "scanout, comfort and complete physical-rig acceptance pending", "CRT presets and pacing require rig-specific acceptance"]},
     "bsDeluxe": {"availability": "build-dependent", "distribution": "excluded from unified candidate", "setup": "Mods > BS Deluxe"}
   },
-  "release": {"tool": "tools/package_unified.py", "channel": "candidate", "platform": "windows-x64", "distribution": "stock-only-rom-free", "preserveUserSettings": true},
+  "release": {"tool": "tools/package_unified.py", "channel": "candidate", "artifactStem": "DBCE-FZeroSNES-unified-preview", "versionPolicy": "upstream-base-with-source-revision", "platform": "windows-x64", "distribution": "stock-only-rom-free", "preserveUserSettings": true},
   "dependencies": {"wheelToolkitPin": "lib/toolkit/VERSION", "wheelToolkitFiles": "lib/toolkit/MANIFEST.txt", "nativeRuntime": "WheelFfb.dll", "submodules": ["snesrecomp", "recomp-ui"]}
 }

@@ -88,7 +88,9 @@ class PackageTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("Fixture source\n")
         (self.root / "VERSION").write_text("1.7.0\n")
-        (self.root / "game-product.json").write_text(json.dumps({"id": "fzero-snes-recomp"}))
+        product = json.loads((pack.ROOT / 'game-product.json').read_text())
+        product['upstreamBaseVersion'] = '1.7.0'
+        (self.root / "game-product.json").write_text(json.dumps(product))
         (self.root / "lib/toolkit/MANIFEST.txt").write_text(self.wheel_hash + "  native/WheelFfb.dll\n")
         for name in pack.DOCS:
             path = self.root / "docs" / name
@@ -111,6 +113,51 @@ class PackageTests(unittest.TestCase):
 
     def test_complete_runtime_and_dynamic_wheel(self):
         self.assertEqual(self.read(), self.files)
+
+    def test_canonical_preview_identity_and_rejected_legacy_or_mismatched_metadata(self):
+        product=json.loads((pack.ROOT/'game-product.json').read_text())
+        identity,archive=pack.preview_identity(product,'1.8.3','1'*40)
+        self.assertEqual(identity,'DBCE F-Zero SNES Unified Preview 1.8.3+g111111111111')
+        self.assertEqual(archive,'DBCE-FZeroSNES-unified-preview-1.8.3-g111111111111-windows-x64.zip')
+        for field,value in (('name','FZeroSNESRecomp'),('upstream','https://example.invalid'),
+                            ('upstreamBaseVersion','1.8.4'),('entrypoint','new.exe')):
+            changed=copy.deepcopy(product); changed[field]=value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                pack.preview_identity(changed,'1.8.3','1'*40)
+        changed=copy.deepcopy(product); changed['release']['artifactStem']='upstream-release'
+        with self.assertRaises(ValueError):pack.preview_identity(changed,'1.8.3','1'*40)
+        changed=copy.deepcopy(product); changed['documentation']['setup']='docs/missing.md'
+        with self.assertRaises(ValueError):pack.preview_identity(changed,'1.8.3','1'*40)
+        for field,value in (('channel','release'),('preserveUserSettings',False),('preserveUserSettings',1)):
+            changed=copy.deepcopy(product); changed['release'][field]=value
+            with self.subTest(field=field,value=value), self.assertRaises(ValueError):
+                pack.preview_identity(changed,'1.8.3','1'*40)
+        for version,revision in (('1.8.3-preview','1'*40),('1.8.3','short')):
+            with self.subTest(version=version,revision=revision), self.assertRaises(ValueError):
+                pack.preview_identity(product,version,revision)
+
+    def test_canonical_documentation_links_exist_and_settings_identity_preserved(self):
+        product=json.loads((pack.ROOT/'game-product.json').read_text())
+        for name in product['documentation'].values():
+            self.assertTrue((pack.ROOT/name).is_file(),name)
+            self.assertIn(Path(name).name,pack.DOCS)
+        self.assertEqual(product['id'],'fzero-snes-recomp')
+        self.assertEqual(product['settings'],['config.ini','fzero-video.ini','keybinds.ini','rom.cfg'])
+        self.assertTrue(product['release']['preserveUserSettings'])
+        self.assertEqual((pack.ROOT/'VERSION').read_text().strip(),product['upstreamBaseVersion'])
+
+    def test_rehashed_manifest_cannot_relabel_preview_as_upstream(self):
+        self.source()
+        original=pack.package(self.payload,self.receipt,self.base/'out',self.root)
+        with zipfile.ZipFile(original) as archive:
+            files={n:archive.read(n) for n in archive.namelist()}
+        product=json.loads(files['game-product.json']); product['name']='FZeroSNESRecomp'
+        files['game-product.json']=json.dumps(product).encode()
+        manifest=json.loads(files['manifest.json'])
+        manifest['files']['game-product.json']=pack.digest(files['game-product.json'])
+        files['manifest.json']=json.dumps(manifest).encode()
+        with self.assertRaisesRegex(ValueError,'Canonical unified product identity'):
+            pack.verify(io.BytesIO(pack.zip_bytes(files)))
 
     def test_missing_import(self):
         del self.receipt["files"]["SDL3.dll"]

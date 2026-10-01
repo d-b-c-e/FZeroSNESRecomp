@@ -11,6 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 class SourceArchiveTests(unittest.TestCase):
     def check_names(self,names):
         self.assertIn('docs/DISTRIBUTION-AUDIT.md',names)
+        self.assertIn('docs/PRODUCT-IDENTITY.md',names)
         self.assertIn('tools/stage_unified.py',names)
         self.assertNotIn('assets/img/boxart.tga',names)
         self.assertFalse(any(n.startswith(('docs/screenshots/','patches/')) for n in names))
