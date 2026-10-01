@@ -168,7 +168,7 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
   if (kind == 8 && index == TRIPLE_OPTIONS) {
     memset(out, 0, sizeof(*out));
     COPY(out->id, "TripleOutputMode"); COPY(out->label, "Display layout");
-    COPY(out->description, "Span uses one fullscreen Surround display. Separate opens one borderless window on each of three equal, horizontally aligned displays. CRT shaders are currently supported in span mode only.");
+    COPY(out->description, "Span uses one fullscreen Surround display. Separate opens one borderless window on each of three equal, horizontally aligned displays. The selected CRT shader applies independently to all three panels in either layout.");
     out->type = RECOMP_MOD_OPTION_CHOICE; out->choice_count = 2;
     COPY(out->value, video->triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE ? "Separate" : "Span");
     COPY(out->default_value, "Span");

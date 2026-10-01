@@ -160,12 +160,17 @@ If the desktop layout changes mid-race, the session closes rather than leaving
 windows on the wrong monitors. Save-state, rewind, and menu overlays remain
 in the center window.
 
-Separate-display mode currently requires **Shader=None**. Per-panel CRT is
-supported in span mode, but the SDL side windows do not yet have separate GL
-shader contexts. The three-window path was visually checked in a diagnostic
+Separate-display mode supports **Shader=None** or the selected CRT preset.
+Each side window owns its own OpenGL shader context and swaps without a
+separate vsync wait; the center window owns presentation pacing. The
+three-window path was visually checked in a diagnostic
 split of one 7680×1440 Surround desktop using the explicit
 `FZERO_TRIPLE_SPLIT_SPAN_TEST=1` environment variable. This diagnostic mode is
 not enabled by the launcher and does not change Windows monitor settings.
+CRT Soft was visually checked on all three diagnostic windows, and the private
+11,364-frame recorded race completed at a 60 FPS target with 244 missed
+presentations. An earlier unfiltered separate-window run missed 135, but these
+were separate desktop runs, not a controlled A/B performance benchmark.
 Physical three-display placement, focus/input, and FFB still need an attended
 rig test after switching out of Surround. Side sprites/effects and exact
 presentation synchronization remain incomplete.
