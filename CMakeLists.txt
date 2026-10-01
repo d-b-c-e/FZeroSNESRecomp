@@ -114,6 +114,10 @@ if(BUILD_TESTING)
         target_compile_options(fzero_renderer_tests PRIVATE -Wall -Wextra -Werror)
     endif()
     add_test(NAME fzero_renderer COMMAND fzero_renderer_tests)
+    add_executable(fzero_ground_colour_tests tests/test_ground_colour.c)
+    target_include_directories(fzero_ground_colour_tests PRIVATE ${SNESRECOMP_RUNNER_INCLUDE_DIRS})
+    target_link_libraries(fzero_ground_colour_tests PRIVATE fzero_video fzero_triple_geometry)
+    add_test(NAME fzero_ground_colour COMMAND fzero_ground_colour_tests)
 endif()
 
 # Release version stamp defaults to VERSION; override explicitly for local builds.
