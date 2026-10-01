@@ -985,16 +985,22 @@ typedef struct FzeroPresenter {
   uint32_t *triple_pixels;
   uint64_t triple_uploaded_version;
   bool triple_active;
+  FzeroTripleRig triple_rig;
 } FzeroPresenter;
 
-/* 512x288 scales exactly 5x onto each 2560x1440 panel. The prior 640x360
- * CPU projection took ~11 ms/present on the rig, beyond a 60 Hz frame budget
- * once simulation and center composition were included. */
-enum { kTriplePanelWidth = 512, kTriplePanelHeight = 288,
-       kTripleSpanWidth = 7680, kTripleSpanHeight = 1440 };
-static const FzeroTripleRig kTripleRig = {
-    708.4166, 398.4843, 660.0, 0.0, 70.0, 70.0, 8.0,
-    kTriplePanelWidth, kTriplePanelHeight};
+/* A fixed internal side resolution bounds CPU projection cost independently
+ * of the physical display resolution. The output stretch is physical-panel
+ * correct because rays use normalized panel coordinates and millimetres. */
+enum { kTriplePanelWidth = 512, kTriplePanelHeight = 288 };
+static FzeroTripleRig triple_rig_for_span(const FzeroVideoSettings *video,
+                                         int span_width, int span_height) {
+  double panel_width = (double)video->triple_panel_width_mm;
+  double physical_height = panel_width * span_height / (span_width / 3);
+  return (FzeroTripleRig){panel_width, physical_height,
+      (double)video->triple_eye_distance_mm, (double)video->triple_eye_height_mm,
+      (double)video->triple_left_yaw_deg, (double)video->triple_right_yaw_deg,
+      (double)video->triple_bezel_gap_mm, kTriplePanelWidth, kTriplePanelHeight};
+}
 
 static SDL_Texture *g_overlay_texture;
 static int g_overlay_texture_w, g_overlay_texture_h;
@@ -1111,7 +1117,7 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
     diagnostic_start = FzeroDiagnosticsBegin();
     triple_ready = FzeroRendererDrawTripleSides(p->triple_pixels,
         (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
-        &kTripleRig, p->logical_width);
+        &p->triple_rig, p->logical_width);
     FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_PROJECTION, diagnostic_start);
     /* At high host refresh rates the same source frame is presented several
      * times. Upload the immutable side panels only when projection rewrites
@@ -1794,10 +1800,10 @@ int main(int argc, char **argv) {
   const Uint32 kHighDpiFlag = SDL_WINDOW_ALLOW_HIGHDPI;
 #endif
   bool use_gl_renderer = launcher_settings.shader_path[0] != 0;
-  bool triple_requested = g_video.triple_screen && launcher_settings.fullscreen &&
-                          !use_gl_renderer;
+  bool triple_requested = g_video.triple_screen && FzeroTripleValidLayout(&g_video) &&
+                          launcher_settings.fullscreen && !use_gl_renderer;
   if (g_video.triple_screen && !triple_requested)
-    fprintf(stderr, "[fzero-triple] experimental mode needs fullscreen and Shader=None; using stock view\n");
+    fprintf(stderr, "[fzero-triple] experimental mode needs a valid rig, fullscreen and Shader=None; using stock view\n");
   if (use_gl_renderer) fzero_gl_prepare_window();
   /* Window scale is a real row on the Settings page, so it has to size the
    * window: it was drawn, saved and then ignored in favour of a hardcoded
@@ -1872,10 +1878,10 @@ int main(int argc, char **argv) {
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
   else
     snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-  bool triple_active = triple_requested && drawable_width == kTripleSpanWidth &&
-                       drawable_height == kTripleSpanHeight;
+  bool triple_active = triple_requested && FzeroTripleSpanSupported(drawable_width,
+                                                                drawable_height);
   if (triple_requested && !triple_active)
-    fprintf(stderr, "[fzero-triple] expected 7680x1440 Surround; got %dx%d, using stock view\n",
+    fprintf(stderr, "[fzero-triple] expected three equal 1.2:1–2.5:1 panels in one fullscreen span; got %dx%d, using stock view\n",
             drawable_width, drawable_height);
   FzeroViewport viewport = FzeroCalculateViewport(&g_video,
       triple_active ? drawable_width / 3 : drawable_width, drawable_height);
@@ -1996,6 +2002,8 @@ int main(int argc, char **argv) {
   presenter.texture = texture;
   presenter.gl = use_gl_renderer ? &gl_renderer : NULL;
   presenter.pixels = pixels;
+  if (triple_active)
+    presenter.triple_rig = triple_rig_for_span(&g_video, drawable_width, drawable_height);
   if (triple_requested) {
     presenter.triple_pixels = calloc((size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
                                      sizeof(*presenter.triple_pixels));
@@ -2206,8 +2214,10 @@ int main(int argc, char **argv) {
         snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
       else
         snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-      triple_active = triple_requested && drawable_width == kTripleSpanWidth &&
-                      drawable_height == kTripleSpanHeight;
+      triple_active = triple_requested && FzeroTripleSpanSupported(drawable_width,
+                                                               drawable_height);
+      if (triple_active)
+        presenter.triple_rig = triple_rig_for_span(&g_video, drawable_width, drawable_height);
       FzeroViewport next = FzeroCalculateViewport(&g_video,
           triple_active ? drawable_width / 3 : drawable_width, drawable_height);
       if (next.width != viewport.width || next.aspect != viewport.aspect) {

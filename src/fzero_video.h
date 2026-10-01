@@ -26,6 +26,11 @@ typedef struct FzeroVideoSettings {
   unsigned hd_scale; /* Integer 2..10; retained while disabled. */
   bool diagnostics; /* Opt-in local performance reports; off by default. */
   bool triple_screen; /* Experimental Surround ground projection. */
+  unsigned triple_panel_width_mm; /* Visible chord width of one panel. */
+  unsigned triple_eye_distance_mm; /* Eye to center-panel plane. */
+  unsigned triple_left_yaw_deg, triple_right_yaw_deg;
+  unsigned triple_bezel_gap_mm; /* Physical gap at each panel hinge. */
+  unsigned triple_eye_height_mm; /* Eye above panel center; zero at center. */
   bool reduce_crash_flash; /* Hold the prior presentation over brief white impact frames. */
 } FzeroVideoSettings;
 
@@ -44,6 +49,8 @@ bool FzeroParseAspect(const char *text, FzeroAspect *aspect);
 bool FzeroValidFps(unsigned fps);
 bool FzeroValidHdScale(unsigned scale);
 bool FzeroParseHdScale(const char *text, unsigned *scale);
+bool FzeroTripleValidLayout(const FzeroVideoSettings *settings);
+bool FzeroTripleSpanSupported(int width, int height);
 double FzeroPresentationHz(unsigned fps, double refresh);
 FzeroViewport FzeroCalculateViewport(const FzeroVideoSettings *settings,
                                      int drawable_width, int drawable_height);

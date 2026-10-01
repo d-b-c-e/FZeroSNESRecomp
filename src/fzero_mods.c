@@ -22,7 +22,7 @@ static const char *const descriptions[] = {
   "Record hardware, active video settings and frame timings in the diagnostics folder beside the game (beside the AppImage on Linux). Off by default. Enable, play through a slowdown, then attach the newest performance JSONL file to your report. Logs stay on your machine; no ROM or save data is included.",
   "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. Button indices are zero-based SDL joystick buttons.",
   "Speed-dependent centering, damping, road texture and collision impulses on the chosen wheel.",
-  "Experimental three-panel Mode 7 ground on a 7680x1440 Surround display. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen and no shader.",
+  "Experimental three-panel Mode 7 view on an equal-panel Surround/span display. Set your physical rig measurements below. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen and no shader.",
   "Hold the previous image through the brief near-white frames that follow hard impacts. Game simulation and force feedback continue; only the flash is hidden."
 };
 typedef struct WheelOption { const char *key, *label; int fallback, min, max; } WheelOption;
@@ -52,6 +52,27 @@ static const WheelOption wheel_options[] = {
   {"ButtonRewind", "Open rewind", -1, -1, 127}
 };
 #define WHEEL_OPTIONS ((int)(sizeof(wheel_options) / sizeof(wheel_options[0])))
+typedef struct TripleOption { const char *key, *label; unsigned fallback, min, max; } TripleOption;
+static const TripleOption triple_options[] = {
+  {"TriplePanelWidthMm", "Visible width of each screen (mm)", 708, 200, 3000},
+  {"TripleEyeDistanceMm", "Eye distance from center screen (mm)", 660, 200, 3000},
+  {"TripleLeftAngleDeg", "Left screen angle (degrees)", 70, 0, 89},
+  {"TripleRightAngleDeg", "Right screen angle (degrees)", 70, 0, 89},
+  {"TripleBezelGapMm", "Bezel gap at each join (mm)", 8, 0, 100},
+  {"TripleEyeHeightMm", "Eye above screen center (mm)", 0, 0, 1000}
+};
+#define TRIPLE_OPTIONS ((int)(sizeof(triple_options) / sizeof(triple_options[0])))
+static unsigned *triple_value(int index) {
+  switch (index) {
+  case 0: return &video->triple_panel_width_mm;
+  case 1: return &video->triple_eye_distance_mm;
+  case 2: return &video->triple_left_yaw_deg;
+  case 3: return &video->triple_right_yaw_deg;
+  case 4: return &video->triple_bezel_gap_mm;
+  case 5: return &video->triple_eye_height_mm;
+  default: return NULL;
+  }
+}
 static int wheel_values[WHEEL_OPTIONS], wheel_enabled, ffb_enabled, ffb_strength;
 static int ffb_impact_strength;
 static char ffb_device[256], ffb_impact_type[32], wheel_section[64];
@@ -97,14 +118,24 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
         "Try 2x and 60 FPS if performance drops.", descriptions[index], video->hd_scale);
     COPY(out->status, "Warning: high CPU and memory use above 4x");
   }
-  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 2 || index == 4 || index == 7 || index == 8 ? 0 : 1;
+  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 7 ? TRIPLE_OPTIONS : index == 2 || index == 4 || index == 8 ? 0 : 1;
   return 1;
 }
 static int option_get(void *ctx, const char *package, const char *feature, int index,
                       RecompLauncherCModOption *out) {
   (void)ctx;
   int kind = identity(package, feature);
-  if (!kind || kind == 3 || kind == 5 || kind == 8 || kind == 9 || !out) return 0;
+  if (!kind || kind == 3 || kind == 5 || kind == 9 || !out) return 0;
+  if (kind == 8 && index >= 0 && index < TRIPLE_OPTIONS) {
+    const TripleOption *spec = &triple_options[index];
+    memset(out, 0, sizeof(*out));
+    COPY(out->id, spec->key); COPY(out->label, spec->label);
+    out->type = RECOMP_MOD_OPTION_INTEGER; out->step = 1;
+    out->min_value = spec->min; out->max_value = spec->max;
+    snprintf(out->value, sizeof(out->value), "%u", *triple_value(index));
+    snprintf(out->default_value, sizeof(out->default_value), "%u", spec->fallback);
+    return 1;
+  }
   if (kind == 6 && index >= 0 && index < WHEEL_OPTIONS) {
     const WheelOption *spec = &wheel_options[index];
     memset(out, 0, sizeof(*out));
@@ -226,6 +257,19 @@ static int set_option(void *ctx, const char *package, const char *feature,
                       const char *option, const char *value) {
   (void)ctx;
   if (!identity(package, feature) || !option || !value) return 0;
+  if (identity(package, feature) == 8) {
+    for (int i = 0; i < TRIPLE_OPTIONS; ++i) {
+      const TripleOption *spec = &triple_options[i];
+      if (strcmp(option, spec->key)) continue;
+      char *end;
+      unsigned long parsed = strtoul(value, &end, 10);
+      if (!value[0] || *end || value[0] < '0' || value[0] > '9' ||
+          parsed < spec->min || parsed > spec->max) return 0;
+      *triple_value(i) = (unsigned)parsed;
+      return 1;
+    }
+    return 0;
+  }
   if (identity(package, feature) == 6 || identity(package, feature) == 7) {
     if (identity(package, feature) == 7 && !strcmp(option, "Device")) {
       if (strlen(value) >= sizeof(ffb_device)) return 0;

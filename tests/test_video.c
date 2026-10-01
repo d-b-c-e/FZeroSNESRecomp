@@ -18,6 +18,15 @@ static void viewport_tests(void) {
         settings.fps_enabled && settings.bs_deluxe);
   CHECK(!settings.hd_mode7 && settings.hd_scale == 2 && !settings.diagnostics &&
         !settings.triple_screen);
+  CHECK(FzeroTripleValidLayout(&settings) && settings.triple_panel_width_mm == 708 &&
+        settings.triple_eye_distance_mm == 660 && settings.triple_left_yaw_deg == 70 &&
+        settings.triple_right_yaw_deg == 70 && settings.triple_bezel_gap_mm == 8);
+  CHECK(FzeroTripleSpanSupported(7680, 1440));
+  CHECK(FzeroTripleSpanSupported(5760, 1080));
+  CHECK(FzeroTripleSpanSupported(3840, 720));
+  CHECK(!FzeroTripleSpanSupported(1920, 1080));
+  CHECK(!FzeroTripleSpanSupported(5120, 1440));
+  CHECK(!FzeroTripleSpanSupported(7681, 1440));
   FzeroVideoStock(&settings);
   CHECK(!settings.enhanced && settings.aspect == FZERO_ASPECT_STOCK && !settings.fps_enabled && !settings.bs_deluxe);
   FzeroViewport v = FzeroCalculateViewport(&settings, 5120, 1440);
@@ -97,11 +106,21 @@ static void config_tests(void) {
   FzeroVideoDefaults(&a);
   a.enhanced = true; a.aspect = FZERO_ASPECT_FIT; a.fps = 165;
   a.triple_screen = true;
+  a.triple_panel_width_mm = 620;
+  a.triple_eye_distance_mm = 780;
+  a.triple_left_yaw_deg = 55;
+  a.triple_right_yaw_deg = 65;
+  a.triple_bezel_gap_mm = 12;
+  a.triple_eye_height_mm = 45;
   a.reduce_crash_flash = true;
   CHECK(FzeroVideoSave(&a, "test-video.ini"));
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165 &&
         b.triple_screen && b.reduce_crash_flash);
+  CHECK(FzeroTripleValidLayout(&b) && b.triple_panel_width_mm == 620 &&
+        b.triple_eye_distance_mm == 780 && b.triple_left_yaw_deg == 55 &&
+        b.triple_right_yaw_deg == 65 && b.triple_bezel_gap_mm == 12 &&
+        b.triple_eye_height_mm == 45);
   a.fps = 0; a.aspect = FZERO_ASPECT_21_9;
   CHECK(FzeroVideoSave(&a, "test-video.ini")); /* atomic replacement */
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
@@ -127,6 +146,18 @@ static void config_tests(void) {
   CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 0); /* invalid fields fall back to shipped defaults */
   CHECK(!b.hd_mode7 && b.hd_scale == 2);
+  const char *invalid_triple[] = {
+      "TriplePanelWidthMm=0", "TriplePanelWidthMm=3001",
+      "TripleEyeDistanceMm=-1", "TripleEyeDistanceMm=3001",
+      "TripleLeftAngleDeg=90", "TripleRightAngleDeg=99999999999999999999",
+      "TripleBezelGapMm=101", "TripleEyeHeightMm=1001"};
+  for (unsigned i = 0; i < sizeof(invalid_triple) / sizeof(*invalid_triple); ++i) {
+    f = fopen("test-video.ini", "w"); CHECK(f);
+    fprintf(f, "TripleScreen=1\n%s\n", invalid_triple[i]); fclose(f);
+    CHECK(!FzeroVideoLoad(&b, "test-video.ini"));
+    CHECK(b.triple_screen && FzeroTripleValidLayout(&b));
+    CHECK(b.triple_panel_width_mm == 708 && b.triple_eye_distance_mm == 660);
+  }
   /* Only absent or invalid fields take a default: a setting the file turned
    * off stays off however corrupt its neighbours are. */
   f = fopen("test-video.ini", "w");
