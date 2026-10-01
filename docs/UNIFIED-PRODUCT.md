@@ -4,7 +4,8 @@ F-Zero SNES and optional BS Deluxe use one native host, existing launcher,
 settings set and version. Wheel, FFB, telemetry, recording/replay and experimental
 triples are internal features. F-Zero X is a different product. The source
 folders in E:/Source are attached development worktrees, not separate products
-to merge. Retain the fork name, upstream history and atomic feature commits.
+to merge. Adopt `dbce-mods-fzero-snes` while retaining the fork relationship,
+upstream attribution/history and atomic feature commits.
 
 Canonical metadata is [game-product.json](../game-product.json). The
 [identity policy](PRODUCT-IDENTITY.md) defines the numeric upstream base,
