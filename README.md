@@ -334,12 +334,18 @@ Send these files from the game folder:
 
 ## Build From Source
 
-Clone with submodules:
+Clone this fork with submodules (the upstream project remains
+[mstan/FZeroSNESRecomp](https://github.com/mstan/FZeroSNESRecomp)):
 
 ```bash
-git clone --recurse-submodules git@github.com:mstan/FZeroSNESRecomp.git
+git clone --recurse-submodules https://github.com/d-b-c-e/FZeroSNESRecomp.git
 cd FZeroSNESRecomp
 ```
+
+For a unified candidate, use its reviewed source commit/branch and initialize
+that revision's submodule pins before generating or building. The fork's default
+branch is not evidence that a candidate has been promoted. The package manifest
+records the exact source and dependency identities.
 
 Put your own USA ROM at `fzero.sfc`, then generate and build:
 
