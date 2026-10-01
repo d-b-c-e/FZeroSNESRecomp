@@ -1,4 +1,5 @@
 #include "fzero_mods.h"
+#include "fzero_analog.h"
 #include "fzero_hotkeys.h"
 #include "raw_hat_binding.h"
 #include <stdio.h>
@@ -20,7 +21,7 @@ static const char *const descriptions[] = {
   "Full BS Deluxe v1.1: original and BS courses, eight vehicles, alternate cups and Practice ghosts. Uses separate saves.",
   "Render the track at higher resolution with smoother scanline geometry. Works independently of widescreen and presentation FPS.",
   "Record hardware, active video settings and frame timings in the diagnostics folder beside the game (beside the AppImage on Linux). Off by default. Enable, play through a slowdown, then attach the newest performance JSONL file to your report. Logs stay on your machine; no ROM or save data is included.",
-  "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. Button indices are zero-based SDL joystick buttons.",
+  "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. The live steering preview shows how often the digital SNES direction is held at your current wheel position. Button indices are zero-based SDL joystick buttons.",
   "Speed-dependent centering, damping, road texture and collision impulses on the chosen wheel.",
   "Experimental three-panel Mode 7 view on an equal-panel Surround/span display. Set your physical rig measurements below. CRT shaders are applied per panel. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen.",
   "Hold the previous image through the brief near-white frames that follow hard impacts. Game simulation and force feedback continue; only the flash is hidden."
@@ -80,6 +81,34 @@ static char ffb_devices[16][256];
 static int ffb_device_count;
 static const char *wheel_config;
 static void (*wheel_write)(const char *, const char *, const char *, const char *);
+static int (*wheel_read_axis)(const char *, int, int *);
+
+static void wheel_preview_status(RecompLauncherCModFeature *out) {
+  int axis = 0;
+  if (!wheel_read_axis || !wheel_section[0] ||
+      !wheel_read_axis(wheel_section + strlen("Controller."), wheel_values[3],
+                       &axis)) {
+    COPY(out->status, "Steering preview: selected wheel or axis unavailable");
+    return;
+  }
+  int deadzone = (wheel_values[0] * 32767 + 50) / 100;
+  double duty = FzeroAnalogSteeringDuty(axis, deadzone, wheel_values[1],
+                                        wheel_values[2]);
+  int percent = (int)(duty * 100.0 + 0.5);
+  int raw_percent = axis * 100 / (axis < 0 ? 32768 : 32767);
+  int fill = (int)(duty * 10.0 + 0.5);
+  char bar[22];
+  for (int i = 0; i < 10; ++i)
+    bar[i] = axis < 0 && i >= 10 - fill ? '=' : '.';
+  bar[10] = '|';
+  for (int i = 0; i < 10; ++i)
+    bar[11 + i] = axis > 0 && i < fill ? '=' : '.';
+  bar[21] = 0;
+  snprintf(out->status, sizeof(out->status),
+           "Steering preview: axis %d %+d%% -> %s %d%% of SNES frames\n[%s]  L / center / R",
+           wheel_values[3], raw_percent,
+           percent ? axis < 0 ? "LEFT" : "RIGHT" : "CENTER", percent, bar);
+}
 static int count(void *ctx) { (void)ctx; return wheel_config ? 9 : 7; }
 static int identity(const char *package, const char *feature) {
   if (package && feature) for (int i = 0; i < 9; ++i) {
@@ -111,6 +140,7 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
   COPY(out->description, descriptions[index]);
   out->enabled = index == 8 ? video->reduce_crash_flash : index == 7 ? video->triple_screen : index == 6 ? ffb_enabled : index == 5 ? wheel_enabled : index == 4 ? video->diagnostics : index == 3 ? video->hd_mode7 : index == 2 ? video->bs_deluxe : index ? video->fps_enabled : video->enhanced;
   COPY(out->status, index == 7 && out->enabled ? "Experimental: side sprites missing" : out->enabled ? "Enabled" : "Disabled");
+  if (index == 5) wheel_preview_status(out);
   if (index == 3 && video->hd_scale > 4) {
     snprintf(out->description, sizeof(out->description),
         "%s\n\nWarning: %ux is extremely demanding and can cause severe slowdown, "
@@ -353,6 +383,7 @@ const RecompLauncherCModProvider *FzeroModsProvider(FzeroVideoSettings *settings
   static RecompLauncherCModProvider provider;
   video = settings; config_path = path; error_text[0] = 0;
   wheel_config = NULL; wheel_write = NULL;
+  wheel_read_axis = NULL;
   ffb_device_count = 0;
   memset(&provider, 0, sizeof(provider));
   provider.package_count = count; provider.package_get = package_get;
@@ -367,10 +398,12 @@ const RecompLauncherCModProvider *FzeroModsProviderWheel(
     FzeroVideoSettings *settings, const char *video_path,
     const char *control_path, const char *wheel_guid,
     void (*write_ini)(const char *, const char *, const char *, const char *),
-    int (*list_ffb_devices)(char names[][256], int max_devices)) {
+    int (*list_ffb_devices)(char names[][256], int max_devices),
+    int (*read_wheel_axis)(const char *guid, int axis, int *value)) {
   const RecompLauncherCModProvider *provider = FzeroModsProvider(settings, video_path);
   if (!control_path || !wheel_guid || !wheel_guid[0]) return provider;
   wheel_config = control_path; wheel_write = write_ini;
+  wheel_read_axis = read_wheel_axis;
   if (list_ffb_devices) {
     ffb_device_count = list_ffb_devices(ffb_devices, 16);
     if (ffb_device_count < 0) ffb_device_count = 0;

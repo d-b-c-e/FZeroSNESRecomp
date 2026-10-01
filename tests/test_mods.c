@@ -5,6 +5,13 @@
 #define CHECK(e) do { if (!(e)) { fprintf(stderr, "%d: %s\n", __LINE__, #e); exit(1); } } while (0)
 static int wrote_wheel_range, wrote_rewind, wrote_ffb, wrote_impact, wrote_brake_invert;
 static char wrote_device[256], wrote_impact_type[32];
+static int live_axis_value;
+static int read_live_axis(const char *guid, int axis, int *value) {
+  CHECK(!strcmp(guid, "test-guid"));
+  if (axis != 0) return 0;
+  *value = live_axis_value;
+  return 1;
+}
 static int list_ffb(char names[][256], int max_devices) {
   CHECK(max_devices >= 2);
   strcpy(names[0], "MOZA R12 Base");
@@ -109,10 +116,24 @@ int main(void) {
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 0));
   CHECK(!s.bs_deluxe && s.enhanced && !s.fps_enabled);
   p = FzeroModsProviderWheel(&s, "test-mods.ini", "wheel-options.ini",
-                             "test-guid", note_ini, list_ffb);
+                             "test-guid", note_ini, list_ffb, read_live_axis);
   CHECK(p->feature_count(NULL) == 9);
   RecompLauncherCModFeature wheel, ffb, triple_with_wheel;
   CHECK(p->feature_get(NULL, 5, &wheel) && wheel.option_count == 23);
+  live_axis_value = 8192;
+  CHECK(p->feature_get(NULL, 5, &wheel));
+  CHECK(strstr(wheel.status, "RIGHT 50% of SNES frames") &&
+        strstr(wheel.status, "axis 0 +25%"));
+  CHECK(p->feature_set_option(NULL, wheel.package_id, wheel.id,
+                              "SteeringRangePercent", "50"));
+  CHECK(p->feature_get(NULL, 5, &wheel) &&
+        strstr(wheel.status, "RIGHT 71% of SNES frames"));
+  live_axis_value = -8192;
+  CHECK(p->feature_get(NULL, 5, &wheel) &&
+        strstr(wheel.status, "LEFT 71% of SNES frames"));
+  live_axis_value = 0;
+  CHECK(p->feature_get(NULL, 5, &wheel) &&
+        strstr(wheel.status, "CENTER 0% of SNES frames"));
   CHECK(p->feature_get(NULL, 6, &ffb) && ffb.option_count == 4);
   CHECK(p->feature_get(NULL, 7, &triple_with_wheel) &&
         !strcmp(triple_with_wheel.package_id, triple.package_id) &&

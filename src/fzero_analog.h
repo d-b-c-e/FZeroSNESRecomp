@@ -19,6 +19,12 @@ typedef struct FzeroAnalogSteering {
 
 void FzeroAnalogSteeringReset(FzeroAnalogSteering *state);
 
+/* Fraction of simulation frames that hold a digital steering direction for
+ * this wheel position. The launcher preview and the in-game pulse modulator
+ * share this exact response curve. Returns 0..1; axis sign gives direction. */
+double FzeroAnalogSteeringDuty(int axis, int deadzone, int range_percent,
+                              int response_percent);
+
 /* axis is SDL's signed -32768..32767 range; deadzone uses the same units.
  * Returns SNES joypad bit 6 (Left), bit 7 (Right), or zero. */
 uint32_t FzeroAnalogSteeringRead(FzeroAnalogSteering *state, int axis,

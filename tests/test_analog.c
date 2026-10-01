@@ -19,6 +19,12 @@ static int count_pulses(FzeroAnalogSteering *state, int axis, int deadzone,
 int main(void) {
   FzeroAnalogSteering state = {0};
 
+  CHECK(FzeroAnalogSteeringDuty(0, 0, 100, 50) == 0.0);
+  CHECK(FzeroAnalogSteeringDuty(32767, 0, 100, 50) == 1.0);
+  CHECK(FzeroAnalogSteeringDuty(-32768, 0, 100, 50) == 1.0);
+  double preview = FzeroAnalogSteeringDuty(8192, 0, 50, 50);
+  CHECK(preview > 0.70 && preview < 0.72);
+
   CHECK(count_pulses(&state, 32767, 0, 120, 0x80) == 120);
   FzeroAnalogSteeringReset(&state);
   CHECK(count_pulses(&state, -32768, 0, 120, 0x40) == 120);

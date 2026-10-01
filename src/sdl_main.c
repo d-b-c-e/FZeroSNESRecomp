@@ -574,6 +574,64 @@ static void save_launcher_settings(const RecompLauncherCSettings *settings) {
   launcher_ini_kv_write(g_config_path, "Rewind", "Interval", number);
 }
 
+static SDL_Joystick *s_launcher_steering_stick;
+static char s_launcher_steering_guid[40];
+
+static void launcher_steering_probe_close(void) {
+  if (s_launcher_steering_stick) SDL_JoystickClose(s_launcher_steering_stick);
+  s_launcher_steering_stick = NULL;
+  s_launcher_steering_guid[0] = 0;
+}
+
+static int launcher_steering_axis(const char *guid, int axis, int *value) {
+  if (!guid || !guid[0] || !value || axis < 0) return 0;
+#if SNESRECOMP_SDL3
+  bool attached = s_launcher_steering_stick && SDL_JoystickConnected(s_launcher_steering_stick);
+#else
+  bool attached = s_launcher_steering_stick && SDL_JoystickGetAttached(s_launcher_steering_stick);
+#endif
+  if (s_launcher_steering_stick &&
+      (!attached || strcmp(guid, s_launcher_steering_guid)))
+    launcher_steering_probe_close();
+  if (!s_launcher_steering_stick) {
+#if SNESRECOMP_SDL3
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    for (int i = 0; ids && i < count; ++i) {
+      char candidate[40];
+      SDL_GUIDToString(SDL_GetJoystickGUIDForID(ids[i]), candidate,
+                       sizeof(candidate));
+      if (strcmp(candidate, guid)) continue;
+      s_launcher_steering_stick = SDL_OpenJoystick(ids[i]);
+      break;
+    }
+    SDL_free(ids);
+#else
+    for (int i = 0; i < SDL_NumJoysticks(); ++i) {
+      char candidate[40];
+      SDL_JoystickGetGUIDString(SDL_JoystickGetDeviceGUID(i), candidate,
+                                sizeof(candidate));
+      if (strcmp(candidate, guid)) continue;
+      s_launcher_steering_stick = SDL_JoystickOpen(i);
+      break;
+    }
+#endif
+    if (!s_launcher_steering_stick) return 0;
+    snprintf(s_launcher_steering_guid, sizeof(s_launcher_steering_guid),
+             "%s", guid);
+  }
+#if SNESRECOMP_SDL3
+  SDL_UpdateJoysticks();
+  if (axis >= SDL_GetNumJoystickAxes(s_launcher_steering_stick)) return 0;
+  *value = SDL_GetJoystickAxis(s_launcher_steering_stick, axis);
+#else
+  SDL_JoystickUpdate();
+  if (axis >= SDL_JoystickNumAxes(s_launcher_steering_stick)) return 0;
+  *value = SDL_JoystickGetAxis(s_launcher_steering_stick, axis);
+#endif
+  return 1;
+}
+
 static int resolve_rom(const char *executable, const char *explicit_rom,
                        bool force_launcher, char *path, size_t path_size,
                        RecompLauncherCSettings *settings) {
@@ -631,7 +689,8 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   game.msu1_note = "Select a music folder with PCM tracks and the matching Conn/Cubear v11 patch: f-zero_msu1_stock.ips for stock F-Zero, f-zero_msu1.ips for BS Deluxe.";
   game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
                                     wheel_guid,
-                                    launcher_ini_kv_write, FzeroFfbListDevices);
+                                    launcher_ini_kv_write, FzeroFfbListDevices,
+                                    launcher_steering_axis);
   game.rom_cache_path = "rom.cfg";
   /* Draws the Controls page's SaveStateMenu and Rewind rows, and the
    * Settings page's rewind enable / depth / interval controls. The hotkey
@@ -682,6 +741,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
       recomp_launcher_run_window("F-Zero \xE2\x80\x94 Launcher", settings,
                                  &game, assets_dir, initial_rom, path,
                                  path_size);
+  launcher_steering_probe_close();
   if (!settings->player_gamepad_guid[0][0] && wheel_guid[0])
     snprintf(settings->player_gamepad_guid[0],
              sizeof(settings->player_gamepad_guid[0]), "%s", wheel_guid);

@@ -183,6 +183,11 @@ For a first wheel test, try **Center dead zone 0%**, **Travel to full steering
 100%**, and **Response curve 50%**. The latter two are the defaults for raw
 wheels, making center steering stronger while preserving full travel and
 tapering sensitivity near the outside; tune them to taste in the launcher.
+The **Steering preview** above those controls updates as you turn the selected
+wheel and change these values. It shows the raw axis position and the share of
+SNES simulation frames that will hold Left or Right; the bar is a preview of
+the digital pulse density, not a true analog steering angle. The existing
+**Live wheel input** section below the bindings still shows raw axes/buttons.
 The **FFB device name** must uniquely match
 the DirectInput wheel reported by the toolkit log. Force feedback remains
 opt-in and should be tested with modest strength first.
