@@ -42,11 +42,19 @@ missing runtime dependencies, stale hashes and existing outputs. It runs no
 payload executable and never scans/copies a whole build folder.
 
 ```powershell
+cmake -S . -B build-stock -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DFZERO_DELUXE_GEN_DIR= -DFZERO_DELUXE_DATA_FILE=
+cmake --build build-stock
 python tools/stage_unified.py --build <fresh-stock-only-build> --output <new-stage-directory>
 python tools/package_unified.py --payload <stock-only-stage> --receipt <build-receipt.json> --output <new-output-directory>
 python tools/package_unified.py --verify <candidate.zip>
 python -m unittest discover -s tests -p test_unified_package.py
 ```
+
+Initialize the exact submodule pins and generate your own stock module first,
+as described in README.md. The MSVC recipe uses its static runtime; a dynamic
+runtime build must stage every imported non-system DLL with reviewed notices.
+The tooling refuses to assume that a runtime installed on the build machine
+will also exist on another user's computer.
 
 Required payload: FZeroSNESRecomp.exe, WheelFfb.dll, approved build runtime DLLs,
 checked-in assets/shaders, the pinned launcher fonts/images, licenses and

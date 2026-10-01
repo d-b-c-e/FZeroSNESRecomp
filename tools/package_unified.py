@@ -1,7 +1,7 @@
 """Package an explicitly receipted stock-only Windows candidate; never run it.
 
 Build receipt JSON:
- {"schema":"dbce.fzero-build", "version":1, "productVersion":"1.7.0",
+ {"schema":"dbce.fzero-build", "version":1, "productVersion":"1.8.3",
   "sourceRevision":"<40 hex>", "sourceTree":"<40 hex>", "dirty":false,
   "bsDeluxe":false, "dependencies":{"snesrecomp":"<40 hex>",
   "recomp-ui":"<40 hex>"}, "files":{"FZeroSNESRecomp.exe":"<sha256>",
@@ -37,6 +37,7 @@ SYSTEM_DLLS = {"kernel32.dll", "user32.dll", "gdi32.dll", "advapi32.dll",
               "dxguid.dll", "opengl32.dll", "dwmapi.dll", "uxtheme.dll",
               "ntdll.dll", "msvcrt.dll", "ucrtbase.dll", "shlwapi.dll",
               "cfgmgr32.dll", "rpcrt4.dll", "bcrypt.dll", "secur32.dll"}
+SYSTEM_DLLS |= {"d2d1.dll", "dwrite.dll"}
 
 
 def digest(data):
