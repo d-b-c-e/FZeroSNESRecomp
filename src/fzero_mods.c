@@ -82,6 +82,64 @@ static int ffb_device_count;
 static const char *wheel_config;
 static void (*wheel_write)(const char *, const char *, const char *, const char *);
 static int (*wheel_read_axis)(const char *, int, int *);
+static int wheel_dirty;
+
+static int valid_wheel_guid(const char *guid) {
+  if (!guid) return 0;
+  int nonzero = 0;
+  for (int i = 0; i < 32; ++i) {
+    char c = guid[i];
+    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+          (c >= 'A' && c <= 'F'))) return 0;
+    nonzero |= c != '0';
+  }
+  return guid[32] == 0 && nonzero;
+}
+static void save_wheel_profile(void) {
+  if (!wheel_write || !wheel_section[0]) return;
+  char value[32];
+  snprintf(value, sizeof(value), "%d", wheel_enabled);
+  wheel_write(wheel_config, wheel_section, "AnalogSteering", value);
+  for (int i = 0; i < WHEEL_OPTIONS; ++i) {
+    snprintf(value, sizeof(value), "%d", wheel_values[i]);
+    wheel_write(wheel_config, wheel_section, wheel_options[i].key, value);
+  }
+  wheel_dirty = 0;
+}
+static void load_wheel_profile(const char *guid) {
+  snprintf(wheel_section, sizeof(wheel_section), "Controller.%s", guid);
+  wheel_enabled = 1;
+  FzeroIniReadInt(wheel_config, wheel_section, "AnalogSteering", &wheel_enabled);
+  for (int i = 0; i < WHEEL_OPTIONS; ++i) {
+    wheel_values[i] = wheel_options[i].fallback;
+    FzeroIniReadInt(wheel_config, wheel_section, wheel_options[i].key,
+                    &wheel_values[i]);
+  }
+  wheel_dirty = 0;
+}
+static int select_controller(void *ctx, int player, int kind, const char *guid) {
+  (void)ctx;
+  /* Keyboard/None do not discard the independent raw-wheel identity. */
+  if (player != 0 || kind != 2) return 1;
+  if (!valid_wheel_guid(guid)) {
+    COPY(error_text, "Select a controller with a valid SDL GUID.");
+    return 0;
+  }
+  if (wheel_section[0] && !strcmp(wheel_section + strlen("Controller."), guid)) {
+    error_text[0] = 0;
+    return 1;
+  }
+  if (wheel_dirty) {
+    if (!wheel_write) return 0;
+    save_wheel_profile();
+  }
+  load_wheel_profile(guid);
+  error_text[0] = 0;
+  return 1;
+}
+const char *FzeroModsWheelGuid(void) {
+  return wheel_section[0] ? wheel_section + strlen("Controller.") : "";
+}
 
 static void wheel_preview_status(RecompLauncherCModFeature *out) {
   int axis = 0;
@@ -157,13 +215,14 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
         "Try 2x and 60 FPS if performance drops.", descriptions[index], video->hd_scale);
     COPY(out->status, "Warning: high CPU and memory use above 4x");
   }
-  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 7 ? TRIPLE_OPTIONS + 1 : index == 2 || index == 4 || index == 8 ? 0 : 1;
+  out->option_count = index == 5 ? (wheel_section[0] ? WHEEL_OPTIONS : 0) : index == 6 ? 4 : index == 7 ? TRIPLE_OPTIONS + 1 : index == 2 || index == 4 || index == 8 ? 0 : 1;
   return 1;
 }
 static int option_get(void *ctx, const char *package, const char *feature, int index,
                       RecompLauncherCModOption *out) {
   (void)ctx;
   int kind = identity(package, feature);
+  if (kind == 6 && !wheel_section[0]) return 0;
   if (!kind || kind == 3 || kind == 5 || kind == 9 || !out) return 0;
   if (kind == 8 && index == TRIPLE_OPTIONS) {
     memset(out, 0, sizeof(*out));
@@ -296,7 +355,10 @@ static int enable(void *ctx, const char *package, const char *feature, int enabl
   if (identity(package, feature) == 9) video->reduce_crash_flash = enabled != 0;
   else if (identity(package, feature) == 8) video->triple_screen = enabled != 0;
   else if (identity(package, feature) == 7) ffb_enabled = enabled != 0;
-  else if (identity(package, feature) == 6) wheel_enabled = enabled != 0;
+  else if (identity(package, feature) == 6) {
+    if (!wheel_section[0]) return 0;
+    wheel_enabled = enabled != 0; wheel_dirty = 1;
+  }
   else if (identity(package, feature) == 5) video->diagnostics = enabled != 0;
   else if (identity(package, feature) == 4) video->hd_mode7 = enabled != 0;
   else if (identity(package, feature) == 3) {
@@ -319,6 +381,7 @@ static int set_option(void *ctx, const char *package, const char *feature,
                       const char *option, const char *value) {
   (void)ctx;
   if (!identity(package, feature) || !option || !value) return 0;
+  if (identity(package, feature) == 6 && !wheel_section[0]) return 0;
   if (identity(package, feature) == 8) {
     if (!strcmp(option, "TripleOutputMode")) {
       if (!strcmp(value, "Span")) video->triple_output_mode = FZERO_TRIPLE_OUTPUT_SPAN;
@@ -357,6 +420,7 @@ static int set_option(void *ctx, const char *package, const char *feature,
       int index = !strcmp(option, "AcceleratorInvert") ? 7 : 8;
       if (strcmp(value, "true") && strcmp(value, "false")) return 0;
       wheel_values[index] = !strcmp(value, "true");
+      wheel_dirty = 1;
       return 1;
     }
     char *end;
@@ -373,7 +437,7 @@ static int set_option(void *ctx, const char *package, const char *feature,
       const WheelOption *spec = &wheel_options[i];
       if (strcmp(option, spec->key)) continue;
       if (parsed < spec->min || parsed > spec->max) return 0;
-      wheel_values[i] = (int)parsed; return 1;
+      wheel_values[i] = (int)parsed; wheel_dirty = 1; return 1;
     }
     return 0;
   }
@@ -396,12 +460,7 @@ static int commit(void *ctx, const char *image) {
   if (FzeroVideoSave(video, config_path)) {
     if (wheel_config && wheel_write) {
       char value[32];
-      snprintf(value, sizeof(value), "%d", wheel_enabled);
-      wheel_write(wheel_config, wheel_section, "AnalogSteering", value);
-      for (int i = 0; i < WHEEL_OPTIONS; ++i) {
-        snprintf(value, sizeof(value), "%d", wheel_values[i]);
-        wheel_write(wheel_config, wheel_section, wheel_options[i].key, value);
-      }
+      save_wheel_profile();
       snprintf(value, sizeof(value), "%d", ffb_enabled);
       wheel_write(wheel_config, "ForceFeedback", "Enabled", value);
       snprintf(value, sizeof(value), "%d", ffb_strength);
@@ -422,6 +481,7 @@ const RecompLauncherCModProvider *FzeroModsProvider(FzeroVideoSettings *settings
   video = settings; config_path = path; error_text[0] = 0;
   wheel_config = NULL; wheel_write = NULL;
   wheel_read_axis = NULL;
+  wheel_section[0] = 0; wheel_enabled = 0; wheel_dirty = 0;
   ffb_device_count = 0;
   memset(&provider, 0, sizeof(provider));
   provider.package_count = count; provider.package_get = package_get;
@@ -439,7 +499,9 @@ const RecompLauncherCModProvider *FzeroModsProviderWheel(
     int (*list_ffb_devices)(char names[][256], int max_devices),
     int (*read_wheel_axis)(const char *guid, int axis, int *value)) {
   const RecompLauncherCModProvider *provider = FzeroModsProvider(settings, video_path);
-  if (!control_path || !wheel_guid || !wheel_guid[0]) return provider;
+  if (!control_path) return provider;
+  /* Selection notification requires the paired source UI revision. */
+  ((RecompLauncherCModProvider *)provider)->select_controller = select_controller;
   wheel_config = control_path; wheel_write = write_ini;
   wheel_read_axis = read_wheel_axis;
   if (list_ffb_devices) {
@@ -447,17 +509,11 @@ const RecompLauncherCModProvider *FzeroModsProviderWheel(
     if (ffb_device_count < 0) ffb_device_count = 0;
     if (ffb_device_count > 16) ffb_device_count = 16;
   }
-  snprintf(wheel_section, sizeof(wheel_section), "Controller.%s", wheel_guid);
-  wheel_enabled = 1; ffb_enabled = 0; ffb_strength = 35;
+  if (valid_wheel_guid(wheel_guid)) load_wheel_profile(wheel_guid);
+  ffb_enabled = 0; ffb_strength = 35;
   ffb_impact_strength = 20;
   COPY(ffb_impact_type, "Constant");
   ffb_device[0] = 0;
-  FzeroIniReadInt(control_path, wheel_section, "AnalogSteering", &wheel_enabled);
-  for (int i = 0; i < WHEEL_OPTIONS; ++i) {
-    wheel_values[i] = wheel_options[i].fallback;
-    FzeroIniReadInt(control_path, wheel_section, wheel_options[i].key,
-                    &wheel_values[i]);
-  }
   FzeroIniReadInt(control_path, "ForceFeedback", "Enabled", &ffb_enabled);
   FzeroIniReadInt(control_path, "ForceFeedback", "Strength", &ffb_strength);
   FzeroIniReadInt(control_path, "ForceFeedback", "ImpactStrength", &ffb_impact_strength);

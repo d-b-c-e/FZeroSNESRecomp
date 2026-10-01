@@ -666,8 +666,6 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   /* The shared launcher may select Keyboard and clear its gamepad GUID.
    * The raw wheel mod is independent of that input-source choice, so keep
    * its configured identity through the launcher session and save. */
-  char wheel_guid[40];
-  snprintf(wheel_guid, sizeof(wheel_guid), "%s", settings->player_gamepad_guid[0]);
   launcher_profile_apply("snes", &game);
   game.name = "F-Zero";
   game.region = "(USA)";
@@ -689,7 +687,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
   game.msu1_supported = 1;
   game.msu1_note = "Select a music folder with PCM tracks and the matching Conn/Cubear v11 patch: f-zero_msu1_stock.ips for stock F-Zero, f-zero_msu1.ips for BS Deluxe.";
   game.mods = FzeroModsProviderWheel(&g_video, kVideoConfig, g_config_path,
-                                    wheel_guid,
+                                    settings->player_gamepad_guid[0],
                                     launcher_ini_kv_write, FzeroFfbListDevices,
                                     launcher_steering_axis);
   game.rom_cache_path = "rom.cfg";
@@ -743,6 +741,7 @@ static int resolve_rom(const char *executable, const char *explicit_rom,
                                  &game, assets_dir, initial_rom, path,
                                  path_size);
   launcher_steering_probe_close();
+  const char *wheel_guid = FzeroModsWheelGuid();
   if (!settings->player_gamepad_guid[0][0] && wheel_guid[0])
     snprintf(settings->player_gamepad_guid[0],
              sizeof(settings->player_gamepad_guid[0]), "%s", wheel_guid);

@@ -7,7 +7,7 @@ static int wrote_wheel_range, wrote_rewind, wrote_ffb, wrote_impact, wrote_brake
 static char wrote_device[256], wrote_impact_type[32];
 static int live_axis_value;
 static int read_live_axis(const char *guid, int axis, int *value) {
-  CHECK(!strcmp(guid, "test-guid"));
+  CHECK(!strcmp(guid, "030000004c0500006802000000000000"));
   if (axis != 0) return 0;
   *value = live_axis_value;
   return 1;
@@ -21,9 +21,9 @@ static int list_ffb(char names[][256], int max_devices) {
 static void note_ini(const char *path, const char *section,
                      const char *key, const char *value) {
   CHECK(!strcmp(path, "wheel-options.ini"));
-  if (!strcmp(section, "Controller.test-guid") &&
+  if (!strcmp(section, "Controller.030000004c0500006802000000000000") &&
       !strcmp(key, "SteeringRangePercent")) wrote_wheel_range = atoi(value);
-  if (!strcmp(section, "Controller.test-guid") &&
+  if (!strcmp(section, "Controller.030000004c0500006802000000000000") &&
       !strcmp(key, "ButtonRewind")) wrote_rewind = atoi(value);
   if (!strcmp(section, "ForceFeedback") &&
       !strcmp(key, "Strength")) wrote_ffb = atoi(value);
@@ -33,8 +33,99 @@ static void note_ini(const char *path, const char *section,
       !strcmp(key, "ImpactType")) strcpy(wrote_impact_type, value);
   if (!strcmp(section, "ForceFeedback") &&
       !strcmp(key, "Device")) strcpy(wrote_device, value);
-  if (!strcmp(section, "Controller.test-guid") &&
+  if (!strcmp(section, "Controller.030000004c0500006802000000000000") &&
       !strcmp(key, "BrakeInvert")) wrote_brake_invert = atoi(value);
+}
+static const char *guid_a = "030000004c0500006802000000000000";
+static const char *guid_b = "030000004c0500006802000000000001";
+static char profile_keys[2][32][40], profile_values[2][32][32];
+static int profile_counts[2], profile_writes, axis_reads;
+static char observed_guid[40];
+static void write_profiles(void) {
+  FILE *f = fopen("selection.ini", "w"); CHECK(f);
+  for (int p = 0; p < 2; ++p) {
+    fprintf(f, "[Controller.%s]\n", p ? guid_b : guid_a);
+    for (int i = 0; i < profile_counts[p]; ++i)
+      fprintf(f, "%s=%s\n", profile_keys[p][i], profile_values[p][i]);
+  }
+  fputs("[ForceFeedback]\nEnabled=0\nStrength=12\nImpactStrength=50\n", f);
+  fclose(f);
+}
+static void selection_write(const char *path, const char *section,
+                            const char *key, const char *value) {
+  CHECK(!strcmp(path, "selection.ini"));
+  if (!strcmp(section, "ForceFeedback")) return;
+  CHECK(!strncmp(section, "Controller.", 11));
+  int p = !strcmp(section + 11, guid_b);
+  CHECK(!strcmp(section + 11, p ? guid_b : guid_a));
+  int i = 0;
+  while (i < profile_counts[p] && strcmp(profile_keys[p][i], key)) ++i;
+  CHECK(i < 32);
+  if (i == profile_counts[p]) ++profile_counts[p];
+  snprintf(profile_keys[p][i], sizeof(profile_keys[p][i]), "%s", key);
+  snprintf(profile_values[p][i], sizeof(profile_values[p][i]), "%s", value);
+  ++profile_writes;
+  write_profiles();
+}
+static int selection_axis(const char *guid, int axis, int *value) {
+  CHECK(axis == (!strcmp(guid, guid_a) ? 2 : 3));
+  snprintf(observed_guid, sizeof(observed_guid), "%s", guid);
+  *value = 0; ++axis_reads; return 1;
+}
+static void test_selection_rebind(void) {
+  FzeroVideoSettings video; FzeroVideoStock(&video);
+  for (int p = 0; p < 2; ++p) {
+    strcpy(profile_keys[p][0], "SteeringRangePercent");
+    strcpy(profile_values[p][0], p ? "80" : "40");
+    strcpy(profile_keys[p][1], "SteeringAxis");
+    strcpy(profile_values[p][1], p ? "3" : "2");
+    profile_counts[p] = 2;
+  }
+  write_profiles();
+  const RecompLauncherCModProvider *provider = FzeroModsProviderWheel(
+      &video, "selection-video.ini", "selection.ini", "", selection_write,
+      NULL, selection_axis);
+  RecompLauncherCModFeature wheel, ffb;
+  RecompLauncherCModOption option;
+  CHECK(provider->select_controller && provider->feature_count(NULL) == 9);
+  CHECK(provider->feature_get(NULL, 5, &wheel) && !wheel.option_count);
+  CHECK(!FzeroModsWheelGuid()[0] && axis_reads == 0 && profile_writes == 0);
+  CHECK(!provider->feature_set_option(NULL, wheel.package_id, wheel.id,
+                                      "SteeringRangePercent", "50"));
+  /* Cancelling initial selection makes no callback or profile change. */
+  CHECK(provider->feature_get(NULL, 5, &wheel) && !FzeroModsWheelGuid()[0]);
+  CHECK(provider->select_controller(NULL, 0, 2, guid_a));
+  CHECK(provider->feature_option_get(NULL, wheel.package_id, wheel.id, 1, &option));
+  CHECK(!strcmp(option.value, "40"));
+  CHECK(provider->feature_option_get(NULL, wheel.package_id, wheel.id, 3, &option));
+  CHECK(!strcmp(option.device_guid, guid_a) && !strcmp(option.value, "2"));
+  CHECK(provider->feature_get(NULL, 5, &wheel) && !strcmp(observed_guid, guid_a));
+  CHECK(provider->feature_set_option(NULL, wheel.package_id, wheel.id,
+                                     "SteeringRangePercent", "70"));
+  CHECK(provider->select_controller(NULL, 0, 2, guid_a) && !profile_writes);
+  const char *invalid[] = {NULL, "", "invalid", "00000000000000000000000000000000",
+                          "030000004c0500006802000000000000-extra"};
+  for (unsigned i = 0; i < sizeof(invalid)/sizeof(invalid[0]); ++i) {
+    CHECK(!provider->select_controller(NULL, 0, 2, invalid[i]));
+    CHECK(!strcmp(FzeroModsWheelGuid(), guid_a) && !profile_writes);
+  }
+  CHECK(provider->select_controller(NULL, 0, 2, guid_b) && profile_writes == 24);
+  CHECK(provider->feature_option_get(NULL, wheel.package_id, wheel.id, 1, &option));
+  CHECK(!strcmp(option.value, "80"));
+  CHECK(provider->feature_option_get(NULL, wheel.package_id, wheel.id, 3, &option));
+  CHECK(!strcmp(option.device_guid, guid_b) && !strcmp(option.value, "3"));
+  CHECK(provider->feature_get(NULL, 5, &wheel) && !strcmp(observed_guid, guid_b));
+  CHECK(provider->select_controller(NULL, 0, 1, "") &&
+        !strcmp(FzeroModsWheelGuid(), guid_b)); /* Keyboard keeps raw wheel. */
+  CHECK(provider->select_controller(NULL, 1, 2, "invalid") &&
+        !strcmp(FzeroModsWheelGuid(), guid_b)); /* Other player is unrelated. */
+  CHECK(provider->select_controller(NULL, 0, 2, guid_a));
+  CHECK(provider->feature_option_get(NULL, wheel.package_id, wheel.id, 1, &option));
+  CHECK(!strcmp(option.value, "70")); /* Prior edits saved to their own profile. */
+  CHECK(provider->feature_get(NULL, 6, &ffb) && !ffb.enabled);
+  CHECK(provider->feature_option_get(NULL, ffb.package_id, ffb.id, 0, &option));
+  CHECK(!strcmp(option.value, "12")); /* Rebind doesn't reload/enable force state. */
+  remove("selection.ini"); remove("selection-video.ini");
 }
 int main(void) {
   FzeroVideoSettings s, loaded; FzeroVideoStock(&s); /* start from nothing enabled to test each toggle */
@@ -139,7 +230,7 @@ int main(void) {
   CHECK(p->feature_enable(NULL, deluxe.package_id, deluxe.id, 0));
   CHECK(!s.bs_deluxe && s.enhanced && !s.fps_enabled);
   p = FzeroModsProviderWheel(&s, "test-mods.ini", "wheel-options.ini",
-                             "test-guid", note_ini, list_ffb, read_live_axis);
+                             "030000004c0500006802000000000000", note_ini, list_ffb, read_live_axis);
   CHECK(p->feature_count(NULL) == 9);
   RecompLauncherCModFeature wheel, ffb, triple_with_wheel;
   CHECK(p->feature_get(NULL, 5, &wheel) && wheel.option_count == 23);
@@ -167,10 +258,10 @@ int main(void) {
         flash_with_wheel.enabled && flash_with_wheel.option_count == 0);
   CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 22, &option));
   CHECK(option.type == RECOMP_MOD_OPTION_RAW_BUTTON);
-  CHECK(!strcmp(option.device_guid, "test-guid"));
+  CHECK(!strcmp(option.device_guid, "030000004c0500006802000000000000"));
   CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 3, &option));
   CHECK(option.type == RECOMP_MOD_OPTION_RAW_AXIS);
-  CHECK(!strcmp(option.device_guid, "test-guid"));
+  CHECK(!strcmp(option.device_guid, "030000004c0500006802000000000000"));
   CHECK(p->feature_option_get(NULL, wheel.package_id, wheel.id, 8, &option));
   CHECK(option.type == RECOMP_MOD_OPTION_BOOLEAN && !strcmp(option.value, "false"));
   CHECK(p->feature_option_get(NULL, ffb.package_id, ffb.id, 1, &option));
@@ -218,6 +309,7 @@ int main(void) {
         wrote_impact == 25 && !strcmp(wrote_impact_type, "Sine"));
   CHECK(wrote_brake_invert == 1 && !strcmp(wrote_device, "MOZA R12 Base"));
   remove("test-mods.ini");
+  test_selection_rebind();
   puts("Independent widescreen and presentation FPS plugins passed");
   return 0;
 }

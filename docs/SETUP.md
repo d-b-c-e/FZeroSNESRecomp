@@ -14,6 +14,11 @@ even when Skip launcher on boot was saved. Select your own F-Zero USA ROM.
    Use Live wheel input and Steering preview to check direction and pulse
    response before driving. Start with dead zone 0%, travel 100%, response 50%.
    Rewind must also be enabled under Settings.
+   Selecting a different device reloads its wheel profile in the same launcher
+   session, including the live preview and axis capture target. Edited settings
+   for the previous wheel are saved to that wheel's profile before switching.
+   Cancelling a capture leaves selection intact; Keyboard keeps the independent
+   raw-wheel identity. Selecting a wheel does not enable force feedback.
 2. FFB is optional. Select the explicit device in Force feedback; preserve
    saved overrides. Start modestly and test feel while seated. A missing or
    ambiguous device disables output rather than choosing another wheel.
