@@ -35,7 +35,8 @@ static const char *const stage_names[] = {
   "pacing_wait", "paused",
   "left_context", "right_context", "left_upload", "right_upload",
   "left_draw_submit", "right_draw_submit", "left_swap", "right_swap",
-  "center_restore"
+  "center_restore", "triple_sky_prepare", "triple_sky_sample",
+  "triple_sky_fill", "triple_ground"
 };
 _Static_assert(sizeof(stage_names) / sizeof(stage_names[0]) ==
                FZERO_DIAG_STAGE_COUNT, "diagnostic stage names must match enum");
@@ -234,7 +235,8 @@ void FzeroDiagnosticsSample(const FzeroDiagnosticFrame *f, bool final) {
           f->output_width, f->output_height, f->fullscreen, f->suspended, f->scene, f->subscene);
   uint64_t accounted = 0;
   for (unsigned i = 0; i < FZERO_DIAG_STAGE_COUNT; ++i) {
-    Timing *t = &timings[i]; accounted += t->ticks;
+    Timing *t = &timings[i];
+    if (i < FZERO_DIAG_TRIPLE_SKY_PREPARE) accounted += t->ticks;
     fprintf(log_file, "%s\"%s\":{\"calls\":%llu,\"total_ms\":%.3f,\"mean_ms\":%.3f,\"max_ms\":%.3f}",
             i ? "," : "", stage_names[i], (unsigned long long)t->calls, ms(t->ticks),
             t->calls ? ms(t->ticks) / t->calls : 0, ms(t->maximum));

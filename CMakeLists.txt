@@ -212,6 +212,7 @@ add_executable(FZeroSNESRecomp
     src/fzero_ffb.cpp
     src/fzero_playthrough.c
     src/fzero_runtime.c)
+target_compile_definitions(FZeroSNESRecomp PRIVATE FZERO_RENDER_TIMINGS=1)
 
 function(configure_fzero_target target)
     target_sources(${target} PRIVATE src/fzero_deluxe.c src/fzero_state_mode.c src/fzero_msu.c)
