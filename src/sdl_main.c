@@ -1116,6 +1116,8 @@ typedef struct FzeroTripleWindows {
   bool use_gl;
 } FzeroTripleWindows;
 
+#include "fzero_output_probe.h"
+
 static bool triple_displays_available(FzeroTripleDisplaySelection *selection) {
   FzeroRect bounds[FZERO_TRIPLE_MAX_DISPLAYS];
   int count = 0;
@@ -1389,6 +1391,11 @@ static bool present_separate_gl_sides(FzeroPresenter *p, bool ready) {
     FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_DRAW : FZERO_DIAG_LEFT_DRAW,
                         draw_start);
     uint64_t swap_start = FzeroDiagnosticsBegin();
+    output_probe(glr->window, side ? "right" : "left",
+        ready ? (const uint8_t *)(p->triple_pixels +
+            (size_t)side * kTriplePanelWidth * kTriplePanelHeight) : NULL,
+        kTriplePanelWidth, kTriplePanelHeight, output_width, output_height,
+        ready, glr->shader != NULL);
     SDL_GL_SwapWindow(glr->window);
     FzeroDiagnosticsEnd(side ? FZERO_DIAG_RIGHT_SWAP : FZERO_DIAG_LEFT_SWAP,
                         swap_start);
@@ -1465,6 +1472,9 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
       overlay_dump(p, is_menu);
     }
     uint64_t diagnostic_start = FzeroDiagnosticsBegin();
+    output_probe(p->gl->window, "center", pixels, width, height,
+        p->drawable_width, p->drawable_height, triple_ready,
+        p->gl->shader != NULL);
     SDL_GL_SwapWindow(p->gl->window);
     FzeroDiagnosticsEnd(FZERO_DIAG_PRESENT, diagnostic_start);
     return;
@@ -2397,6 +2407,10 @@ int main(int argc, char **argv) {
   bool reduce_race_flash = reduce_flash_env && *reduce_flash_env ?
       strcmp(reduce_flash_env, "0") != 0 : g_video.reduce_crash_flash;
   unsigned suppressed_flashes = 0;
+  g_output_probe_dir = getenv("FZERO_OUTPUT_PROBE_DIR");
+  if (g_output_probe_dir && (!*g_output_probe_dir || g_playthrough.mode != 2 ||
+                             !triple_separate || !use_gl_renderer))
+    Die("Output probes require a recorded separate-window OpenGL replay");
   FzeroPresenter presenter;
   memset(&presenter, 0, sizeof(presenter));
   presenter.window = window;
@@ -2725,6 +2739,10 @@ int main(int argc, char **argv) {
       snes_rewind_note_frame();
       frames++;
       FzeroClockSimulationDone(&clock);
+      if (output_probe_due(frames)) {
+        g_output_probe_frame = frames;
+        break; /* Explicit probe mode presents this exact verified frame. */
+      }
       now = monotonic_seconds();
       if (g_playthrough.mode == 2 && (uint64_t)frames >= g_playthrough.total) {
         running = 0;
@@ -2768,7 +2786,7 @@ int main(int argc, char **argv) {
       continue;
     }
 
-    if (FzeroClockPresentationDue(&clock, now)) {
+    if (g_output_probe_frame || FzeroClockPresentationDue(&clock, now)) {
       uint64_t diagnostic_start = FzeroDiagnosticsBegin();
       FzeroPresent(triple_active ? 1.0 : FzeroClockAlpha(&clock, now));
       FzeroDiagnosticsEnd(FZERO_DIAG_COMPOSITION, diagnostic_start);
@@ -2777,7 +2795,7 @@ int main(int argc, char **argv) {
       const uint8_t *source = hd_frame ? (const uint8_t *)hd_frame : pixels;
       unsigned mean = reduce_race_flash ? source_frame_mean(source,
           logical_width * (int)hd_scale, kFrameHeight * (int)hd_scale) : 0;
-      bool hold_flash = reduce_race_flash && g_ram[0x54] == 2 &&
+      bool hold_flash = !g_output_probe_frame && reduce_race_flash && g_ram[0x54] == 2 &&
           g_ram[0x55] >= 3 && mean >= 225 && suppressed_flashes < 6;
       if (hold_flash) {
         ++suppressed_flashes;
@@ -2787,6 +2805,10 @@ int main(int argc, char **argv) {
       } else {
         suppressed_flashes = 0;
         present_frame(&presenter, NULL, 0, 0, 0);
+        if (g_output_probe_frame) {
+          ++g_output_probe_index;
+          g_output_probe_frame = 0;
+        }
         FzeroDiagnosticsPresented();
         /* Offer what was just presented as the next save's thumbnail and as
          * the filmstrip's frame for the next capture. Both downsample into
@@ -2811,6 +2833,10 @@ int main(int argc, char **argv) {
     diagnostic_frame.missed = missed_presentations + clock.missed_presentations;
     FzeroDiagnosticsSample(&diagnostic_frame, true);
     FzeroDiagnosticsStop();
+  }
+  if (g_output_probe_dir && (g_output_probe_failed || g_output_probe_index != 3)) {
+    fprintf(stderr, "[fzero-output-probe] incomplete or failed readbacks\n");
+    replay_failed = true;
   }
   fprintf(stderr, "[fzero-presentation] simulation=%ld presentations=%llu missed=%llu target_hz=%.3f\n",
           frames, (unsigned long long)presentations,
