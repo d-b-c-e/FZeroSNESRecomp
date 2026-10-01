@@ -32,13 +32,15 @@ bool FzeroTripleValidLayout(const FzeroVideoSettings *s) {
          s->triple_bezel_gap_mm <= 100 && s->triple_eye_height_mm <= 1000;
 }
 
+bool FzeroTriplePanelSupported(int width, int height) {
+  return width >= 640 && width <= 4096 && height >= 480 && height <= 2160 &&
+         width * 10 >= height * 12 && width * 10 <= height * 25;
+}
+
 bool FzeroTripleSpanSupported(int width, int height) {
-  if (width < 1920 || width % 3 || height < 480 || height > 2160) return false;
-  int panel = width / 3;
-  /* An ordinary fullscreen display should not be mistaken for three very
-   * narrow panels. Spanned displays must have three equal visible regions. */
-  return panel <= 4096 && panel * 10 >= height * 12 &&
-         panel * 10 <= height * 25;
+  /* An ordinary fullscreen display should not be mistaken for a span. */
+  return width >= 1920 && width % 3 == 0 &&
+         FzeroTriplePanelSupported(width / 3, height);
 }
 
 /* Existing mods stay on; HD Mode 7 is a separate opt-in. Aspect follows
@@ -165,6 +167,10 @@ bool FzeroVideoLoad(FzeroVideoSettings *s, const char *path) {
     } else if (!strcmp(key, "TripleScreen")) {
       if (!strcmp(value, "0") || !strcmp(value, "1")) s->triple_screen = value[0] == '1';
       else valid = false;
+    } else if (!strcmp(key, "TripleOutputMode")) {
+      if (!strcmp(value, "Span")) s->triple_output_mode = FZERO_TRIPLE_OUTPUT_SPAN;
+      else if (!strcmp(value, "Separate")) s->triple_output_mode = FZERO_TRIPLE_OUTPUT_SEPARATE;
+      else valid = false;
     } else if (!strcmp(key, "TriplePanelWidthMm")) {
       if (!parse_bounded_unsigned(value, 200, 3000, &s->triple_panel_width_mm)) valid = false;
     } else if (!strcmp(key, "TripleEyeDistanceMm")) {
@@ -203,10 +209,11 @@ bool FzeroVideoSave(const FzeroVideoSettings *s, const char *path) {
   if (snprintf(temporary, sizeof(temporary), "%s.tmp", path) >= (int)sizeof(temporary)) return false;
   FILE *f = fopen(temporary, "w");
   if (!f) return false;
-  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\nDiagnostics=%d\nTripleScreen=%d\nTriplePanelWidthMm=%u\nTripleEyeDistanceMm=%u\nTripleLeftAngleDeg=%u\nTripleRightAngleDeg=%u\nTripleBezelGapMm=%u\nTripleEyeHeightMm=%u\nReduceCrashFlash=%d\n",
+  bool ok = fprintf(f, "[FZeroVideo]\nEnhancedRenderer=%d\nAspect=%s\nPresentationEnabled=%d\nPresentationFPS=%u\nBSDeluxe=%d\nHDMode7=%d\nHDMode7Scale=%u\nDiagnostics=%d\nTripleScreen=%d\nTripleOutputMode=%s\nTriplePanelWidthMm=%u\nTripleEyeDistanceMm=%u\nTripleLeftAngleDeg=%u\nTripleRightAngleDeg=%u\nTripleBezelGapMm=%u\nTripleEyeHeightMm=%u\nReduceCrashFlash=%d\n",
                     s->enhanced, FzeroAspectName(s->aspect), s->fps_enabled, s->fps, s->bs_deluxe,
                     s->hd_mode7, FzeroValidHdScale(s->hd_scale) ? s->hd_scale : 2u, s->diagnostics,
-                    s->triple_screen, s->triple_panel_width_mm, s->triple_eye_distance_mm,
+                    s->triple_screen, s->triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE ? "Separate" : "Span",
+                    s->triple_panel_width_mm, s->triple_eye_distance_mm,
                     s->triple_left_yaw_deg, s->triple_right_yaw_deg,
                     s->triple_bezel_gap_mm, s->triple_eye_height_mm,
                     s->reduce_crash_flash) > 0;

@@ -14,6 +14,7 @@
 #include "fzero_msu.h"
 #include "fzero_replay.h"
 #include "fzero_playthrough.h"
+#include "fzero_triple_display.h"
 #include "fzero_state_mode.h"
 #include "fzero_diagnostics.h"
 #include "fzero_build.h"
@@ -1099,11 +1100,113 @@ typedef struct FzeroPresenter {
   FzeroViewport viewport;
   int drawable_width, drawable_height;
   SDL_Texture *triple_texture;
+  struct FzeroTripleWindows *triple_windows;
   uint32_t *triple_pixels;
   uint64_t triple_uploaded_version;
   bool triple_active;
+  bool triple_separate;
   FzeroTripleRig triple_rig;
 } FzeroPresenter;
+
+typedef struct FzeroTripleWindows {
+  SDL_Window *window[2];
+  SDL_Renderer *renderer[2];
+  SDL_Texture *texture[2];
+} FzeroTripleWindows;
+
+static bool triple_displays_available(FzeroTripleDisplaySelection *selection) {
+  FzeroRect bounds[FZERO_TRIPLE_MAX_DISPLAYS];
+  int count = 0;
+#if SNESRECOMP_SDL3
+  SDL_DisplayID *ids = SDL_GetDisplays(&count);
+  if (!ids || count > FZERO_TRIPLE_MAX_DISPLAYS) {
+    SDL_free(ids);
+    return false;
+  }
+  for (int i = 0; i < count; ++i) {
+    SDL_Rect rect;
+    if (!SDL_GetDisplayBounds(ids[i], &rect)) {
+      SDL_free(ids);
+      return false;
+    }
+    bounds[i] = (FzeroRect){rect.x, rect.y, rect.w, rect.h};
+  }
+  SDL_free(ids);
+#else
+  count = SDL_GetNumVideoDisplays();
+  if (count > FZERO_TRIPLE_MAX_DISPLAYS) return false;
+  for (int i = 0; i < count; ++i) {
+    SDL_Rect rect;
+    if (SDL_GetDisplayBounds(i, &rect) != 0) return false;
+    bounds[i] = (FzeroRect){rect.x, rect.y, rect.w, rect.h};
+  }
+#endif
+  /* Diagnostic only: exercise the three-window path inside one Surround
+   * surface without changing the machine's display mode. Never inferred from
+   * the user's configuration and never active without this explicit opt-in. */
+  const char *split_test = getenv("FZERO_TRIPLE_SPLIT_SPAN_TEST");
+  if (count == 1 && split_test && !strcmp(split_test, "1") &&
+      FzeroTripleSpanSupported(bounds[0].w, bounds[0].h)) {
+    static bool announced;
+    FzeroRect thirds[3];
+    for (int i = 0; i < 3; ++i)
+      thirds[i] = (FzeroRect){bounds[0].x + i * bounds[0].w / 3,
+          bounds[0].y, bounds[0].w / 3, bounds[0].h};
+    if (!announced) {
+      fprintf(stderr, "[fzero-triple] diagnostic three-window test inside one Surround span\n");
+      announced = true;
+    }
+    return FzeroTripleSelectDisplays(thirds, 3, selection);
+  }
+  return FzeroTripleSelectDisplays(bounds, count, selection);
+}
+
+static bool triple_display_bounds_equal(const FzeroTripleDisplaySelection *a,
+                                        const FzeroTripleDisplaySelection *b) {
+  for (int i = 0; i < 3; ++i) {
+    const FzeroRect x = a->bounds[i], y = b->bounds[i];
+    if (x.x != y.x || x.y != y.y || x.w != y.w || x.h != y.h)
+      return false;
+  }
+  return true;
+}
+
+static void triple_windows_destroy(FzeroTripleWindows *windows) {
+  if (!windows) return;
+  for (int side = 0; side < 2; ++side) {
+    if (windows->texture[side]) SDL_DestroyTexture(windows->texture[side]);
+    if (windows->renderer[side]) SDL_DestroyRenderer(windows->renderer[side]);
+    if (windows->window[side]) SDL_DestroyWindow(windows->window[side]);
+  }
+  memset(windows, 0, sizeof(*windows));
+}
+
+static bool triple_windows_create(FzeroTripleWindows *windows,
+                                  const FzeroTripleDisplaySelection *selection,
+                                  SDL_WindowFlags high_dpi_flag) {
+  memset(windows, 0, sizeof(*windows));
+  for (int side = 0; side < 2; ++side) {
+    const FzeroRect rect = selection->bounds[side ? 2 : 0];
+    windows->window[side] = snesrecomp_sdl_create_window(
+        side ? "F-Zero - Right" : "F-Zero - Left", rect.w, rect.h,
+        SDL_WINDOW_BORDERLESS | high_dpi_flag);
+    if (!windows->window[side]) goto fail;
+    SDL_SetWindowPosition(windows->window[side], rect.x, rect.y);
+    windows->renderer[side] = snesrecomp_sdl_create_renderer(
+        windows->window[side], false, 0);
+    if (!windows->renderer[side]) goto fail;
+    windows->texture[side] = SDL_CreateTexture(windows->renderer[side],
+        SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING,
+        kTriplePanelWidth, kTriplePanelHeight);
+    if (!windows->texture[side]) goto fail;
+    snesrecomp_sdl_set_texture_opaque(windows->texture[side]);
+    snesrecomp_sdl_set_texture_linear(windows->texture[side], true);
+  }
+  return true;
+fail:
+  triple_windows_destroy(windows);
+  return false;
+}
 
 /* A fixed internal side resolution bounds CPU projection cost independently
  * of the physical display resolution. The output stretch is physical-panel
@@ -1127,9 +1230,11 @@ static int g_overlay_texture_w, g_overlay_texture_h;
 static FzeroRect overlay_rect(const FzeroPresenter *p, int is_menu) {
   FzeroRect game =
       FzeroDestination(p->viewport,
-          p->triple_active ? p->drawable_width / 3 : p->drawable_width,
+          p->triple_active && !p->triple_separate ?
+              p->drawable_width / 3 : p->drawable_width,
           p->drawable_height);
-  if (p->triple_active) game.x += p->drawable_width / 3;
+  if (p->triple_active && !p->triple_separate)
+    game.x += p->drawable_width / 3;
   if (is_menu) return game;
   int strip = game.h / 3;
   if (strip < 1) strip = 1;
@@ -1182,6 +1287,39 @@ static unsigned source_frame_mean(const uint8_t *pixels, int width, int height) 
       ++samples;
     }
   return samples ? sum / (3 * samples) : 0;
+}
+
+static void present_separate_sides(FzeroPresenter *p, bool ready) {
+  if (!p->triple_windows) return;
+  FzeroTripleWindows *windows = p->triple_windows;
+  if (ready) {
+    uint64_t version = FzeroRendererTripleSidesVersion();
+    if (version != p->triple_uploaded_version) {
+      uint64_t upload_start = FzeroDiagnosticsBegin();
+      for (int side = 0; side < 2; ++side) {
+        const uint32_t *source = p->triple_pixels +
+            (size_t)side * kTriplePanelWidth * kTriplePanelHeight;
+#if SNESRECOMP_SDL3
+        bool uploaded = SDL_UpdateTexture(windows->texture[side], NULL,
+            source, kTriplePanelWidth * kBytesPerPixel);
+#else
+        bool uploaded = SDL_UpdateTexture(windows->texture[side], NULL,
+            source, kTriplePanelWidth * kBytesPerPixel) == 0;
+#endif
+        if (!uploaded) ready = false;
+      }
+      FzeroDiagnosticsEnd(FZERO_DIAG_TRIPLE_UPLOAD, upload_start);
+      if (ready) p->triple_uploaded_version = version;
+    }
+  }
+  for (int side = 0; side < 2; ++side) {
+    SDL_Renderer *renderer = windows->renderer[side];
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    if (ready)
+      snesrecomp_sdl_render_texture(renderer, windows->texture[side], NULL, NULL);
+    SDL_RenderPresent(renderer);
+  }
 }
 
 /* One present, with an optional panel over it. The game image is whatever is
@@ -1246,7 +1384,8 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
   SDL_UpdateTexture(p->texture, &source, pixels, width * kBytesPerPixel);
   FzeroDiagnosticsEnd(FZERO_DIAG_UPLOAD, diagnostic_start);
   bool triple_ready = false;
-  if (p->triple_active && p->triple_texture && p->triple_pixels) {
+  if (p->triple_active && p->triple_pixels &&
+      (p->triple_texture || p->triple_separate)) {
     diagnostic_start = FzeroDiagnosticsBegin();
     triple_ready = FzeroRendererDrawTripleSides(p->triple_pixels,
         (size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
@@ -1256,7 +1395,8 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
      * times. Upload the immutable side panels only when projection rewrites
      * them; keep drawing the already resident streaming texture otherwise. */
     uint64_t version = FzeroRendererTripleSidesVersion();
-    if (triple_ready && version != p->triple_uploaded_version) {
+    if (!p->triple_separate && triple_ready &&
+        version != p->triple_uploaded_version) {
       diagnostic_start = FzeroDiagnosticsBegin();
 #if SNESRECOMP_SDL3
       bool uploaded = SDL_UpdateTexture(p->triple_texture, NULL, p->triple_pixels,
@@ -1269,10 +1409,11 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
       if (uploaded) p->triple_uploaded_version = version;
     }
   }
+  if (p->triple_separate) present_separate_sides(p, triple_ready);
   diagnostic_start = FzeroDiagnosticsBegin();
   SDL_SetRenderDrawColor(p->renderer, 0, 0, 0, 255);
   SDL_RenderClear(p->renderer);
-  if (triple_ready) {
+  if (triple_ready && !p->triple_separate) {
     SDL_Rect left_src = {0, 0, kTriplePanelWidth, kTriplePanelHeight};
     SDL_Rect right_src = {0, kTriplePanelHeight, kTriplePanelWidth, kTriplePanelHeight};
     SDL_Rect left_dst = {0, 0, p->drawable_width / 3, p->drawable_height};
@@ -1285,9 +1426,11 @@ static void present_frame(FzeroPresenter *p, const uint32_t *panel,
   }
   FzeroRect rect =
       FzeroDestination(p->viewport,
-          p->triple_active ? p->drawable_width / 3 : p->drawable_width,
+          p->triple_active && !p->triple_separate ?
+              p->drawable_width / 3 : p->drawable_width,
           p->drawable_height);
-  if (p->triple_active) rect.x += p->drawable_width / 3;
+  if (p->triple_active && !p->triple_separate)
+    rect.x += p->drawable_width / 3;
   SDL_Rect destination = {rect.x, rect.y, rect.w, rect.h};
   snesrecomp_sdl_render_texture(p->renderer, p->texture, &source, &destination);
   overlay_draw_sdl(p, panel, pw, ph, is_menu);
@@ -1937,6 +2080,16 @@ int main(int argc, char **argv) {
                           launcher_settings.fullscreen;
   if (g_video.triple_screen && !triple_requested)
     fprintf(stderr, "[fzero-triple] experimental mode needs a valid rig and fullscreen; using stock view\n");
+  bool triple_separate = triple_requested &&
+      g_video.triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE;
+  FzeroTripleDisplaySelection separate_layout = {0};
+  if (triple_separate && use_gl_renderer) {
+    fprintf(stderr, "[fzero-triple] separate displays currently require Shader=None; using stock view\n");
+    triple_requested = triple_separate = false;
+  } else if (triple_separate && !triple_displays_available(&separate_layout)) {
+    fprintf(stderr, "[fzero-triple] separate mode needs one unambiguous row of three equal, aligned displays; using stock view\n");
+    triple_requested = triple_separate = false;
+  }
   if (use_gl_renderer) fzero_gl_prepare_window();
   /* Window scale is a real row on the Settings page, so it has to size the
    * window: it was drawn, saved and then ignored in favour of a hardcoded
@@ -1945,7 +2098,8 @@ int main(int argc, char **argv) {
   if (window_scale < 1 || window_scale > 8) window_scale = 3;
   SDL_Window *window = snesrecomp_sdl_create_window(
       kWindowTitle, 256 * window_scale, 192 * window_scale,
-      SDL_WINDOW_RESIZABLE | kHighDpiFlag |
+      (triple_separate ? SDL_WINDOW_BORDERLESS : SDL_WINDOW_RESIZABLE) |
+          kHighDpiFlag |
           (use_gl_renderer ? SDL_WINDOW_OPENGL : 0));
   if (!window) Die("Unable to create the game window");
   void *native_window = NULL;
@@ -1954,7 +2108,11 @@ int main(int argc, char **argv) {
                                          SDL_PROP_WINDOW_WIN32_HWND_POINTER,
                                          NULL);
 #endif
-  if (launcher_settings.fullscreen)
+  if (triple_separate) {
+    const FzeroRect center = separate_layout.bounds[1];
+    SDL_SetWindowSize(window, center.w, center.h);
+    SDL_SetWindowPosition(window, center.x, center.y);
+  } else if (launcher_settings.fullscreen)
     snesrecomp_sdl_set_fullscreen(window, true);
   FzeroGlRenderer gl_renderer;
   SDL_Renderer *renderer = NULL;
@@ -1989,6 +2147,24 @@ int main(int argc, char **argv) {
                                       launcher_settings.linear_filter != 0);
     snesrecomp_sdl_set_texture_opaque(texture);
   }
+  /* Side windows must exist before FFB init: creating or focusing windows
+   * after acquisition can make some direct-drive drivers silently drop their
+   * effects until a menu/rewind transition reacquires them. */
+  FzeroTripleWindows separate_windows = {0};
+  if (triple_separate) {
+    if (!triple_windows_create(&separate_windows, &separate_layout, kHighDpiFlag)) {
+      fprintf(stderr, "[fzero-triple] unable to create side windows; using centered stock view\n");
+      triple_requested = triple_separate = false;
+      SDL_SetWindowSize(window, 256 * window_scale, 192 * window_scale);
+      snesrecomp_sdl_set_fullscreen(window, true);
+    } else {
+      SDL_RaiseWindow(window);
+      fprintf(stderr, "[fzero-triple] separate windows: left=%d center=%d right=%d, %dx%d per display\n",
+              separate_layout.index[0], separate_layout.index[1],
+              separate_layout.index[2], separate_layout.bounds[1].w,
+              separate_layout.bounds[1].h);
+    }
+  }
   if (texture_scale != requested_texture_scale) {
     char message[256];
     snprintf(message, sizeof(message),
@@ -2012,13 +2188,15 @@ int main(int argc, char **argv) {
     snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
   else
     snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-  bool triple_active = triple_requested && FzeroTripleSpanSupported(drawable_width,
-                                                                drawable_height);
-  if (triple_requested && !triple_active)
+  bool triple_active = triple_separate ||
+      (triple_requested && FzeroTripleSpanSupported(drawable_width,
+                                                     drawable_height));
+  if (triple_requested && !triple_separate && !triple_active)
     fprintf(stderr, "[fzero-triple] expected three equal 1.2:1–2.5:1 panels in one fullscreen span; got %dx%d, using stock view\n",
             drawable_width, drawable_height);
   FzeroViewport viewport = FzeroCalculateViewport(&g_video,
-      triple_active ? drawable_width / 3 : drawable_width, drawable_height);
+      triple_active && !triple_separate ? drawable_width / 3 : drawable_width,
+      drawable_height);
   FzeroSetViewport(viewport);
   FzeroSetDeferredPresentation(true);
   int logical_width = viewport.width;
@@ -2136,17 +2314,24 @@ int main(int argc, char **argv) {
   presenter.texture = texture;
   presenter.gl = use_gl_renderer ? &gl_renderer : NULL;
   presenter.pixels = pixels;
+  presenter.triple_separate = triple_separate;
+  presenter.triple_windows = triple_separate ? &separate_windows : NULL;
   if (triple_active)
-    presenter.triple_rig = triple_rig_for_span(&g_video, drawable_width, drawable_height);
+    presenter.triple_rig = triple_rig_for_span(&g_video,
+        triple_separate ? drawable_width * 3 : drawable_width, drawable_height);
   if (triple_requested) {
     presenter.triple_pixels = calloc((size_t)2 * kTriplePanelWidth * kTriplePanelHeight,
                                      sizeof(*presenter.triple_pixels));
-    if (!use_gl_renderer)
+    if (!use_gl_renderer && !triple_separate)
       presenter.triple_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
           SDL_TEXTUREACCESS_STREAMING, kTriplePanelWidth, 2 * kTriplePanelHeight);
-    if (!presenter.triple_pixels || (!use_gl_renderer && !presenter.triple_texture)) {
+    if (!presenter.triple_pixels ||
+        (!use_gl_renderer && !triple_separate && !presenter.triple_texture)) {
       fprintf(stderr, "[fzero-triple] unable to allocate side panels; using stock view\n");
       triple_requested = triple_active = false;
+      presenter.triple_separate = triple_separate = false;
+      presenter.triple_windows = NULL;
+      triple_windows_destroy(&separate_windows);
       viewport = FzeroCalculateViewport(&g_video, drawable_width, drawable_height);
       FzeroSetViewport(viewport);
       logical_width = viewport.width;
@@ -2185,6 +2370,12 @@ int main(int argc, char **argv) {
     int panel = 0; /* 0 none, 1 save-state browser, 2 rewind filmstrip */
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) running = 0;
+#if SNESRECOMP_SDL3
+      if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) running = 0;
+#else
+      if (event.type == SDL_WINDOWEVENT &&
+          event.window.event == SDL_WINDOWEVENT_CLOSE) running = 0;
+#endif
       if (g_playthrough.mode == 2 && event.type == SDL_KEYDOWN) {
         if (SNESRECOMP_SDL_EVENT_KEY(event) == SDLK_ESCAPE) running = 0;
         continue; /* no user hotkey may mutate a verified visual replay */
@@ -2253,7 +2444,7 @@ int main(int argc, char **argv) {
             }
             break;
           case SDLK_RETURN: {
-            if (!(mod & KMOD_ALT)) break;
+            if (!(mod & KMOD_ALT) || triple_separate) break;
             Uint32 flags = (Uint32)SDL_GetWindowFlags(window);
             snesrecomp_sdl_set_fullscreen(
                 window,
@@ -2296,6 +2487,15 @@ int main(int argc, char **argv) {
     }
     double now = monotonic_seconds();
     if (now >= next_display_check) {
+      if (triple_separate) {
+        FzeroTripleDisplaySelection current_layout;
+        if (!triple_displays_available(&current_layout) ||
+            !triple_display_bounds_equal(&separate_layout, &current_layout)) {
+          fprintf(stderr, "[fzero-triple] display layout changed; closing three-window session safely\n");
+          running = 0;
+          break;
+        }
+      }
       actual_refresh = display_refresh(window);
       double next_hz = g_video.fps_enabled ? FzeroPresentationHz(g_video.fps, actual_refresh) : FZERO_SIMULATION_HZ;
       if (next_hz != hz) {
@@ -2343,18 +2543,23 @@ int main(int argc, char **argv) {
                                    &state_feedback_until);
       FzeroReplayViewport((unsigned)frames, &g_video);
       int replay_width, replay_height;
-      if (FzeroReplayWindow((unsigned)frames, &replay_width, &replay_height))
+      if (!triple_separate &&
+          FzeroReplayWindow((unsigned)frames, &replay_width, &replay_height))
         SDL_SetWindowSize(window, replay_width, replay_height);
       if (use_gl_renderer)
         snesrecomp_sdl_get_drawable_size(window, &drawable_width, &drawable_height);
       else
         snesrecomp_sdl_get_render_output_size(renderer, &drawable_width, &drawable_height);
-      triple_active = triple_requested && FzeroTripleSpanSupported(drawable_width,
-                                                               drawable_height);
+      triple_active = triple_separate ||
+          (triple_requested && FzeroTripleSpanSupported(drawable_width,
+                                                         drawable_height));
       if (triple_active)
-        presenter.triple_rig = triple_rig_for_span(&g_video, drawable_width, drawable_height);
+        presenter.triple_rig = triple_rig_for_span(&g_video,
+            triple_separate ? drawable_width * 3 : drawable_width,
+            drawable_height);
       FzeroViewport next = FzeroCalculateViewport(&g_video,
-          triple_active ? drawable_width / 3 : drawable_width, drawable_height);
+          triple_active && !triple_separate ? drawable_width / 3 : drawable_width,
+          drawable_height);
       if (next.width != viewport.width || next.aspect != viewport.aspect) {
         viewport = next;
         FzeroSetViewport(viewport);
@@ -2550,6 +2755,7 @@ int main(int argc, char **argv) {
   SDL_CloseAudioDevice(audio);
 #endif
   FzeroGamepadShutdown(&pad);
+  FzeroFfbShutdown();
   snes_rewind_shutdown();
   if (g_overlay_texture) {
     SDL_DestroyTexture(g_overlay_texture);
@@ -2557,6 +2763,7 @@ int main(int argc, char **argv) {
   }
   if (presenter.triple_texture) SDL_DestroyTexture(presenter.triple_texture);
   free(presenter.triple_pixels);
+  triple_windows_destroy(&separate_windows);
   if (use_gl_renderer) {
     fzero_gl_destroy(&gl_renderer);
   } else {
@@ -2564,7 +2771,6 @@ int main(int argc, char **argv) {
     SDL_DestroyRenderer(renderer);
   }
   FzeroTelemetryShutdown();
-  FzeroFfbShutdown();
   if (g_playthrough.mode == 1) {
     if (!FzeroPlaythroughClose(&g_playthrough))
       fprintf(stderr, "[fzero-playthrough] close failed; case incomplete\n");

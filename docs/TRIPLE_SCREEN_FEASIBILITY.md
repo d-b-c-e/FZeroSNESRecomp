@@ -119,7 +119,9 @@ The `codex/triple-wheel-integration` branch combines this renderer with the
 wheel/launcher branch. Its launcher retains the wheel bindings, FFB and
 telemetry mods and adds Triple Screen as a separate experimental toggle. A
 7680×1440 Surround smoke test rendered a center race view with distinct left
-and right ground panels; the regular Stream Deck launcher was not replaced.
+and right ground panels. Verified builds are now deployed to the regular
+Stream Deck/LaunchBox installation with executable backups and preserved
+user settings.
 
 The launcher now exposes an opt-in **Triple Screen (experimental)** mod. Its
 presenter accepts a fullscreen equal-panel Surround/span surface with panel
@@ -134,7 +136,7 @@ at each panel's horizontal eye angle and carries its skyline down to the
 ground-plane horizon. This removes the black sky/gap seen in the first rig
 preview, but side vehicles and effects are still missing. This is **not** complete
 triple-screen support. The versioned toolkit layout/status adapter has not yet
-been connected, and separate display windows are not implemented.
+been connected.
 On one captured active-race frame, both live side buffers matched the offline
 reference byte-for-byte before the sky pass. In an 11,364-frame recorded-drive
 replay with 7680×1440 Surround, the sky-enabled experimental build completed
@@ -145,6 +147,28 @@ missed, versus 46 in a prior ground-only replay. Runs were not simultaneous,
 so this is a performance warning rather than a controlled A/B benchmark.
 Diagnostics now split side projection and texture upload into their own
 buckets. The earlier comparison predates that split.
+
+### Separate-display preview (2026-10-01)
+
+The Triple Screen mod's **Display layout** option defaults to **One Surround /
+span display**. **Three separate displays** opens borderless left, center,
+and right windows on exactly one unambiguous horizontal row of three equal,
+edge-adjacent landscape displays. The center window retains the stock game,
+vehicle, and HUD compositor; the side windows show the projected side panels.
+A missing or ambiguous display row falls back to the stock view and logs why.
+If the desktop layout changes mid-race, the session closes rather than leaving
+windows on the wrong monitors. Save-state, rewind, and menu overlays remain
+in the center window.
+
+Separate-display mode currently requires **Shader=None**. Per-panel CRT is
+supported in span mode, but the SDL side windows do not yet have separate GL
+shader contexts. The three-window path was visually checked in a diagnostic
+split of one 7680×1440 Surround desktop using the explicit
+`FZERO_TRIPLE_SPLIT_SPAN_TEST=1` environment variable. This diagnostic mode is
+not enabled by the launcher and does not change Windows monitor settings.
+Physical three-display placement, focus/input, and FFB still need an attended
+rig test after switching out of Surround. Side sprites/effects and exact
+presentation synchronization remain incomplete.
 
 ### Per-panel CRT shader (2026-10-01)
 
@@ -379,8 +403,9 @@ future adapter should:
 
 - reject unknown `schemaVersion` values;
 - support `nvidia-surround` and `borderless-span` first;
-- defer `separate-displays` until the SDL presentation layer can own and
-  synchronize three windows;
+- report `separate-displays` only after the SDL presentation layer confirms
+  three distinct active windows; the current experimental mode has no toolkit
+  status adapter yet;
 - atomically publish a version-1 runtime status containing the accepted layout
   SHA-256 and observed frame state;
 - publish `activeCameraCount: 3` only when all three distinct ground projections
@@ -418,8 +443,9 @@ Keep this work independent of analog input, force feedback, and telemetry.
    - Validate desired-layout JSON and hash its exact accepted bytes.
    - Publish atomic runtime status with frame evidence and diagnostics.
    - Add manifest capabilities only as each stage is verified.
-5. **Separate windows (optional)**
-   - Add three synchronized SDL windows only after span mode is correct.
+5. **Separate windows (experimental implementation)**
+   - Three SDL windows now present the projected panels, but physical monitor
+     placement, pacing, and input/FFB behavior still need an attended test.
 
 ## Acceptance tests
 

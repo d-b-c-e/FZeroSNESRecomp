@@ -16,6 +16,11 @@ typedef enum FzeroAspect {
   FZERO_ASPECT_COUNT
 } FzeroAspect;
 
+typedef enum FzeroTripleOutputMode {
+  FZERO_TRIPLE_OUTPUT_SPAN = 0,
+  FZERO_TRIPLE_OUTPUT_SEPARATE = 1
+} FzeroTripleOutputMode;
+
 typedef struct FzeroVideoSettings {
   bool enhanced;
   FzeroAspect aspect;
@@ -26,6 +31,7 @@ typedef struct FzeroVideoSettings {
   unsigned hd_scale; /* Integer 2..10; retained while disabled. */
   bool diagnostics; /* Opt-in local performance reports; off by default. */
   bool triple_screen; /* Experimental Surround ground projection. */
+  FzeroTripleOutputMode triple_output_mode;
   unsigned triple_panel_width_mm; /* Visible chord width of one panel. */
   unsigned triple_eye_distance_mm; /* Eye to center-panel plane. */
   unsigned triple_left_yaw_deg, triple_right_yaw_deg;
@@ -50,6 +56,7 @@ bool FzeroValidFps(unsigned fps);
 bool FzeroValidHdScale(unsigned scale);
 bool FzeroParseHdScale(const char *text, unsigned *scale);
 bool FzeroTripleValidLayout(const FzeroVideoSettings *settings);
+bool FzeroTriplePanelSupported(int width, int height);
 bool FzeroTripleSpanSupported(int width, int height);
 double FzeroPresentationHz(unsigned fps, double refresh);
 FzeroViewport FzeroCalculateViewport(const FzeroVideoSettings *settings,

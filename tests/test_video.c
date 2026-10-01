@@ -17,7 +17,8 @@ static void viewport_tests(void) {
   CHECK(settings.enhanced && settings.aspect == FZERO_ASPECT_FIT && settings.fps == 0 &&
         settings.fps_enabled && settings.bs_deluxe);
   CHECK(!settings.hd_mode7 && settings.hd_scale == 2 && !settings.diagnostics &&
-        !settings.triple_screen);
+        !settings.triple_screen &&
+        settings.triple_output_mode == FZERO_TRIPLE_OUTPUT_SPAN);
   CHECK(FzeroTripleValidLayout(&settings) && settings.triple_panel_width_mm == 708 &&
         settings.triple_eye_distance_mm == 660 && settings.triple_left_yaw_deg == 70 &&
         settings.triple_right_yaw_deg == 70 && settings.triple_bezel_gap_mm == 8);
@@ -106,6 +107,7 @@ static void config_tests(void) {
   FzeroVideoDefaults(&a);
   a.enhanced = true; a.aspect = FZERO_ASPECT_FIT; a.fps = 165;
   a.triple_screen = true;
+  a.triple_output_mode = FZERO_TRIPLE_OUTPUT_SEPARATE;
   a.triple_panel_width_mm = 620;
   a.triple_eye_distance_mm = 780;
   a.triple_left_yaw_deg = 55;
@@ -116,7 +118,8 @@ static void config_tests(void) {
   CHECK(FzeroVideoSave(&a, "test-video.ini"));
   CHECK(FzeroVideoLoad(&b, "test-video.ini"));
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 165 &&
-        b.triple_screen && b.reduce_crash_flash);
+        b.triple_screen && b.reduce_crash_flash &&
+        b.triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE);
   CHECK(FzeroTripleValidLayout(&b) && b.triple_panel_width_mm == 620 &&
         b.triple_eye_distance_mm == 780 && b.triple_left_yaw_deg == 55 &&
         b.triple_right_yaw_deg == 65 && b.triple_bezel_gap_mm == 12 &&
@@ -147,6 +150,7 @@ static void config_tests(void) {
   CHECK(b.enhanced && b.aspect == FZERO_ASPECT_FIT && b.fps == 0); /* invalid fields fall back to shipped defaults */
   CHECK(!b.hd_mode7 && b.hd_scale == 2);
   const char *invalid_triple[] = {
+      "TripleOutputMode=Other",
       "TriplePanelWidthMm=0", "TriplePanelWidthMm=3001",
       "TripleEyeDistanceMm=-1", "TripleEyeDistanceMm=3001",
       "TripleLeftAngleDeg=90", "TripleRightAngleDeg=99999999999999999999",

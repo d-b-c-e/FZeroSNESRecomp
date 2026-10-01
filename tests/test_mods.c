@@ -43,11 +43,22 @@ int main(void) {
   RecompLauncherCModOption option;
   CHECK(p->package_count(NULL) == 7 && p->feature_count(NULL) == 7);
   RecompLauncherCModFeature triple;
-  CHECK(p->feature_get(NULL, 5, &triple) && !triple.enabled && triple.option_count == 6);
+  CHECK(p->feature_get(NULL, 5, &triple) && !triple.enabled && triple.option_count == 7);
   CHECK(p->feature_enable(NULL, triple.package_id, triple.id, 1) && s.triple_screen);
   CHECK(p->feature_option_get(NULL, triple.package_id, triple.id, 0, &option));
   CHECK(!strcmp(option.id, "TriplePanelWidthMm") && !strcmp(option.value, "708") &&
         option.min_value == 200 && option.max_value == 3000);
+  CHECK(p->feature_option_get(NULL, triple.package_id, triple.id, 6, &option));
+  CHECK(!strcmp(option.id, "TripleOutputMode") && !strcmp(option.value, "Span") &&
+        option.type == RECOMP_MOD_OPTION_CHOICE && option.choice_count == 2);
+  RecompLauncherCModChoice triple_choice;
+  CHECK(p->feature_choice_get(NULL, triple.package_id, triple.id,
+                              "TripleOutputMode", 1, &triple_choice));
+  CHECK(!strcmp(triple_choice.value, "Separate"));
+  CHECK(p->feature_set_option(NULL, triple.package_id, triple.id,
+                              "TripleOutputMode", "Separate"));
+  CHECK(!p->feature_set_option(NULL, triple.package_id, triple.id,
+                               "TripleOutputMode", "invalid"));
   CHECK(p->feature_set_option(NULL, triple.package_id, triple.id, "TriplePanelWidthMm", "620"));
   CHECK(p->feature_set_option(NULL, triple.package_id, triple.id, "TripleEyeDistanceMm", "780"));
   CHECK(p->feature_set_option(NULL, triple.package_id, triple.id, "TripleLeftAngleDeg", "55"));
@@ -108,7 +119,8 @@ int main(void) {
         loaded.triple_screen && loaded.reduce_crash_flash);
   CHECK(loaded.triple_panel_width_mm == 620 && loaded.triple_eye_distance_mm == 780 &&
         loaded.triple_left_yaw_deg == 55 && loaded.triple_right_yaw_deg == 65 &&
-        loaded.triple_bezel_gap_mm == 12 && loaded.triple_eye_height_mm == 45);
+        loaded.triple_bezel_gap_mm == 12 && loaded.triple_eye_height_mm == 45 &&
+        loaded.triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE);
   CHECK(p->feature_enable(NULL, diag.package_id, diag.id, 0) && !s.diagnostics);
   CHECK(p->commit(NULL, NULL) && FzeroVideoLoad(&loaded, "test-mods.ini") && !loaded.diagnostics);
   CHECK(p->feature_enable(NULL, hd.package_id, hd.id, 0));
@@ -137,7 +149,7 @@ int main(void) {
   CHECK(p->feature_get(NULL, 6, &ffb) && ffb.option_count == 4);
   CHECK(p->feature_get(NULL, 7, &triple_with_wheel) &&
         !strcmp(triple_with_wheel.package_id, triple.package_id) &&
-        triple_with_wheel.enabled && triple_with_wheel.option_count == 6);
+        triple_with_wheel.enabled && triple_with_wheel.option_count == 7);
   RecompLauncherCModFeature flash_with_wheel;
   CHECK(p->feature_get(NULL, 8, &flash_with_wheel) &&
         !strcmp(flash_with_wheel.package_id, flash.package_id) &&

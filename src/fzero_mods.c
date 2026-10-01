@@ -23,7 +23,7 @@ static const char *const descriptions[] = {
   "Record hardware, active video settings and frame timings in the diagnostics folder beside the game (beside the AppImage on Linux). Off by default. Enable, play through a slowdown, then attach the newest performance JSONL file to your report. Logs stay on your machine; no ROM or save data is included.",
   "Tune wheel steering, pedals, SNES buttons and host save-state/rewind buttons. The live steering preview shows how often the digital SNES direction is held at your current wheel position. Button indices are zero-based SDL joystick buttons.",
   "Speed-dependent centering, damping, road texture and collision impulses on the chosen wheel.",
-  "Experimental three-panel Mode 7 view on an equal-panel Surround/span display. Set your physical rig measurements below. CRT shaders are applied per panel. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen.",
+  "Experimental three-panel Mode 7 view on an equal-panel Surround/span or three separate displays. Set your output mode and physical rig below. Center UI and vehicles remain stock; side scenery and effects are incomplete. Requires fullscreen.",
   "Hold the previous image through the brief near-white frames that follow hard impacts. Game simulation and force feedback continue; only the flash is hidden."
 };
 typedef struct WheelOption { const char *key, *label; int fallback, min, max; } WheelOption;
@@ -148,7 +148,7 @@ static int feature_get(void *ctx, int index, RecompLauncherCModFeature *out) {
         "Try 2x and 60 FPS if performance drops.", descriptions[index], video->hd_scale);
     COPY(out->status, "Warning: high CPU and memory use above 4x");
   }
-  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 7 ? TRIPLE_OPTIONS : index == 2 || index == 4 || index == 8 ? 0 : 1;
+  out->option_count = index == 5 ? WHEEL_OPTIONS : index == 6 ? 4 : index == 7 ? TRIPLE_OPTIONS + 1 : index == 2 || index == 4 || index == 8 ? 0 : 1;
   return 1;
 }
 static int option_get(void *ctx, const char *package, const char *feature, int index,
@@ -156,6 +156,15 @@ static int option_get(void *ctx, const char *package, const char *feature, int i
   (void)ctx;
   int kind = identity(package, feature);
   if (!kind || kind == 3 || kind == 5 || kind == 9 || !out) return 0;
+  if (kind == 8 && index == TRIPLE_OPTIONS) {
+    memset(out, 0, sizeof(*out));
+    COPY(out->id, "TripleOutputMode"); COPY(out->label, "Display layout");
+    COPY(out->description, "Span uses one fullscreen Surround display. Separate opens one borderless window on each of three equal, horizontally aligned displays. CRT shaders are currently supported in span mode only.");
+    out->type = RECOMP_MOD_OPTION_CHOICE; out->choice_count = 2;
+    COPY(out->value, video->triple_output_mode == FZERO_TRIPLE_OUTPUT_SEPARATE ? "Separate" : "Span");
+    COPY(out->default_value, "Span");
+    return 1;
+  }
   if (kind == 8 && index >= 0 && index < TRIPLE_OPTIONS) {
     const TripleOption *spec = &triple_options[index];
     memset(out, 0, sizeof(*out));
@@ -242,6 +251,12 @@ static int choice_get(void *ctx, const char *package, const char *feature,
   (void)ctx;
   if (!identity(package, feature) || !option || !out || index < 0) return 0;
   const char *value = NULL;
+  if (identity(package, feature) == 8 && !strcmp(option, "TripleOutputMode") && index < 2) {
+    memset(out, 0, sizeof(*out));
+    COPY(out->value, index ? "Separate" : "Span");
+    COPY(out->label, index ? "Three separate displays" : "One Surround / span display");
+    return 1;
+  }
   if (identity(package, feature) == 7 && !strcmp(option, "Device") &&
       index <= ffb_device_count) {
     memset(out, 0, sizeof(*out));
@@ -288,6 +303,12 @@ static int set_option(void *ctx, const char *package, const char *feature,
   (void)ctx;
   if (!identity(package, feature) || !option || !value) return 0;
   if (identity(package, feature) == 8) {
+    if (!strcmp(option, "TripleOutputMode")) {
+      if (!strcmp(value, "Span")) video->triple_output_mode = FZERO_TRIPLE_OUTPUT_SPAN;
+      else if (!strcmp(value, "Separate")) video->triple_output_mode = FZERO_TRIPLE_OUTPUT_SEPARATE;
+      else return 0;
+      return 1;
+    }
     for (int i = 0; i < TRIPLE_OPTIONS; ++i) {
       const TripleOption *spec = &triple_options[i];
       if (strcmp(option, spec->key)) continue;
