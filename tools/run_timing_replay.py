@@ -1,5 +1,5 @@
 import argparse, hashlib, json, os, subprocess, time, zipfile
-from timing_replay_summary import summarize
+from timing_replay_summary import postprocess, persist
 from pathlib import Path
 
 parser=argparse.ArgumentParser()
@@ -45,12 +45,11 @@ with (folder/'stdout.log').open('w') as stdout,(folder/'stderr.log').open('w') a
         returncode=124
 text=(folder/'stderr.log').read_text(errors='replace')
 result={'mode':args.mode,'returncode':returncode,'elapsedSeconds':round(time.monotonic()-started,3),'executableSha256':hashfile(folder/'FZeroSNESRecomp.exe'),'recordingSha256':hashfile(record),'physicalFfb':False,'initialStateSha256':hashfile(source/case['initialState']['path']),'caseSha256':hashfile(source/'wheel-drive-20260928-235320.case.json'),'packageSha256':hashfile(archive),'displayMode':'one 7680x1440 Surround display','separateModeIsDiagnostic':args.mode.startswith('separate'),'complete':'visual replay complete' in text,'ffbInitializationObserved':'[fzero-ffb] active' in text}
-logs=list((folder/'diagnostics').glob('performance-*.jsonl'))
-rows=[]
-for log in logs:
-    rows.extend(json.loads(line) for line in log.read_text().splitlines())
-frame=folder/'final-source-frame.bmp'
-result.update(summarize(rows,text,returncode,hashfile(frame) if frame.exists() else None))
-(folder/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+result.pop('complete', None)
+try:
+    result.update(postprocess(folder,text,returncode))
+except Exception as error:
+    result.update(validated=False, errors=['Postprocessing failed: '+type(error).__name__+': '+str(error)])
+persist(folder/'result.json', result)
 print(json.dumps(result))
 raise SystemExit(0 if result['validated'] else 1)
