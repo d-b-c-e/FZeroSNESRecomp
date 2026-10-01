@@ -295,6 +295,12 @@ if(BUILD_TESTING)
         src/fzero_hotkeys.c)
     target_include_directories(fzero_ffb_tests PRIVATE "${CMAKE_SOURCE_DIR}/src")
     add_test(NAME fzero_ffb COMMAND fzero_ffb_tests)
+    if(WIN32)
+        # Fake Win32 loader/exports: no real DLL or device is accessed.
+        add_executable(fzero_ffb_lifecycle_tests tests/test_ffb_lifecycle.cpp
+            src/fzero_hotkeys.c)
+        add_test(NAME fzero_ffb_lifecycle COMMAND fzero_ffb_lifecycle_tests)
+    endif()
 endif()
 recomp_target_launcher_ui(FZeroSNESRecomp CONSOLE snes)
 # Identify dependencies as well as the game in player performance reports.

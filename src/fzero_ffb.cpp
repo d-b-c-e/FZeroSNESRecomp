@@ -9,6 +9,7 @@ extern "C" {
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -40,6 +41,11 @@ ReleaseConstantBurstsFn s_release_constant_bursts = nullptr;
 bool s_active = false;
 unsigned s_trace_frames = 0;
 bool s_trace_enabled = false;
+/* Serialize every export-backed entry, including launcher discovery. Init
+ * deliberately calls Shutdown while holding this gate. No consumer worker or
+ * loader-lock callback owns it. Shutdown drains the current call before close. */
+std::recursive_mutex s_call_gate;
+bool s_closed = false;
 #endif
 
 uint16_t read16(const uint8_t *p) {
@@ -57,9 +63,13 @@ int wrapped_delta(uint16_t current, uint16_t previous, int modulus) {
 int FzeroFfbListDevices(char names[][256], int max_devices) {
   if (!names || max_devices <= 0) return 0;
 #ifdef _WIN32
+  std::lock_guard<std::recursive_mutex> call(s_call_gate);
+  if (s_closed) return 0;
   WheelFfbApi api{};
-  if (!WheelFfb_LoadBeside(&api, GetModuleHandleW(nullptr), L"WheelFfb.dll"))
+  if (!WheelFfb_LoadBeside(&api, GetModuleHandleW(nullptr), L"WheelFfb.dll")) {
+    WheelFfb_Unload(&api); /* Partial resolution never started a worker. */
     return 0;
+  }
   int found = api.EnumerateDevices();
   int count = 0;
   for (int i = 0; i < found && count < max_devices; ++i) {
@@ -129,7 +139,13 @@ void FzeroFfbCompute(FzeroFfbState *state, const uint8_t *ram,
 }
 
 void FzeroFfbInit(const char *config_path, void *native_window) {
+#ifdef _WIN32
+  std::lock_guard<std::recursive_mutex> call(s_call_gate);
+#endif
   FzeroFfbShutdown();
+#ifdef _WIN32
+  s_closed = false; /* Explicit main-thread initialization starts a new session. */
+#endif
   int enabled = 0;
   if (!FzeroIniReadInt(config_path, "ForceFeedback", "Enabled", &enabled) ||
       !enabled) return;
@@ -234,6 +250,7 @@ void FzeroFfbInit(const char *config_path, void *native_window) {
 
 void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
 #ifdef _WIN32
+  std::lock_guard<std::recursive_mutex> call(s_call_gate);
   if (!s_active) return;
   FzeroFfbOutput output{};
   FzeroFfbCompute(&s_state, ram, ram_size, input, s_strength, &output);
@@ -282,18 +299,25 @@ void FzeroFfbFrame(const uint8_t *ram, size_t ram_size, uint32_t input) {
 
 void FzeroFfbSilence(void) {
 #ifdef _WIN32
+  std::lock_guard<std::recursive_mutex> call(s_call_gate);
   if (s_active) s_ffb.ZeroForces();
 #endif
 }
 
 void FzeroFfbShutdown(void) {
 #ifdef _WIN32
+  std::lock_guard<std::recursive_mutex> call(s_call_gate);
+  s_closed = true;
+  s_active = false; /* Reentrant/late frame and silence calls cannot emit exports. */
   if (s_ffb.module) {
     s_ffb.PanicStop();
     if (s_release_constant_bursts) s_release_constant_bursts();
     s_ffb.ReleasePeriodicEffects();
     s_ffb.ReleaseConditionEffects();
     s_ffb.FreeDirectInput();
+    /* Requires the reviewed toolkit contract: FreeDirectInput returns only
+     * after its workers/callbacks are stopped/joined and resources released.
+     * The old pinned DLL cannot prove this; binary adoption remains gated. */
     WheelFfb_Unload(&s_ffb);
   }
   s_spring = s_damper = s_road = s_collision_sine = s_collision_constant = -1;
