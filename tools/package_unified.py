@@ -21,10 +21,16 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ("SETUP.md", "UNIFIED-PRODUCT.md", "PLAYTHROUGH_RECORDING.md",
-        "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md")
+        "TRIPLE_SCREEN_FEASIBILITY.md", "TELEMETRY_SIGNALS.md",
+        "ADAPTIVE_RENDERER.md", "BS_DELUXE_EXPLORATION.md", "HD_MODE7.md",
+        "HD_MODE7_PERFORMANCE.md", "PERFORMANCE_DIAGNOSTICS.md", "SAVE_STATES.md",
+        "WHEELFFB_EXPERIMENTAL_RECEIPT.md")
 SOURCE_FILES = ("README.md", "LICENSE", "VERSION", "game-product.json",
                 "lib/toolkit/MANIFEST.txt", "lib/toolkit/VERSION", "lib/toolkit/LICENSE.txt",
                 "tools/fzero_replay_adapter.py")
+SOURCE_FILES += tuple("docs/screenshots/" + n for n in (
+    "attract-race.png", "bs-blue-thunder.png", "bs-forest-iii-race-21x9.png",
+    "bs-forest-iii-race.png", "bs-forest-iii.png", "widescreen-title.png"))
 UI_ASSETS = tuple("assets/img/" + n for n in (
     "boxart.tga", "brand_mark.tga", "flags.png", "pad.tga", "verdict_bad.tga",
     "verdict_none.tga", "verdict_ok.tga", "verdict_warn.tga")) + tuple(
