@@ -233,6 +233,17 @@ hosts link, driven from CMake whenever `FZERO_DELUXE_GEN_DIR` is set;
 to the `mods/` directory `tools/regen_bs_deluxe.py` writes beside the generated
 sources.
 
+If the original archive is unavailable but the repository's pinned USA 1.1
+`patches/bs-deluxe-usa.ips` is present, regenerate privately from a verified
+user-owned stock ROM with `python tools/regen_bs_deluxe_from_ips.py --stock
+<path-to-fzero.sfc>`. This checks the patch, stock ROM, resulting Deluxe ROM,
+and guarded delta against the recorded hashes before publishing the ignored
+`captures/bs-deluxe/{gen,mods,oracle.sfc}` outputs. Configure CMake with
+`-DFZERO_DELUXE_GEN_DIR=<absolute captures/bs-deluxe/gen>` and
+`-DFZERO_DELUXE_DATA_FILE=<absolute captures/bs-deluxe/mods/bs-deluxe.dat>`;
+an empty `FZERO_DELUXE_GEN_DIR` silently builds the stock-only module. Never
+commit or distribute the generated sources, oracle, payload or ROM.
+
 `FzeroDeluxePrepare` verifies the embedded bytes exactly as it verified a file
 - magic, declared sizes, the stock digest they were built against, ordered
 non-overlapping records, and the digest of the patched cartridge - and applies

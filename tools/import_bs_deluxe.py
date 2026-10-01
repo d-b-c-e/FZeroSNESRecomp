@@ -33,6 +33,26 @@ def namespace(gen):
         "".join(f"#define {name} deluxe_{name}\n" for name in sorted(symbols)))
 
 
+def guarded_delta(source, target):
+    """Build the same private cartridge delta from any independently verified target."""
+    baseline = source + bytes(len(target) - len(source))
+    records = []
+    start = None
+    for i, (old, new) in enumerate(zip(baseline, target)):
+        if old != new and start is None:
+            start = i
+        if old == new and start is not None:
+            records.append((start, target[start:i]))
+            start = None
+    if start is not None:
+        records.append((start, target[start:]))
+    payload = b"BSDELX1\0" + struct.pack("<II", len(target), len(records))
+    payload += bytes.fromhex(STOCK_SHA256) + bytes.fromhex(DELUXE_SHA256)
+    for offset, data in records:
+        payload += struct.pack("<II", offset, len(data)) + data
+    return payload, len(records)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--archive", type=Path, required=True)
@@ -54,21 +74,7 @@ def main():
         version = readme_version(z)
     if sha(target) != DELUXE_SHA256 or version != DELUXE_VERSION:
         raise ValueError(f"Unsupported Deluxe revision {version}: native module is pinned to USA {DELUXE_VERSION}")
-    baseline = source + bytes(len(target) - len(source))
-    records = []
-    start = None
-    for i, (old, new) in enumerate(zip(baseline, target)):
-        if old != new and start is None:
-            start = i
-        if old == new and start is not None:
-            records.append((start, target[start:i]))
-            start = None
-    if start is not None:
-        records.append((start, target[start:]))
-    payload = b"BSDELX1\0" + struct.pack("<II", len(target), len(records))
-    payload += bytes.fromhex(STOCK_SHA256) + bytes.fromhex(DELUXE_SHA256)
-    for offset, data in records:
-        payload += struct.pack("<II", offset, len(data)) + data
+    payload, record_count = guarded_delta(source, target)
     namespace(a.gen)
     a.out.mkdir(parents=True, exist_ok=True)
     (a.out / "bs-deluxe.dat").write_bytes(payload)
@@ -79,9 +85,9 @@ def main():
         "archive_sha256": sha(a.archive.read_bytes()), "stock_sha256": sha(source),
         "bps_member": bps_name, "ips_member": ips_name,
         "target_sha256": sha(target), "delta_sha256": sha(payload),
-        "records": len(records), "payload_bytes": len(payload),
+        "records": record_count, "payload_bytes": len(payload),
     }, indent=2) + "\n")
-    print(f"Imported {len(records)} guarded delta records ({len(payload)} bytes); native namespace ready")
+    print(f"Imported {record_count} guarded delta records ({len(payload)} bytes); native namespace ready")
 
 
 if __name__ == "__main__":
