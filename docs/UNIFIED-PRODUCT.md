@@ -4,15 +4,17 @@ F-Zero SNES and optional BS Deluxe use one native host, existing launcher,
 settings set and version. Wheel, FFB, telemetry, recording/replay and experimental
 triples are internal features. F-Zero X is a different product. The source
 folders in E:/Source are attached development worktrees, not separate products
-to merge. Adopt `dbce-mods-fzero-snes` while retaining the fork relationship,
+to merge. The in-place rename to `dbce-mods-fzero-snes` is complete, retaining the fork relationship,
 upstream attribution/history and atomic feature commits.
 
 Canonical metadata is [game-product.json](../game-product.json). The
 [identity policy](PRODUCT-IDENTITY.md) defines the numeric upstream base,
 source-qualified preview label, reviewed repository-name migration and remaining
-consolidation actions. The canonical source lane is
-[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001),
-not the retained default branch or a historical release ZIP.
+consolidation actions. As verified on 2026-10-02, default `main` and the retained source lane
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001)
+both contain reviewed source `14ea520bf97700f6bd5bb832b1daf1fdb6483f50`.
+Historical release ZIPs are not unified preview binaries; no DBCE unified
+binary release or installation promotion has occurred.
 
 ## Install and setup
 
@@ -93,7 +95,18 @@ remain incomplete; keep experimental availability in the product manifest.
 No current installed payload, monitor profile or saved tune is changed by this
 candidate work.
 
-Separate physical-monitor placement/focus and sampled CPU/GL backbuffer
-parity have since been checked for one recorded stock case/preset. This does
-not establish scanout, comfort, complete side content, every CRT preset or
-attended full-rig acceptance. Keep those product limitations explicit.
+The approved interactive stock replay at `21f2605` completed 11,364 frames
+and rendered the original CRT preset on three separate monitors, with FFB
+disabled and the staged wheel DLL excluded. Placement, desktop capture and
+sampled CPU/GL backbuffer evidence were retained. Center keyboard/foreground
+focus failed acceptance; no definite application defect was established.
+An attended focus check remains required. This does not establish optical
+scanout/seams, comfort, complete side content or full rig acceptance.
+
+Published source `14ea520` adds an optional softer CRT mask while preserving
+the original preset and default. Its before/after comparison is simulated
+CPU shader math, not a new GPU render. GPU compilation and visual acceptance
+remain pending. Each separate view uses its own input texture size; the
+reproduced 512-output-pixel band is evidence of a mask-alias contribution,
+not proof of one mask stretched over the full desktop. No game, device,
+display, install or release action is part of this documentation update.

@@ -11,8 +11,10 @@ owned game products. F-Zero X remains a different game target.
 Canonical metadata: [game-product.json](../game-product.json).
 Canonical product/setup documents: [UNIFIED-PRODUCT](UNIFIED-PRODUCT.md) and
 [SETUP](SETUP.md); rights/assets gates: [DISTRIBUTION-AUDIT](DISTRIBUTION-AUDIT.md).
-The approved source lane is
-[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001).
+Default `main` and the retained approved source lane
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001)
+both contain reviewed source `14ea520bf97700f6bd5bb832b1daf1fdb6483f50`
+as verified on 2026-10-02. The metadata's `sourceBranch` retains that lane.
 The one package tool is `tools/package_unified.py` and one `Setup.cmd` opens
 `FZeroSNESRecomp.exe --launcher`. The headless companion is the replay runner,
 not a second product/install flow. No new installer or game binary is made
@@ -37,7 +39,7 @@ Historical tags, versions, ZIPs and their manifests stay unchanged. Verify a
 historical artifact with the verifier from its recorded source revision;
 the new metadata contract does not rewrite or relabel it. A later public
 preview tag should use an explicitly reviewed fork namespace and migration
-plan; no tag, binary release or default-branch change is made here.
+plan; this docs-only successor makes no tag, binary release or branch update.
 
 `FZeroSNESRecomp.exe`, the headless companion, product ID and config.ini,
 fzero-video.ini, keybinds.ini, rom.cfg remain stable. Saves, user shaders,
@@ -70,11 +72,14 @@ repository ID is an offline metadata consistency check, not proof of remote
 ownership; live ID, public visibility and fork parent were checked before and
 after rename. Exact hosted ZIP/tar exports at `2374f26` matched the canonical
 committed file contents and retained artwork/patch/private-data exclusions.
-Default `main` stayed at `1686df46d4fc7c22b5dc8fdfaa5282ca4bd78562`.
-Main promotion remains separate from this completed rename and requires the
-complete main-to-unified scope review. No binary release was published.
+At the rename audit on 2026-10-01, default `main` stayed at
+`1686df46d4fc7c22b5dc8fdfaa5282ca4bd78562`; promotion was then pending.
+That historical checkpoint is superseded by the reviewed nonforced source
+updates: on 2026-10-02, `main`, the retained unified lane and
+`codex/crt-subtle-mask` were verified at `14ea520`. The exact GitHub tree is
+`9c3f3b631a85df6838a920bddb1961ec2b2ca7c4`. No binary release was published.
 
-## Observed state and exact remaining organization actions
+## Historical organization audit (2026-10-01)
 
 Read-only inventory on 2026-10-01 listed 75 owned repositories and found one SNES
 F-Zero fork, with no separate owned wheel/triple F-Zero repositories. The
@@ -82,6 +87,10 @@ eight original F-Zero development folders share one common Git directory;
 the isolated review clones/worktrees are validation lanes, not extra owned
 mod products. Source histories/feature branches are not folders to merge
 blindly. The launcher worktree retains a tracked `recomp/funcs.h` edit.
+
+The following action list records the original audit, not current pending
+publication work. Items 1 and 2's source-publication/main-promotion steps have
+since completed; worktree coordination and the remaining gates still apply.
 
 1. Review this metadata candidate, then promote only its exact source commit
    to the existing unified source lane if separately authorized. No new repo
@@ -114,3 +123,24 @@ Software evidence covers one sampled physical layout/replay/CRT preset;
 complete side sprites/effects, scanout/comfort, temporal presets and attended
 rig/FFB/ROM acceptance remain gated. This organization milestone does not
 claim those features complete or the assembled product MIT-only.
+
+## Current status and remaining gates (2026-10-02)
+
+Repository rename and reviewed main/unified source promotion are complete.
+The publication readback for `14ea520` reported zero hosted workflow runs,
+check runs and commit-status contexts; the aggregate status was `pending`,
+not a CI pass. Local build/test evidence is separate from hosted checks.
+
+The approved `21f2605` stock replay rendered the original CRT preset on three
+separate monitors with FFB disabled and the staged wheel DLL excluded. Center
+keyboard/foreground focus failed acceptance; an attended check remains pending.
+The `14ea520` optional softer preset retains the original/default and has
+simulated CPU comparison evidence only. GPU compilation and visual acceptance
+remain pending. No new install or binary release is implied by source promotion.
+
+Preserve owner WIP, upstream watcher and feature history while coordinating
+the persistent unified development lane and any residual-patch review. Finish
+distribution/asset/BS rights review, community support intake and attended
+focus, physical FFB, complete side content and rig acceptance before rollout.
+This docs-only successor changes no runtime, package, rights terms, user data,
+Issues/Discussions or device/display settings.

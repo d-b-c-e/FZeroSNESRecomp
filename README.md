@@ -3,8 +3,9 @@
 A native PC build of *F-Zero* for SNES.
 
 Based on upstream [FZeroSNESRecomp](https://github.com/mstan/FZeroSNESRecomp)
-1.8.3. The public fork retains its upstream name; the DBCE preview identity
-distinguishes this combined product from upstream and historical releases.
+1.8.3. The public fork is now named `d-b-c-e/dbce-mods-fzero-snes`, retaining
+the upstream fork relationship, attribution and history. The DBCE preview
+identity distinguishes this combined product from upstream and historical releases.
 
 This fork keeps wheel, force feedback, telemetry, recording/replay and
 experimental triples inside this one native app and launcher. See
@@ -41,14 +42,23 @@ You bring your own legally dumped *F-Zero (USA)* ROM. No ROM is included.
 
 ## Download And Play
 
-The unified preview's canonical source branch is
-[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001).
-The default branch and historical Releases page are not evidence of a unified
-binary promotion. No DBCE unified binary release is currently published.
+As verified on 2026-10-02, the default `main` branch and the retained unified lane
+[`codex/unified-product-20261001`](https://github.com/d-b-c-e/dbce-mods-fzero-snes/tree/codex/unified-product-20261001)
+both contain reviewed source `14ea520bf97700f6bd5bb832b1daf1fdb6483f50`.
+Source publication does not imply a binary promotion. No DBCE unified binary
+release is currently published; historical packages remain historical.
 Use the reviewed source/receipt, the DBCE preview ZIP identity and
 [one setup flow](docs/SETUP.md); do not substitute an upstream 1.8.3 ZIP.
 `VERSION=1.8.3` is the numeric upstream base. The full preview identity adds
 its exact source revision, as described in [identity policy](docs/PRODUCT-IDENTITY.md).
+
+The approved stock replay at `21f2605` rendered the original CRT preset across
+three separate monitors with FFB disabled and the staged wheel DLL excluded.
+Center keyboard/foreground focus failed acceptance, so full rig acceptance
+remains pending. The optional softer CRT preset added in `14ea520` has only
+simulated CPU comparison evidence; GPU compilation and visual acceptance remain
+pending. The original preset and default are unchanged. See
+[validation boundaries](docs/UNIFIED-PRODUCT.md#validation-boundaries).
 
 ### Historical upstream/legacy packages
 
